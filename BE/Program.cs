@@ -262,20 +262,30 @@ app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
 
-// Auto-create/migrate database + seed demo data on first run
+// Database initialization is controlled by environment configuration.
+// Keep AutoMigrateDatabase=false when using the shared Railway database.
+var autoMigrateDatabase =
+    builder.Configuration.GetValue<bool>("Features:AutoMigrateDatabase");
+
+var seedDemoData =
+    builder.Configuration.GetValue<bool>("Features:SeedDemoData");
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await db.Database.MigrateAsync();
 
-    if (app.Environment.IsDevelopment())
+    if (autoMigrateDatabase)
+    {
+        await db.Database.MigrateAsync();
+    }
+
+    if (app.Environment.IsDevelopment() && seedDemoData)
     {
         await DemoSeeder.SeedAsync(app.Services);
         await DemoSeeder.SeedExtraAsync(app.Services);
     }
-    else
+    else if (!app.Environment.IsDevelopment())
     {
-        // Production: chỉ tạo admin nếu chưa có, không seed toàn bộ demo data
         await DemoSeeder.EnsureAdminAsync(app.Services);
     }
 }
