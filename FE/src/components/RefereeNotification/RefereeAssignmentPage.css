@@ -1,0 +1,319 @@
+/* Referee Assignment Page Styling */
+
+.referee-assignments {
+  display: grid;
+  gap: 32px;
+}
+
+.referee-hero {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 28px;
+  padding: 32px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+  box-shadow: 0 20px 50px rgba(23, 32, 51, 0.12);
+}
+
+.referee-hero h1 {
+  color: #172033;
+  font-size: 42px;
+  margin: 12px 0 10px;
+}
+
+.referee-hero p {
+  color: #657086;
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.referee-hero__actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.referee-hero__panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+  align-content: center;
+  text-align: center;
+}
+
+.referee-hero__panel span {
+  color: #657086;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.referee-hero__panel strong {
+  display: block;
+  font-size: 22px;
+  color: #8f6420;
+  margin-top: 4px;
+}
+
+.referee-section {
+  display: grid;
+  gap: 20px;
+}
+
+.section-heading {
+  display: grid;
+  gap: 8px;
+}
+
+.section-heading h2 {
+  color: #172033;
+  font-size: 24px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.section-heading p {
+  color: #657086;
+  font-size: 14px;
+  margin: 0;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 14px;
+  padding: 10px 18px;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  background: linear-gradient(145deg, #f2d28b, #d7aa4d);
+  color: #14100a;
+  transition: all 0.2s ease;
+}
+
+.primary-button:hover {
+  box-shadow: 0 10px 25px rgba(242, 210, 139, 0.3);
+  transform: translateY(-2px);
+}
+
+.guidelines-section {
+  margin-top: 32px;
+  padding: 32px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+}
+
+.guidelines-section h2 {
+  color: #172033;
+  font-size: 28px;
+  margin: 0 0 28px 0;
+}
+
+.guidelines-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.guideline-card {
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1px solid rgba(231, 198, 120, 0.1);
+}
+
+.guideline-card h4 {
+  color: #172033;
+  font-size: 16px;
+  margin: 0 0 16px 0;
+  font-weight: 600;
+}
+
+.guideline-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.guideline-card li {
+  color: #34415b;
+  font-size: 14px;
+  padding-left: 20px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.guideline-card li:before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #22c55e;
+  font-weight: bold;
+}
+
+@media (max-width: 1100px) {
+  .referee-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .referee-hero h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .guidelines-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .referee-hero {
+    padding: 24px;
+  }
+
+  .referee-hero__panel {
+    padding: 16px;
+  }
+}
+
+.detail-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
+}
+
+.detail-card h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.detail-card ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.detail-card li {
+  margin: 8px 0;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* FAQ Section */
+.faq-section {
+  margin-bottom: 32px;
+}
+
+.faq-section h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 20px;
+}
+
+.faq-list {
+  display: grid;
+  gap: 16px;
+}
+
+.faq-item {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
+}
+
+.faq-item h4 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.faq-item p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .referee-assignment-page {
+    padding: 16px 12px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+  }
+
+  .header-content h1 {
+    font-size: 24px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .btn-secondary {
+    width: 100%;
+  }
+
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .referee-assignment-page {
+    padding: 12px 8px;
+  }
+
+  .page-header {
+    padding-bottom: 12px;
+  }
+
+  .header-content h1 {
+    font-size: 20px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+  }
+
+  .faq-item {
+    padding: 12px 16px;
+  }
+
+  .info-card {
+    padding: 12px 16px;
+  }
+
+  .info-card h3 {
+    font-size: 14px;
+  }
+
+  .info-card li {
+    font-size: 13px;
+  }
+}

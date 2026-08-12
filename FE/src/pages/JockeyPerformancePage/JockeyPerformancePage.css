@@ -1,0 +1,227 @@
+.jp-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  display: grid;
+  gap: 24px;
+  width: 100%; box-sizing: border-box;
+}
+
+.app-shell:has(.jp-page) .page-wrapper { padding: 24px 32px 48px; }
+
+/* ── Header ── */
+.jp-header h1 { font-size: 28px; font-weight: 700; color: #1a1d23; margin: 0; }
+.jp-sub { color: #64748b; font-size: 15px; margin: 4px 0 0; }
+
+/* ── KPI Cards ── */
+.jp-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.jp-kpi {
+  background: linear-gradient(180deg, #171B25 0%, #0F131B 100%);
+  border-radius: 14px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+.jp-kpi:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,0,0,0.1); }
+
+.jp-kpi-label { display: block; font-size: 11px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.5px; }
+.jp-kpi-value { display: block; font-size: 28px; font-weight: 700; color: #fff; margin: 4px 0 2px; letter-spacing: -0.02em; }
+.jp-kpi-trend { font-size: 12px; color: rgba(255,255,255,0.35); }
+
+/* ── Chart ── */
+.jp-chart-card {
+  background: rgba(255,255,255,0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.04);
+  padding: 22px 24px;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+.jp-chart-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15,23,42,0.06); }
+
+.jp-chart-card h3 { font-size: 15px; font-weight: 700; color: #1a1d23; margin: 0 0 16px; }
+
+.jp-chart { display: grid; gap: 10px; }
+
+.jp-chart-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 60px 40px;
+  gap: 12px;
+  align-items: center;
+}
+
+.jp-chart-name { font-size: 13px; font-weight: 600; color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.jp-chart-bar-wrap { height: 22px; border-radius: 99px; background: rgba(0,0,0,0.04); overflow: hidden; position: relative; }
+
+.jp-chart-bar { height: 100%; border-radius: 99px; background: rgba(242,210,139,0.15); transition: width 0.5s ease; }
+
+.jp-chart-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #d7aa4d, #f2d28b); transition: width 0.5s ease; }
+
+.jp-chart-stat { font-size: 12px; color: #64748b; text-align: right; }
+.jp-chart-pct { font-size: 13px; font-weight: 700; color: #1a1d23; text-align: right; }
+
+/* ── Table Card ── */
+.jp-table-card {
+  background: rgba(255,255,255,0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.04);
+  padding: 20px 0;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+.jp-table-card:hover { box-shadow: 0 12px 28px rgba(15,23,42,0.04); }
+
+.jp-table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  flex-wrap: wrap;
+}
+
+.jp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(0,0,0,0.04);
+  flex: 1;
+  max-width: 260px;
+}
+
+.jp-search input { border: none; background: none; outline: none; font-size: 13px; color: #1a1d23; font-family: inherit; flex: 1; }
+.jp-search input::placeholder { color: #94a3b8; }
+
+.jp-sort-group { display: flex; gap: 4px; background: rgba(0,0,0,0.03); padding: 3px; border-radius: 8px; }
+
+.jp-sort-btn {
+  padding: 8px 20px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; font-family: inherit;
+  background: transparent; color: #64748b; display: inline-flex; align-items: center; gap: 3px;
+}
+
+.jp-sort-btn:hover { background: rgba(255,255,255,0.5); color: #1a1d23; }
+
+.jp-sort-btn--active { background: #fff; color: #1a1d23; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+.jp-arrow { font-size: 10px; }
+
+/* ── Table ── */
+.jp-table { display: grid; }
+.jp-tr {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 0.7fr 0.5fr 0.8fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 22px;
+  transition: background 0.1s;
+}
+
+.jp-tr:hover { background: rgba(255,255,255,0.4); }
+
+.jp-tr--head { background: rgba(0,0,0,0.02); font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.jp-tr--head:hover { background: rgba(0,0,0,0.02); }
+
+.jp-td { font-size: 13px; color: #1a1d23; }
+
+.jp-td strong { display: block; font-weight: 600; color: #1a1d23; }
+.jp-td small { font-size: 11px; color: #94a3b8; }
+
+.jp-td--date { color: #64748b; }
+
+.jp-rate {
+  display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 700;
+}
+
+.jp-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 10px; font-weight: 700;
+}
+
+.jp-badge--ok { background: rgba(16,185,129,0.1); color: #0f7a5a; }
+.jp-badge--warn { background: rgba(245,158,11,0.1); color: #b8860b; }
+
+/* ── Loading / Empty ── */
+.jp-loading { display: grid; gap: 10px; padding: 0 22px; }
+.jp-skeleton { height: 40px; border-radius: 8px; background: rgba(0,0,0,0.04); animation: jp-shimmer 1.5s infinite; }
+@keyframes jp-shimmer { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
+
+.jp-empty { text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 14px; }
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .jp-page { padding: 20px 16px; }
+  .jp-kpis { grid-template-columns: 1fr; }
+  .jp-chart-row { grid-template-columns: 80px 1fr 40px 36px; gap: 8px; }
+  .jp-tr { grid-template-columns: 1fr; gap: 2px; padding: 14px 16px; }
+  .jp-tr--head { display: none; }
+  .jp-table-toolbar { flex-direction: column; align-items: stretch; }
+  .jp-search { max-width: none; }
+}
+
+/* ── Light KPI ── */
+.jp-kpi--light {
+  background: rgba(255,255,255,0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+.jp-kpi--light .jp-kpi-value { color: #1a1d23; }
+.jp-kpi--light .jp-kpi-label { color: #94a3b8; }
+.jp-kpi--light .jp-kpi-trend { color: #94a3b8; }
+
+/* ── Monthly Chart ── */
+.jp-monthly-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  height: 160px;
+}
+.jp-mcol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.jp-mval { font-size: 11px; font-weight: 700; color: #1a1d23; }
+.jp-mbar { width: 100%; max-width: 32px; border-radius: 4px 4px 0 0; background: rgba(242,210,139,0.12); position: relative; min-height: 4px; transition: height 0.5s; }
+.jp-mfill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #f2d28b, #d7aa4d); transition: height 0.5s; }
+.jp-mlabel { font-size: 10px; color: #94a3b8; font-weight: 600; }
+
+/* ── Best badge ── */
+.jp-best-badge {
+  font-size: 11px; color: #a67c1e; background: rgba(242,210,139,0.12);
+  padding: 4px 12px; border-radius: 99px; font-weight: 600;
+}
+.jp-crown { color: #f2d28b; font-size: 14px; margin-right: 2px; }
+.jp-chart-row--best { background: rgba(255,248,239,0.5); border-radius: 8px; padding: 4px 8px; }
+
+/* ── Filter group ── */
+.jp-filter-group {
+  display: flex; gap: 4px; background: rgba(0,0,0,0.03); padding: 3px; border-radius: 8px;
+}
+.jp-fbtn {
+  padding: 8px 18px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; font-family: inherit;
+  background: transparent; color: #64748b;
+}
+.jp-fbtn:hover { background: rgba(255,255,255,0.5); color: #1a1d23; }
+.jp-fbtn--active { background: #fff; color: #1a1d23; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+/* ── Table row hover ── */
+.jp-tr { cursor: pointer; }
+.jp-tr:hover { background: rgba(255,248,239,0.6) !important; }
+.jp-tr--head { cursor: default; }
+.jp-tr--head:hover { background: rgba(0,0,0,0.02) !important; }
+
+/* ── Badge padding ── */
+.jp-badge { padding: 3px 12px; font-size: 11px; }

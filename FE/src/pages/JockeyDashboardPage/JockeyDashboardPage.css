@@ -1,0 +1,346 @@
+.jockey-dashboard {
+  display: grid;
+  gap: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+/* ── Hero Banner ── */
+.jd-hero {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  min-height: 200px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.jd-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(20,18,18,0.82), rgba(20,18,18,0.4), rgba(20,18,18,0.15));
+  z-index: 1;
+}
+
+.jd-hero__content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  padding: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+}
+
+.jd-hero__content h1 {
+  color: #fff;
+  font-size: 32px;
+  font-weight: 700;
+  font-family: "Spectral", serif;
+  margin: 8px 0 6px;
+}
+
+.jd-hero__content > div > p {
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  max-width: 400px;
+}
+
+.jd-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-width: 420px;
+}
+
+.jd-hero__stats div {
+  text-align: center;
+}
+
+.jd-hero__stats span {
+  display: block;
+  color: rgba(255,255,255,0.55);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.jd-hero__stats strong {
+  display: block;
+  color: #f2d28b;
+  font-size: 20px;
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+/* ── Error ── */
+.jd-error {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: rgba(216,103,103,0.12);
+  border: 1px solid rgba(216,103,103,0.3);
+  color: #991b1b;
+  margin: 0;
+}
+
+/* ── Layout columns ── */
+.jd-cols {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 24px;
+}
+
+.jd-cols:last-child {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ── Card ── */
+.jd-card {
+  background: rgba(255,255,255,0.86);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(231,198,120,0.18);
+  box-shadow: 0 8px 24px rgba(23,32,51,0.06);
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.jd-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172033;
+  margin: 0;
+}
+
+/* ── Next Race ── */
+.jd-next-race h4 {
+  font-size: 18px;
+  color: #172033;
+  margin: 0 0 4px;
+}
+
+.jd-race-meta {
+  font-size: 13px;
+  color: #657086;
+  margin: 2px 0;
+}
+
+/* ── Badge ── */
+.jd-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.jd-badge--ok {
+  background: #e6f7e6;
+  color: #1a7d1a;
+}
+
+.jd-badge--warn {
+  background: #fff3cd;
+  color: #856404;
+}
+
+/* ── Buttons ── */
+.jd-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.jd-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+  background: linear-gradient(135deg, #8f6420, #b8862d);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.jd-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.jd-btn--outline {
+  background: transparent;
+  border: 1.5px solid rgba(143,100,32,0.25);
+  color: #8f6420;
+}
+
+.jd-btn--outline:hover {
+  background: rgba(143,100,32,0.06);
+}
+
+.jd-btn--sm {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.jd-link {
+  color: #8f6420;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.jd-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Race List ── */
+.jd-race-list {
+  display: grid;
+  gap: 10px;
+}
+
+.jd-race-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255,250,240,0.6);
+  border: 1px solid rgba(231,198,120,0.1);
+  gap: 12px;
+}
+
+.jd-race-row strong {
+  display: block;
+  color: #172033;
+  font-size: 14px;
+}
+
+.jd-race-row p {
+  color: #657086;
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.jd-race-right {
+  text-align: right;
+  display: grid;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.jd-date {
+  font-size: 12px;
+  color: #8f6420;
+  font-weight: 600;
+}
+
+/* ── Invites ── */
+.jd-invite-list {
+  display: grid;
+  gap: 10px;
+}
+
+.jd-invite-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255,250,240,0.6);
+  border: 1px solid rgba(231,198,120,0.1);
+  gap: 12px;
+}
+
+.jd-invite-row strong {
+  display: block;
+  color: #172033;
+  font-size: 14px;
+}
+
+.jd-invite-row p {
+  color: #657086;
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+/* ── Stats ── */
+.jd-stats {
+  display: grid;
+  gap: 12px;
+}
+
+.jd-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(231,198,120,0.1);
+}
+
+.jd-stat:last-child {
+  border-bottom: none;
+}
+
+.jd-stat span {
+  color: #657086;
+  font-size: 13px;
+}
+
+.jd-stat strong {
+  color: #172033;
+  font-size: 16px;
+}
+
+/* ── Wallet ── */
+.jd-wallet {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.jd-wallet-bal {
+  font-size: 26px;
+  font-weight: 800;
+  color: #8f6420;
+  margin: 0;
+}
+
+.jd-wallet p.muted {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .jd-hero__content {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+  }
+
+  .jd-hero__stats {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .jd-cols,
+  .jd-cols:last-child {
+    grid-template-columns: 1fr;
+  }
+}

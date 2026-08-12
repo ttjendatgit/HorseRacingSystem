@@ -1,0 +1,434 @@
+/* ============================================================
+   SpectatorRewardNotificationsPage — Full-width, gold/amber accents
+   ============================================================ */
+
+.prw-page {
+  --prw-navy: #172033;
+  --prw-slate: #657086;
+  --prw-gold: #d7aa4d;
+  --prw-gold-dark: #8f6420;
+  --prw-gold-light: #e7c678;
+  --prw-green: #16a34a;
+  --prw-green-bg: rgba(22, 163, 74, 0.08);
+  --prw-border: rgba(23, 32, 51, 0.08);
+  --prw-radius: 14px;
+  --prw-radius-lg: 18px;
+  --prw-shadow: 0 4px 20px rgba(23, 32, 51, 0.06);
+  --prw-shadow-lg: 0 12px 40px rgba(23, 32, 51, 0.08);
+  --prw-shadow-gold: 0 8px 32px rgba(143, 100, 32, 0.1);
+  --prw-transition: 0.2s ease;
+
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  display: grid;
+  gap: 28px;
+  color: var(--prw-navy);
+  font-family: "Sora", system-ui, -apple-system, sans-serif;
+}
+
+/* ---------- Hero banner ---------- */
+.prw-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+  padding: 44px;
+  border-radius: var(--prw-radius-lg);
+  background: linear-gradient(135deg, #fef9ed 0%, #fffdf8 40%, #ffffff 100%);
+  border: 1px solid rgba(231, 198, 120, 0.25);
+  box-shadow: var(--prw-shadow-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.prw-hero::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: linear-gradient(180deg, #e7c678, #d7aa4d, #8f6420);
+  border-radius: 0 3px 3px 0;
+}
+
+/* Decorative gold circle */
+.prw-hero::after {
+  content: "";
+  position: absolute;
+  right: -60px;
+  top: -60px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(231, 198, 120, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.prw-hero__text {
+  flex: 1 1 340px;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.prw-eyebrow {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(215, 170, 77, 0.13);
+  color: var(--prw-gold-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.prw-hero__text h1 {
+  margin: 0 0 12px;
+  font-size: clamp(36px, 4.5vw, 48px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--prw-navy);
+}
+
+.prw-hero__text p {
+  margin: 0;
+  max-width: 500px;
+  color: var(--prw-slate);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ---------- Hero payout display ---------- */
+.prw-hero__payout {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 40px;
+  border-radius: var(--prw-radius-lg);
+  background: linear-gradient(145deg, #fffaf0, rgba(247, 236, 211, 0.85));
+  border: 1px solid rgba(215, 170, 77, 0.3);
+  box-shadow: var(--prw-shadow-gold);
+  min-width: 220px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.prw-hero__payout-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--prw-gold-dark);
+}
+
+.prw-hero__payout-value {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--prw-gold-dark);
+  line-height: 1;
+}
+
+.prw-hero__payout-meta {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(143, 100, 32, 0.15);
+}
+
+.prw-hero__meta-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.prw-hero__meta-item span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--prw-slate);
+}
+
+.prw-hero__meta-item strong {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--prw-navy);
+}
+
+/* ---------- Error ---------- */
+.prw-error {
+  padding: 14px 20px;
+  border-radius: var(--prw-radius);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  color: #991b1b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ---------- Empty state ---------- */
+.prw-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 64px 24px;
+  border-radius: var(--prw-radius);
+  border: 1.5px dashed rgba(23, 32, 51, 0.12);
+  background: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.prw-empty__icon {
+  color: var(--prw-gold);
+  opacity: 0.45;
+  margin-bottom: 4px;
+}
+
+.prw-empty h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--prw-navy);
+}
+
+.prw-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--prw-slate);
+  max-width: 360px;
+}
+
+/* ---------- Reward cards grid ---------- */
+.prw-grid {
+  display: grid;
+  gap: 16px;
+}
+
+/* ---------- Reward card ---------- */
+.prw-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 28px;
+  border-radius: var(--prw-radius);
+  background: #fff;
+  border: 1px solid var(--prw-border);
+  box-shadow: 0 2px 12px rgba(23, 32, 51, 0.04);
+  transition: transform var(--prw-transition), box-shadow var(--prw-transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.prw-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--prw-gold-light), var(--prw-gold-dark));
+  border-radius: 0 2px 2px 0;
+}
+
+.prw-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--prw-shadow);
+}
+
+/* ---------- Gold badge (checkmark circle) ---------- */
+.prw-card__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f2c565, #d29a2d);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(183, 122, 29, 0.2);
+  flex-shrink: 0;
+}
+
+.prw-card__badge svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+}
+
+/* ---------- Card body ---------- */
+.prw-card__body {
+  min-width: 0;
+}
+
+.prw-card__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.prw-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--prw-green-bg);
+  color: var(--prw-green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prw-card__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--prw-slate);
+}
+
+.prw-card__date svg {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.prw-card__body h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--prw-navy);
+}
+
+.prw-card__horse {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--prw-slate);
+}
+
+.prw-card__horse strong {
+  color: var(--prw-navy);
+  font-weight: 600;
+}
+
+.prw-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--prw-slate);
+}
+
+/* ---------- Payout block ---------- */
+.prw-card__payout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 24px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fef9ed, #fdf4de);
+  border: 1px solid rgba(215, 170, 77, 0.2);
+  min-width: 150px;
+  text-align: center;
+}
+
+.prw-card__payout-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--prw-gold-dark);
+}
+
+.prw-card__payout-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--prw-navy);
+  line-height: 1;
+}
+
+.prw-card__payout-sub {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--prw-green);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--prw-green-bg);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .prw-hero {
+    padding: 32px 24px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prw-hero__payout {
+    width: 100%;
+  }
+
+  .prw-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 22px;
+  }
+
+  .prw-card__badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .prw-card__payout {
+    flex-direction: row;
+    justify-content: space-between;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .prw-page {
+    padding: 24px 14px 48px;
+    gap: 20px;
+  }
+
+  .prw-hero__text h1 {
+    font-size: 28px;
+  }
+
+  .prw-hero__payout-value {
+    font-size: 34px;
+  }
+
+  .prw-hero__payout-meta {
+    gap: 16px;
+  }
+
+  .prw-card__header {
+    gap: 10px;
+  }
+
+  .prw-card__body h3 {
+    font-size: 17px;
+  }
+}

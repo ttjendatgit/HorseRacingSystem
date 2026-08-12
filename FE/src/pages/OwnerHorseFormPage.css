@@ -1,0 +1,137 @@
+.owner-horse-form-page {
+  display: grid;
+  gap: 32px;
+}
+
+.horse-form-card {
+  background: rgba(255, 250, 240, 0.96);
+  border-radius: 22px;
+  padding: 28px;
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+  display: grid;
+  gap: 24px;
+}
+
+.horse-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 24px;
+}
+
+.form-section {
+  display: grid;
+  gap: 16px;
+}
+
+.form-section h3 {
+  margin: 0;
+  color: #172033;
+}
+
+.image-upload {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1px dashed rgba(231, 198, 120, 0.2);
+}
+
+.image-preview {
+  position: relative;
+  overflow: hidden;
+  min-height: 180px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(231, 198, 120, 0.18), rgba(255, 255, 255, 0.78)),
+    radial-gradient(circle at top, rgba(231, 198, 120, 0.35), transparent 60%);
+}
+
+.image-preview::before,
+.image-preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--horse-image);
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.image-preview::before {
+  inset: -12px;
+  background-size: cover;
+  filter: blur(10px) brightness(0.55);
+  transform: scale(1.06);
+}
+
+.image-preview::after {
+  background-size: contain;
+}
+
+.form-field {
+  display: grid;
+  gap: 8px;
+}
+
+.form-textarea {
+  min-height: 120px;
+  resize: vertical;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(231, 198, 120, 0.2);
+  background: rgba(255, 250, 240, 0.92);
+  color: #172033;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: rgba(231, 198, 120, 0.5);
+  background: rgba(255, 250, 240, 0.92);
+  box-shadow: 0 0 0 3px rgba(231, 198, 120, 0.1);
+}
+
+.form-file {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(231, 198, 120, 0.2);
+  background: rgba(255, 250, 240, 0.92);
+  color: #172033;
+}
+
+.form-hint {
+  color: #657086;
+  font-size: 12px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.form-grid-two {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid-three {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .horse-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .form-grid-two,
+  .form-grid-three {
+    grid-template-columns: 1fr;
+  }
+}

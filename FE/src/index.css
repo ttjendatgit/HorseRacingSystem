@@ -1,0 +1,63 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Spectral:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: "Sora", system-ui, sans-serif;
+  color: #172033;
+  background-color: #f7f3ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(236, 202, 132, 0.32), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(143, 179, 154, 0.2), transparent 30%),
+    linear-gradient(180deg, #fffaf0 0%, #f7f3ea 46%, #edf1ec 100%);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Spectral", "Times New Roman", serif;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+button,
+input,
+select {
+  font-family: "Sora", system-ui, sans-serif;
+}
+
+.form-control,
+.form-select,
+.form-check-input {
+  background-color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(23, 32, 51, 0.18);
+  color: #172033;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: rgba(242, 210, 139, 0.72);
+  box-shadow: 0 0 0 0.2rem rgba(215, 170, 77, 0.18);
+}

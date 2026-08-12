@@ -1,0 +1,86 @@
+.spectator-page {
+  display: grid;
+  gap: 32px;
+}
+
+.spectator-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.spectator-sidebar {
+  position: sticky;
+  top: 110px;
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+}
+
+.spectator-sidebar__header h3 {
+  margin: 12px 0 8px;
+  color: #172033;
+}
+
+.spectator-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.spectator-nav__link {
+  text-decoration: none;
+  color: #34415b;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 250, 240, 0.92);
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.spectator-nav__link:hover {
+  border-color: rgba(231, 198, 120, 0.3);
+  color: #8f6420;
+  transform: translateY(-1px);
+}
+
+.spectator-sidebar__card {
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1.5px solid rgba(143, 100, 32, 0.16);
+}
+
+.spectator-sidebar__card p {
+  margin: 0 0 8px;
+  color: #657086;
+}
+
+.spectator-sidebar__card h4 {
+  margin: 0 0 6px;
+  color: #172033;
+}
+
+.spectator-sidebar__card span {
+  color: #8f6420;
+  font-weight: 600;
+}
+
+.spectator-content {
+  display: grid;
+  gap: 32px;
+}
+
+/* Responsive: Single column on tablets and below */
+@media (max-width: 1100px) {
+  .spectator-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .spectator-sidebar {
+    position: static;
+  }
+}

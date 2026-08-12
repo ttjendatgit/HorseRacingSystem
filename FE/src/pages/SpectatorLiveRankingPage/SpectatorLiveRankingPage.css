@@ -1,0 +1,301 @@
+/* SpectatorLiveRankingPage — Season Rankings */
+
+.srp-page {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  display: grid;
+  gap: 36px;
+}
+
+.srp-header {
+  text-align: center;
+}
+
+.srp-eyebrow {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(143, 100, 32, 0.1);
+  color: #8f6420;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.srp-title {
+  margin: 8px 0;
+  font-size: 36px;
+  font-weight: 700;
+  color: #172033;
+  letter-spacing: -0.02em;
+}
+
+.srp-subtitle {
+  margin: 8px 0 0;
+  color: #657086;
+  font-size: 15px;
+}
+
+/* ── Two-column grid ── */
+
+.srp-season-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+
+.srp-season-panel {
+  background: #fff;
+  border: 1px solid rgba(143, 100, 32, 0.1);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.srp-season-title {
+  margin: 0;
+  padding: 22px 24px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172033;
+  border-bottom: 1px solid rgba(143, 100, 32, 0.08);
+}
+
+/* ── Table ── */
+
+.srp-season-table {
+  padding: 8px 0;
+}
+
+.srp-season-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 70px 60px 62px;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 24px;
+  transition: background 0.15s ease;
+}
+
+.srp-season-row:hover {
+  background: rgba(231, 198, 120, 0.04);
+}
+
+.srp-season-row--header {
+  padding: 10px 24px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8791a3;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(143, 100, 32, 0.06);
+}
+
+.srp-season-row--top {
+  background: rgba(231, 198, 120, 0.04);
+}
+
+.sst-col--rank {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  color: #172033;
+}
+
+.sst-col--name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sst-col--name strong {
+  font-size: 14px;
+  color: #172033;
+}
+
+.sst-col--name small {
+  font-size: 11px;
+  color: #8791a3;
+}
+
+.sst-col--stat {
+  text-align: center;
+  font-size: 13px;
+  color: #657086;
+  font-weight: 500;
+}
+
+.sst-col--highlight {
+  color: #8f6420;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sst-col--rate {
+  color: #3f7853;
+  font-weight: 600;
+}
+
+/* ── Race ranking section ── */
+
+.srp-race-section {
+  background: #fff;
+  border: 1px solid rgba(143, 100, 32, 0.1);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.srp-race-section .srp-season-title {
+  border-bottom: 1px solid rgba(143, 100, 32, 0.08);
+}
+
+.srp-race-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(143, 100, 32, 0.06);
+  flex-wrap: wrap;
+}
+
+.srp-select-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.srp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #657086;
+  white-space: nowrap;
+}
+
+.srp-select {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(143, 100, 32, 0.15);
+  background: #fff;
+  color: #172033;
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 240px;
+  cursor: pointer;
+}
+
+.srp-select:focus {
+  border-color: #d7aa4d;
+  outline: none;
+}
+
+.srp-race-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8f6420;
+}
+
+.srp-table-wrapper {
+  overflow-x: auto;
+}
+
+.srp-table {
+  min-width: 500px;
+}
+
+.srp-table__row {
+  display: grid;
+  grid-template-columns: 70px 1.5fr 1.2fr 0.8fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(231, 198, 120, 0.06);
+  font-size: 14px;
+  color: #172033;
+}
+
+.srp-table__row:last-child {
+  border-bottom: none;
+}
+
+.srp-table__header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8791a3;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255, 250, 240, 0.5);
+  border-bottom: 1.5px solid rgba(231, 198, 120, 0.12);
+  padding: 12px 24px;
+}
+
+.srp-table__row--podium {
+  background: rgba(231, 198, 120, 0.04);
+}
+
+.srp-col--pos {
+  text-align: center;
+}
+
+.srp-col--horse {
+  font-weight: 600;
+}
+
+.srp-col--jockey {
+  color: #657086;
+  font-size: 13px;
+}
+
+.srp-col--time {
+  color: #8f6420;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.srp-rank-medal {
+  font-size: 22px;
+}
+
+.srp-rank-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: #657086;
+}
+
+.srp-empty {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.srp-empty h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: #172033;
+}
+
+.srp-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: #657086;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 768px) {
+  .srp-season-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .srp-title {
+    font-size: 28px;
+  }
+
+  .srp-season-row {
+    grid-template-columns: 36px 1fr 56px 50px 52px;
+    padding: 10px 16px;
+    gap: 4px;
+    font-size: 12px;
+  }
+}

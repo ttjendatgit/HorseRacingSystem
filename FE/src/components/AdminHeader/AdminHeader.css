@@ -1,0 +1,113 @@
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 64px;
+  background: #262323;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(18px);
+  gap: 20px;
+}
+
+.admin-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #f2d28b;
+  text-decoration: none;
+  flex-shrink: 0;
+  min-height: 50px;
+}
+
+.admin-header__brand .header-logo {
+  position: absolute;
+  bottom: -27px;
+  left: 0;
+  height: 130px;
+  width: auto;
+  padding: 4px 10px;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* ── Nav ── */
+.admin-header__nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  justify-content: center;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex: 1;
+}
+
+.admin-header__nav::-webkit-scrollbar { height: 4px; }
+.admin-header__nav::-webkit-scrollbar-thumb { background: rgba(215,170,77,0.3); border-radius: 999px; }
+
+.admin-header .nav-link {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: rgba(242, 210, 139, 0.7);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-header .nav-link:hover,
+.admin-header .nav-link:focus-visible {
+  color: #f2d28b;
+  background: rgba(215, 170, 77, 0.12);
+  outline: none;
+}
+
+.admin-header .nav-link--active,
+.admin-header .nav-link--active:hover,
+.admin-header .nav-link--active:focus-visible {
+  color: #14100a;
+  background: linear-gradient(145deg, #f2c565, #d29a2d);
+  box-shadow: 0 8px 18px rgba(215, 170, 77, 0.25);
+}
+
+/* ── Actions ── */
+.admin-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ah-notif {
+  position: relative; width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.5); cursor: pointer; display: grid; place-items: center;
+  transition: all 0.2s; font-family: inherit;
+}
+
+.ah-notif:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
+
+.ah-notif-badge {
+  position: absolute; top: -3px; right: -3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #ef4444; color: #fff; font-size: 9px; font-weight: 700;
+  display: grid; place-items: center; box-shadow: 0 0 6px rgba(239,68,68,0.4);
+}
+
+@media (max-width: 1024px) {
+  .admin-header { padding: 22px 24px; flex-wrap: wrap; }
+  .admin-header__nav { order: 3; flex-basis: 100%; justify-content: flex-start; }
+}
+
+@media (max-width: 640px) {
+  .admin-header .nav-link { font-size: 12px; padding: 5px 10px; }
+}

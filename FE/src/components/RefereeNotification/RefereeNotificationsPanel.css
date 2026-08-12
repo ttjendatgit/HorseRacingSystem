@@ -1,0 +1,68 @@
+/* RefereeNotificationsPanel Styling */
+
+.referee-notifications-panel {
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.referee-notifications-panel.loading,
+.referee-notifications-panel.error,
+.referee-notifications-panel.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1px solid rgba(231, 198, 120, 0.1);
+  border-radius: 16px;
+}
+
+.referee-notifications-panel.loading p,
+.referee-notifications-panel.error p,
+.referee-notifications-panel.empty p {
+  color: #657086;
+  font-size: 16px;
+  margin: 0;
+  text-align: center;
+}
+
+.referee-notifications-panel.error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.referee-notifications-panel.error button {
+  padding: 10px 18px;
+  background: linear-gradient(145deg, #f2d28b, #d7aa4d);
+  color: #14100a;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  align-self: center;
+}
+
+.referee-notifications-panel.error button:hover {
+  box-shadow: 0 10px 25px rgba(242, 210, 139, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Notifications List */
+.notifications-list {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .notifications-list {
+    grid-template-columns: 1fr;
+  }
+
+  .referee-notifications-panel {
+    padding: 16px;
+  }
+}

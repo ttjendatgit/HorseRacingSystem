@@ -1,0 +1,93 @@
+.tournament-detail-page {
+  display: grid;
+  gap: 40px;
+}
+
+.detail-hero {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.detail-hero h1 {
+  color: #172033;
+  font-size: 46px;
+  margin: 12px 0;
+}
+
+.detail-hero p {
+  color: #657086;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.detail-panel {
+  background: rgba(255, 250, 240, 0.96);
+  border-radius: 20px;
+  padding: 24px;
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+  text-align: center;
+}
+
+.detail-panel strong {
+  display: block;
+  font-size: 32px;
+  color: #8f6420;
+  margin: 12px 0 8px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.detail-grid h3 {
+  color: #172033;
+}
+
+.detail-grid ul {
+  padding: 0;
+  list-style: none;
+  color: #657086;
+  display: grid;
+  gap: 6px;
+}
+
+.timeline h2 {
+  color: #172033;
+  margin-bottom: 16px;
+}
+
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.timeline-grid div {
+  background: rgba(255, 250, 240, 0.96);
+  border-radius: 16px;
+  padding: 18px;
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+}
+
+.timeline-grid h4 {
+  margin: 0 0 8px;
+  color: #8f6420;
+}
+
+@media (max-width: 960px) {
+  .detail-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

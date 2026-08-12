@@ -1,0 +1,315 @@
+.owner-horse-detail {
+  display: grid;
+  gap: 32px;
+}
+
+.horse-banner {
+  display: grid;
+  grid-template-columns: minmax(280px, 38%) minmax(0, 1fr);
+  min-height: 360px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(17, 24, 39, 0.96), rgba(255, 255, 255, 0.72));
+  border: 1.5px solid rgba(143, 100, 32, 0.22);
+  box-shadow: 0 28px 70px rgba(2, 6, 18, 0.52);
+}
+
+.horse-banner__media {
+  position: relative;
+  min-height: 360px;
+  background: linear-gradient(135deg, rgba(231, 198, 120, 0.18), rgba(255, 255, 255, 0.78));
+}
+
+.horse-banner__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.72));
+  pointer-events: none;
+}
+
+.horse-banner__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.horse-banner__placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  color: #8f6420;
+  font-size: 88px;
+  font-weight: 700;
+  background:
+    linear-gradient(135deg, rgba(231, 198, 120, 0.18), rgba(255, 255, 255, 0.78)),
+    radial-gradient(circle at 50% 30%, rgba(231, 198, 120, 0.26), transparent 58%);
+}
+
+.horse-banner__content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 30px;
+}
+
+.horse-banner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.horse-detail-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.horse-detail-status--approved {
+  color: #6ee7b7;
+  background: rgba(110, 231, 183, 0.16);
+  border: 1px solid rgba(110, 231, 183, 0.36);
+}
+
+.horse-detail-status--pending {
+  color: #8f6420;
+  background: rgba(231, 198, 120, 0.16);
+  border: 1px solid rgba(231, 198, 120, 0.34);
+}
+
+.horse-detail-status--rejected {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.34);
+}
+
+.owner-horse-detail .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  color: #172033;
+  background: rgba(248, 244, 230, 0.08);
+  border: 1.5px solid rgba(143, 100, 32, 0.28);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.owner-horse-detail .secondary-button:hover {
+  background: rgba(231, 198, 120, 0.14);
+  border-color: rgba(231, 198, 120, 0.38);
+  transform: translateY(-1px);
+}
+
+.horse-banner__content h1 {
+  margin: 12px 0 8px;
+  color: #172033;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 1;
+}
+
+.horse-banner__content p {
+  max-width: 680px;
+  margin: 0;
+  color: #a7b0c2;
+  font-size: 15px;
+}
+
+.horse-banner__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.horse-banner__meta div,
+.stat-card,
+.horse-info-card {
+  background: rgba(255, 250, 240, 0.92);
+  border: 1px solid rgba(231, 198, 120, 0.1);
+}
+
+.horse-banner__meta div {
+  min-height: 92px;
+  padding: 16px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.horse-banner__meta span,
+.horse-info-card span,
+.stat-card .muted {
+  color: #657086;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.horse-banner__meta strong {
+  color: #8f6420;
+  font-size: 18px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  position: relative;
+  min-height: 150px;
+  border-radius: 20px;
+  padding: 22px;
+  display: grid;
+  align-content: end;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(231, 198, 120, 0.12), transparent 48%);
+  pointer-events: none;
+}
+
+.stat-card__label {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  color: rgba(242, 210, 139, 0.22);
+  font-size: 38px;
+  font-weight: 700;
+}
+
+.stat-card h3 {
+  position: relative;
+  margin: 0;
+  color: #172033;
+  font-size: 34px;
+}
+
+.stat-trend {
+  position: relative;
+  color: #6ee7b7;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.horse-detail-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.horse-detail-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.horse-info-list {
+  display: grid;
+  gap: 12px;
+}
+
+.horse-info-card {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.42fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 72px;
+  padding: 18px 20px;
+  border-radius: 16px;
+}
+
+.horse-info-card strong {
+  color: #172033;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .horse-banner,
+  .horse-detail-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .horse-banner__media,
+  .horse-banner__placeholder {
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 760px) {
+  .horse-banner {
+    border-radius: 18px;
+  }
+
+  .horse-banner__content {
+    padding: 22px;
+  }
+
+  .horse-banner__meta,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .horse-info-card {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* ---- Jockey Invitation & Race Entry cards ---- */
+.horse-invitation-card,
+.horse-entry-card {
+  background: rgba(255, 250, 240, 0.92);
+  border: 1px solid rgba(231, 198, 120, 0.1);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.horse-invitation-card__row,
+.horse-entry-card__row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.42fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.horse-invitation-card__row span,
+.horse-entry-card__row span {
+  color: #657086;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.horse-invitation-card__row strong,
+.horse-entry-card__row strong {
+  color: #172033;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}

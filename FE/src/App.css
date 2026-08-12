@@ -1,0 +1,123 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-wrapper {
+  flex: 1;
+  padding: 40px 72px 80px;
+  display: grid;
+  gap: 48px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(201, 150, 54, 0.14);
+  color: #8f6420;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(201, 150, 54, 0.14);
+  color: #8f6420;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.muted {
+  color: #657086;
+}
+
+.section-heading h2 {
+  color: #172033;
+  margin-bottom: 6px;
+}
+
+.section-heading p {
+  color: #657086;
+}
+
+.page-header {
+  display: grid;
+  gap: 8px;
+}
+
+.page-header h1 {
+  color: #172033;
+  font-size: 42px;
+}
+
+.page-header p {
+  color: #657086;
+}
+
+.card,
+.table,
+.form-control,
+.form-select,
+.form-check-input,
+.dropdown-menu,
+.modal-content {
+  border-color: rgba(23, 32, 51, 0.18);
+}
+
+.card,
+.dropdown-menu,
+.modal-content {
+  background: rgba(255, 250, 240, 0.96);
+  box-shadow: 0 16px 36px rgba(23, 32, 51, 0.14);
+}
+
+.table {
+  box-shadow: 0 14px 30px rgba(23, 32, 51, 0.1);
+}
+
+.form-control,
+.form-select,
+.form-check-input {
+  box-shadow: inset 0 0 0 1px rgba(23, 32, 51, 0.04);
+}
+
+@media (max-width: 1024px) {
+  .page-wrapper {
+    padding: 40px 24px 64px;
+  }
+}
+
+/* Logo trong tất cả header — không làm navbar bị kéo */
+[class$="__brand"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+}
+.header-logo {
+  position: absolute;
+  bottom: -27px;
+  left: 0;
+  height: 130px;
+  width: auto;
+  border-radius: 8px;
+  background: transparent;
+  padding: 4px 10px;
+  z-index: 1;
+}
+
+.page-loading {
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+  font-size: 16px;
+  color: #94a3b8;
+}

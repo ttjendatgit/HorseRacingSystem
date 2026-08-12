@@ -1,0 +1,459 @@
+/* ──────────────────────────────────────────────
+   Referee Race Report Page — Light Theme (Cream/Glass)
+   ────────────────────────────────────────────── */
+
+/* Page wrapper override */
+.app-shell:has(.rr-wrap) .page-wrapper {
+  padding: 0;
+  background: #f5f2eb;
+}
+
+/* ── Wrap ── */
+.rr-wrap {
+  background: #f5f2eb;
+  min-height: 100%;
+  padding: 28px 32px 48px;
+  color: #1a1d23;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Header ── */
+.rr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rr-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1d23;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.rr-sub {
+  font-size: 14px;
+  color: #64748b;
+  margin: 4px 0 0;
+}
+
+/* ── Report Type Selector ── */
+.rr-type-grid {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rr-type-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(231, 198, 120, 0.12);
+  border-radius: 12px;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+  min-width: 180px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.rr-type-card:hover {
+  border-color: rgba(242, 210, 139, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.rr-type-card--active {
+  border-color: #f2d28b;
+  background: rgba(242, 210, 139, 0.08);
+  box-shadow: 0 0 0 1px rgba(242, 210, 139, 0.2);
+}
+
+.rr-type-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.rr-type-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1d23;
+}
+
+.rr-type-sub {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* ── Two-column Grid ── */
+.rr-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .rr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Cards ── */
+.rr-card-dark {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(231, 198, 120, 0.12);
+  border-radius: 14px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.rr-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1d23;
+  margin: 0;
+}
+
+.rr-card-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: -8px 0 0;
+}
+
+/* ── Left column ── */
+.rr-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rr-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Select ── */
+.rr-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(231, 198, 120, 0.2);
+  background: rgba(255, 250, 240, 0.85);
+  color: #1a1d23;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.rr-select:focus {
+  outline: none;
+  border-color: #f2d28b;
+  box-shadow: 0 0 0 3px rgba(242, 210, 139, 0.08);
+}
+
+.rr-select option {
+  background: #fff;
+  color: #1a1d23;
+}
+
+.rr-muted {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ── Form ── */
+.rr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rr-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rr-field textarea,
+.rr-field select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(231, 198, 120, 0.2);
+  background: rgba(255, 250, 240, 0.85);
+  color: #1a1d23;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  resize: vertical;
+}
+
+.rr-field textarea::placeholder,
+.rr-field select::placeholder {
+  color: #94a3b8;
+}
+
+.rr-field textarea:focus,
+.rr-field select:focus {
+  outline: none;
+  border-color: #f2d28b;
+  box-shadow: 0 0 0 3px rgba(242, 210, 139, 0.08);
+}
+
+/* ── Rating ── */
+.rr-rating-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rr-star-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+  color: #cbd5e1;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.rr-star-btn:hover {
+  transform: scale(1.2);
+}
+
+.rr-star-btn--on {
+  color: #f2d28b;
+}
+
+.rr-rating-val {
+  font-size: 13px;
+  color: #64748b;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.rr-rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rr-rating-stars .star-filled {
+  color: #f2d28b;
+  font-size: 16px;
+}
+
+.rr-rating-stars .star-empty {
+  color: #cbd5e1;
+  font-size: 16px;
+}
+
+.rr-rating-num {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: 6px;
+}
+
+/* ── Submit Button ── */
+.rr-submit-btn {
+  padding: 11px 24px;
+  border-radius: 10px;
+  border: none;
+  background: #f2d28b;
+  color: #1a1d23;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+
+.rr-submit-btn:hover {
+  background: #e8c476;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(242, 210, 139, 0.2);
+}
+
+.rr-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Message ── */
+.rr-msg {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rr-msg--ok {
+  background: rgba(16, 185, 129, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.rr-msg--err {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* ── Existing Report ── */
+.rr-existing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.rr-existing-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rr-existing-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Chart (CSS bars) ── */
+.rr-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  height: 160px;
+  padding: 8px 0 0;
+}
+
+.rr-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  height: 100%;
+}
+
+.rr-chart-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1;
+}
+
+.rr-chart-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.rr-chart-bar {
+  width: 60%;
+  max-width: 32px;
+  min-height: 4px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #f2d28b 0%, #c9a85c 100%);
+  transition: height 0.4s ease;
+}
+
+.rr-chart-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Recent Reports List ── */
+.rr-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rr-recent-item {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(231, 198, 120, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rr-recent-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rr-recent-race {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1d23;
+}
+
+.rr-recent-date {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rr-recent-excerpt {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rr-recent-rating {
+  font-size: 12px;
+  color: #f2d28b;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.rr-recent-rating-num {
+  color: #64748b;
+  margin-left: 6px;
+  font-size: 11px;
+}

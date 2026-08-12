@@ -1,0 +1,47 @@
+# Build outputs
+**/bin/
+**/obj/
+# Build
+BE/bin/
+BE/obj/
+
+
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+# User/IDE files
+.vs/
+.vscode/
+.agents/
+appsettings.Development.json
+*.user
+*.suo
+*.userprefs
+*.csproj.user
+
+# Logs
+*.log
+*.lscache
+skills-lock.json
+*.md
+!README.md
+
+# Environment files
+FE/.env.development
+FE/.env.production
+.env
+.env.*
+
+# Published backend output
+publish/
+
+
+# Local database dumps
+horse_core_data.sql
+horse_core_schema.sql
+
+# Old payment assets
+FE/public/qr-nap-tien.png
