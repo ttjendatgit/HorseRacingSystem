@@ -7,17 +7,23 @@ import "./SpectatorHeader.css";
 function SpectatorHeader() {
   return (
     <header className="spectator-header">
-      <Link className="spectator-header__brand" to="/spectator/tournaments">
-        <img src="/logo.png" alt="RaceMaster" className="header-logo" />
-      </Link>
-      <nav className="spectator-header__nav" aria-label="Spectator">
-        {spectatorNavItems.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? "nav-link nav-link--active" : "nav-link"}>{item.label}</NavLink>
-        ))}
-      </nav>
-      <div className="spectator-header__actions">
-        <NotificationBell />
-        <ProfileDropdown profileUrl="/spectator/profile" />
+      <div className="spectator-header__inner">
+        <Link className="spectator-header__brand" to="/spectator/tournaments">
+          <img
+            src="/images/home-legacy/hr-logo-approved-exact.svg"
+            alt="RaceMaster"
+            className="header-logo"
+          />
+        </Link>
+        <nav className="spectator-header__nav" aria-label="Spectator">
+          {spectatorNavItems.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? "nav-link nav-link--active" : "nav-link"}>{item.label}</NavLink>
+          ))}
+        </nav>
+        <div className="spectator-header__actions">
+          <NotificationBell />
+          <ProfileDropdown profileUrl="/spectator/profile" />
+        </div>
       </div>
     </header>
   );

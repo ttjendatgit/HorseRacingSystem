@@ -31,36 +31,36 @@ export default function HorseManagementPage() {
     return lastEntry?.jockey?.user?.fullName || lastEntry?.Jockey?.User?.FullName || "Chưa có";
   };
 
-  if (loading) return <div style={{padding:40,textAlign:"center",color:"#657086"}}>Đang tải...</div>;
+  if (loading) return <div style={{padding:40,textAlign:"center",color:"var(--hr-muted)"}}>Đang tải...</div>;
 
   return (
     <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 32px"}}>
-      <h1 style={{margin:"0 0 24px",fontSize:28,color:"#172033"}}>Quản lý ngựa</h1>
+      <h1 style={{margin:"0 0 24px",fontSize:28,color:"var(--hr-paper)"}}>Quản lý ngựa</h1>
       {horses.length === 0 ? (
-        <p style={{color:"#657086"}}>Chưa có ngựa nào.</p>
+        <p style={{color:"var(--hr-muted)"}}>Chưa có ngựa nào.</p>
       ) : (
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
-          <thead><tr style={{borderBottom:"2px solid rgba(143,100,32,0.12)"}}>
-            <th style={{padding:"12px 16px",textAlign:"left",color:"#657086",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Ngựa</th>
-            <th style={{padding:"12px 16px",textAlign:"left",color:"#657086",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Giống</th>
-            <th style={{padding:"12px 16px",textAlign:"left",color:"#657086",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Kỵ sĩ</th>
-            <th style={{padding:"12px 16px",textAlign:"left",color:"#657086",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Chủ sở hữu</th>
-            <th style={{padding:"12px 16px",textAlign:"left",color:"#657086",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Trạng thái</th>
+          <thead><tr style={{borderBottom:"2px solid var(--hr-border)"}}>
+            <th style={{padding:"12px 16px",textAlign:"left",color:"var(--hr-muted)",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Ngựa</th>
+            <th style={{padding:"12px 16px",textAlign:"left",color:"var(--hr-muted)",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Giống</th>
+            <th style={{padding:"12px 16px",textAlign:"left",color:"var(--hr-muted)",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Kỵ sĩ</th>
+            <th style={{padding:"12px 16px",textAlign:"left",color:"var(--hr-muted)",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Chủ sở hữu</th>
+            <th style={{padding:"12px 16px",textAlign:"left",color:"var(--hr-muted)",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Trạng thái</th>
           </tr></thead>
           <tbody>
             {horses.map(h => {
               const id = h.id || h.Id;
               return (
-                <tr key={id} style={{borderBottom:"1px solid rgba(143,100,32,0.06)"}}>
-                  <td style={{padding:"12px 16px",fontWeight:600,color:"#172033"}}>{h.name || h.Name}</td>
-                  <td style={{padding:"12px 16px",color:"#657086"}}>{h.breed || h.Breed || "-"}</td>
-                  <td style={{padding:"12px 16px",color:"#34415b"}}>🏇 {getJockeyName(h)}</td>
-                  <td style={{padding:"12px 16px",color:"#657086"}}>{h.owner?.user?.fullName || h.Owner?.User?.FullName || "-"}</td>
+                <tr key={id} style={{borderBottom:"1px solid var(--hr-border-soft)"}}>
+                  <td style={{padding:"12px 16px",fontWeight:600,color:"var(--hr-paper)"}}>{h.name || h.Name}</td>
+                  <td style={{padding:"12px 16px",color:"var(--hr-muted)"}}>{h.breed || h.Breed || "-"}</td>
+                  <td style={{padding:"12px 16px",color:"var(--hr-text)"}}>🏇 {getJockeyName(h)}</td>
+                  <td style={{padding:"12px 16px",color:"var(--hr-muted)"}}>{h.owner?.user?.fullName || h.Owner?.User?.FullName || "-"}</td>
                   <td style={{padding:"12px 16px"}}>
                     {h.isBusy ? (
-                      <span style={{padding:"2px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:"rgba(245,158,11,0.1)",color:"#92400e"}}>Đang đua</span>
+                      <span style={{padding:"2px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:"rgba(185,138,69,0.16)",color:"var(--hr-warning)"}}>Đang đua</span>
                     ) : (
-                      <span style={{padding:"2px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:"rgba(16,185,129,0.1)",color:"#166534"}}>Sẵn sàng</span>
+                      <span style={{padding:"2px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:"rgba(112,139,104,0.16)",color:"var(--hr-success)"}}>Sẵn sàng</span>
                     )}
                   </td>
                 </tr>

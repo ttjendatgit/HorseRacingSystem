@@ -1,6 +1,6 @@
 .site-footer {
-  border-top: 1px solid rgba(212, 175, 55, 0.12);
-  background: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid rgba(238, 229, 212, 0.07);
+  background: rgba(18, 14, 10, 0.9);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
@@ -22,25 +22,25 @@
 }
 
 .site-footer__links a {
-  color: #657086;
+  color: rgba(238, 229, 212, 0.55);
   text-decoration: none;
   line-height: 0;
   transition: color 0.2s;
 }
 
 .site-footer__links a:hover {
-  color: #8f6420;
+  color: #c9a563;
 }
 
 .site-footer__copy {
   font-size: 12px;
-  color: #888;
+  color: rgba(238, 229, 212, 0.45);
   white-space: nowrap;
 }
 
 .site-footer__badge {
   font-size: 10px;
-  color: rgba(219, 168, 58, 0.7);
+  color: rgba(184, 134, 59, 0.75);
   text-transform: uppercase;
   letter-spacing: 2px;
   font-weight: 600;

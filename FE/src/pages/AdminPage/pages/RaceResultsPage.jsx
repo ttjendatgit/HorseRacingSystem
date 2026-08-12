@@ -38,10 +38,10 @@ const STATUS_LABEL = {
 };
 
 const STATUS_COLOR = {
-  finished: { color: "#166534", bg: "rgba(16,185,129,0.12)" },
-  awaitingresult: { color: "#6d28d9", bg: "rgba(139,92,246,0.12)" },
-  resultpendingapproval: { color: "#b45309", bg: "rgba(245,158,11,0.12)" },
-  resultapproved: { color: "#047857", bg: "rgba(16,185,129,0.12)" },
+  finished: { color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
+  awaitingresult: { color: "#c4b5fd", bg: "rgba(139,92,246,0.16)" },
+  resultpendingapproval: { color: "var(--hr-warning)", bg: "rgba(185,138,69,0.16)" },
+  resultapproved: { color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
 };
 
 const fmtDate = (v) =>
@@ -164,22 +164,22 @@ export default function RaceResultsPage() {
 
   if (loading)
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#657086" }}>
+      <div style={{ padding: 40, textAlign: "center", color: "var(--hr-muted)" }}>
         Đang tải...
       </div>
     );
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px" }}>
-      <h1 style={{ margin: "0 0 8px", fontSize: 28, color: "#172033" }}>
+      <h1 style={{ margin: "0 0 8px", fontSize: 28, color: "var(--hr-paper)" }}>
         Kết quả cuộc đua
       </h1>
-      <p style={{ margin: "0 0 24px", fontSize: 13, color: "#657086" }}>
+      <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--hr-muted)" }}>
         Ngựa và kỵ sĩ chiến thắng theo từng giải đấu.
       </p>
 
       {groups.length === 0 ? (
-        <p style={{ color: "#657086" }}>Chưa có cuộc đua nào kết thúc.</p>
+        <p style={{ color: "var(--hr-muted)" }}>Chưa có cuộc đua nào kết thúc.</p>
       ) : (
         groups.map((group) => (
           <section key={group.id} style={{ marginBottom: 28 }}>
@@ -190,7 +190,7 @@ export default function RaceResultsPage() {
                 gap: 10,
                 marginBottom: 14,
                 paddingBottom: 10,
-                borderBottom: "2px solid rgba(143,100,32,0.16)",
+                borderBottom: "2px solid var(--hr-border)",
               }}
             >
               <span
@@ -198,8 +198,8 @@ export default function RaceResultsPage() {
                   width: 34,
                   height: 34,
                   borderRadius: 10,
-                  background: "rgba(143,100,32,0.12)",
-                  color: "#8f6420",
+                  background: "rgba(184,134,59,0.14)",
+                  color: "var(--hr-gold-soft)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -210,10 +210,10 @@ export default function RaceResultsPage() {
                 {String(group.name || "?").slice(0, 1)}
               </span>
               <div>
-                <h2 style={{ margin: 0, fontSize: 19, color: "#172033" }}>
+                <h2 style={{ margin: 0, fontSize: 19, color: "var(--hr-paper)" }}>
                   {group.name}
                 </h2>
-                <span style={{ fontSize: 12, color: "#657086" }}>
+                <span style={{ fontSize: 12, color: "var(--hr-muted)" }}>
                   {group.races.length} cuộc đua · {fmtDate(group.startDate)}
                 </span>
               </div>
@@ -231,14 +231,14 @@ export default function RaceResultsPage() {
                 const status = normalizeStatus(race.status ?? race.Status);
                 const hasWinner = Boolean(det.winnerHorseName);
                 const stColor =
-                  STATUS_COLOR[status] ?? { color: "#64748b", bg: "rgba(100,116,139,0.1)" };
+                  STATUS_COLOR[status] ?? { color: "var(--hr-muted)", bg: "rgba(238,229,212,0.06)" };
                 return (
                   <article
                     key={id}
                     style={{
                       borderRadius: 14,
-                      border: "1px solid rgba(143,100,32,0.16)",
-                      background: "rgba(255,250,240,0.96)",
+                      border: "1px solid var(--hr-border)",
+                      background: "var(--hr-surface)",
                       padding: "16px 18px",
                       display: "flex",
                       flexDirection: "column",
@@ -254,11 +254,11 @@ export default function RaceResultsPage() {
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: "#172033" }}>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: "var(--hr-paper)" }}>
                           {race.name ?? race.Name}
                         </div>
                         {(race.roundNames ?? race.RoundNames) && (
-                          <div style={{ fontSize: 12, color: "#8f6420", marginTop: 2 }}>
+                          <div style={{ fontSize: 12, color: "var(--hr-gold-soft)", marginTop: 2 }}>
                             {race.roundNames ?? race.RoundNames}
                           </div>
                         )}
@@ -281,7 +281,7 @@ export default function RaceResultsPage() {
                     <div
                       style={{
                         fontSize: 12,
-                        color: "#657086",
+                        color: "var(--hr-muted)",
                         display: "flex",
                         justifyContent: "space-between",
                       }}
@@ -297,19 +297,19 @@ export default function RaceResultsPage() {
 
                     <div
                       style={{
-                        borderTop: "1px solid rgba(143,100,32,0.12)",
+                        borderTop: "1px solid var(--hr-border-soft)",
                         paddingTop: 10,
                       }}
                     >
                       {hasWinner ? (
                         <>
-                          <div style={{ fontSize: 13, color: "#166534", fontWeight: 700 }}>
+                          <div style={{ fontSize: 13, color: "var(--hr-success)", fontWeight: 700 }}>
                             🏆 {det.winnerHorseName}
                           </div>
-                          <div style={{ fontSize: 12, color: "#34415b", marginTop: 4 }}>
+                          <div style={{ fontSize: 12, color: "var(--hr-text)", marginTop: 4 }}>
                             Kỵ sĩ: <strong>{det.winnerJockeyName ?? "Chưa xác định"}</strong>
                             {det.winnerOdds ? (
-                              <span style={{ color: "#8f6420" }}>
+                              <span style={{ color: "var(--hr-gold-soft)" }}>
                                 {" "}
                                 · Tỉ lệ {Number(det.winnerOdds).toFixed(2)}x
                               </span>
@@ -320,7 +320,7 @@ export default function RaceResultsPage() {
                           </div>
                         </>
                       ) : (
-                        <div style={{ fontSize: 13, color: "#657086" }}>
+                        <div style={{ fontSize: 13, color: "var(--hr-muted)" }}>
                           Chưa có kết quả — chờ trọng tài nộp và admin duyệt.
                         </div>
                       )}

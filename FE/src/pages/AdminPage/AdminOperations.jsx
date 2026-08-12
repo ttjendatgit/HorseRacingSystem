@@ -14,7 +14,7 @@ const fDate = (v) => v ? new Date(v).toLocaleDateString("vi-VN", { dateStyle: "m
 function Modal({ title, children, onClose }) {
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="owner-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+      <div className="admin-modal-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="ghost-button" onClick={onClose}>Đóng</button>
@@ -40,7 +40,7 @@ export function PrizeManagement() {
   return (
     <div>
       <h2>Tiền thưởng</h2>
-      <p style={{ color: "#657086", marginBottom: 16 }}>Quản lý phân phối tiền thưởng cho giải đấu và cuộc đua.</p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Quản lý phân phối tiền thưởng cho giải đấu và cuộc đua.</p>
       {msg && <p className="admin-notice">{msg}</p>}
       <form onSubmit={submit} className="admin-form" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
         <input placeholder="Tên giải thưởng" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -83,7 +83,7 @@ export function ProtestManagement() {
   return (
     <div>
       <h2>Khiếu nại</h2>
-      <p style={{ color: "#657086", marginBottom: 16 }}>Xem xét và phán quyết khiếu nại cuộc đua từ chủ sở hữu và kỵ sĩ.</p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Xem xét và phán quyết khiếu nại cuộc đua từ chủ sở hữu và kỵ sĩ.</p>
       {msg && <p className="admin-notice">{msg}</p>}
 
       {modal && (
@@ -138,7 +138,7 @@ export function TransferManagement() {
   return (
     <div>
       <h2>Chuyển nhượng ngựa</h2>
-      <p style={{ color: "#657086", marginBottom: 16 }}>Xem xét và phê duyệt chuyển nhượng quyền sở hữu ngựa.</p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Xem xét và phê duyệt chuyển nhượng quyền sở hữu ngựa.</p>
       {msg && <p className="admin-notice">{msg}</p>}
 
       {rejectModal && (
@@ -174,7 +174,7 @@ export function ContractManagement() {
   return (
     <div>
       <h2>Hợp đồng</h2>
-      <p style={{ color: "#657086", marginBottom: 16 }}>Hợp đồng và thỏa thuận Chủ sở hữu - Kỵ sĩ.</p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Hợp đồng và thỏa thuận Chủ sở hữu - Kỵ sĩ.</p>
       {msg && <p className="admin-notice">{msg}</p>}
       {items.length === 0 ? <p className="muted">Không có hợp đồng.</p> : (
         <div className="admin-table-wrap"><table className="admin-table">
@@ -196,7 +196,7 @@ export function InjuryManagement() {
   return (
     <div>
       <h2>Hồ sơ chấn thương</h2>
-      <p style={{ color: "#657086", marginBottom: 16 }}>Theo dõi chấn thương ngựa, điều trị và tình trạng hồi phục.</p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Theo dõi chấn thương ngựa, điều trị và tình trạng hồi phục.</p>
       {msg && <p className="admin-notice">{msg}</p>}
       {items.length === 0 ? <p className="muted">Không có hồ sơ chấn thương.</p> : (
         <div className="admin-table-wrap"><table className="admin-table">

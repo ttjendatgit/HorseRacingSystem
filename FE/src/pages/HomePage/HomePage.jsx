@@ -80,22 +80,82 @@ function HomePage() {
 
   return (
     <div className="home-page">
-      {/* ── Hero Banner ── */}
-      <section className="hero-banner">
-        <div className="hero-banner__bg">
-          <img src={heroImage} alt="" />
-          <div className="hero-banner__overlay" />
-        </div>
-        <div className="hero-banner__content">
-          <span className="hero-banner__badge">🏆 Nền Tảng Đua Ngựa Hàng Đầu</span>
-          <h1>Chinh Phục Đường Đua<br />Cùng RaceMaster</h1>
-          <p>
-            Nền tảng toàn diện cho Chủ Ngựa, Kỵ Sĩ và Khán Giả — quản lý giải đấu,
-            theo dõi kết quả trực tiếp và kết nối cộng đồng đua ngựa chuyên nghiệp.
-          </p>
-          <div className="hero-banner__actions">
-            <Link to="/register" className="hero-btn hero-btn--primary">Tham Gia Ngay</Link>
-            <Link to="/tournaments" className="hero-btn hero-btn--outline">Khám Phá Giải Đấu</Link>
+      {/* ── Cinematic Hero ── */}
+      <section className="legacy-hero">
+        <div className="legacy-hero__background" aria-hidden="true" />
+
+        <div className="legacy-hero__shade" aria-hidden="true" />
+
+        <div className="legacy-hero__inner">
+          <div className="legacy-hero__copy">
+            <h1 className="legacy-hero__title">
+              Điều hành cả
+              <br />
+              mùa giải
+              <br />
+              trong <em>một</em>
+              <br />
+              <em>nền tảng</em>
+            </h1>
+
+            <div className="legacy-hero__eyebrow">
+              <span />
+              PHOTO FINISH
+            </div>
+
+            <p className="legacy-hero__description">
+              Quản lý lịch thi đấu, đăng ký ngựa và jockey, chấm kết quả và
+              công bố bảng xếp hạng — tất cả theo thời gian thực, cho mọi vai
+              trò từ ban tổ chức đến khán giả.
+            </p>
+
+            <div className="legacy-hero__actions">
+              <Link to="/tournaments" className="legacy-hero__primary">
+                Khám phá giải đấu
+              </Link>
+
+              <Link to="/live-results" className="legacy-hero__secondary">
+                Xem kết quả →
+              </Link>
+            </div>
+          </div>
+
+          <div className="legacy-hero__visual">
+            <article className="legacy-race-card">
+              <img
+                src="/images/home-legacy/RaceCard.jpg"
+                alt=""
+                className="legacy-race-card__image"
+              />
+              <div className="legacy-race-card__scrim" aria-hidden="true" />
+
+              <div className="legacy-race-card__content">
+                <span className="legacy-race-card__eyebrow">Sắp diễn ra</span>
+                <h2 className="legacy-race-card__title">Những cuộc đua đang chờ bạn</h2>
+                <Link to="/tournaments" className="legacy-race-card__cta">
+                  <span>Xem lịch</span>
+                  <span className="legacy-race-card__arrow" aria-hidden="true">→</span>
+                </Link>
+              </div>
+            </article>
+
+            <article className="legacy-ranking-card">
+              <div className="legacy-ranking-card__media">
+                <img
+                  src="/images/home-legacy/RankingCard.jpg"
+                  alt=""
+                />
+              </div>
+
+              <div className="legacy-ranking-card__content">
+                <span className="legacy-ranking-card__eyebrow">Bảng xếp hạng</span>
+                <Link to="/live-results" className="legacy-ranking-card__row">
+                  <span className="legacy-ranking-card__rank">01</span>
+                  <span className="legacy-ranking-card__label">Dẫn đầu mùa giải</span>
+                  <span className="legacy-ranking-card__arrow" aria-hidden="true">→</span>
+                </Link>
+              </div>
+            </article>
           </div>
         </div>
       </section>
@@ -115,32 +175,51 @@ function HomePage() {
       {/* ── Giải đấu nổi bật ── */}
       <section className="tournaments-section">
         <div className="section-header">
-          <span className="section-tag">Giải Đấu</span>
+          <span className="section-eyebrow">Giải Đấu</span>
           <h2>Giải Đấu Nổi Bật</h2>
           <p>Những giải đấu danh giá nhất đang chờ đón bạn và chiến mã của mình.</p>
         </div>
-        <div className="tournaments-grid">
+        <div className="tournaments-list">
           {tournaments.length === 0 ? (
             <p className="muted">Chưa có giải đấu nào.</p>
           ) : tournaments.slice(0, 3).map((t) => {
             const statusKey = (t.statusName ?? t.StatusName ?? "draft").toLowerCase();
             const statusLabel = TOURNAMENT_STATUS[statusKey] ?? t.statusName ?? "Đang mở";
             const raceCount = t.raceCount ?? t.RaceCount ?? t.stats?.raceCount ?? 0;
+            // Presentation-only date breakdown derived from the same startDate value.
+            const startDate = t.startDate ? new Date(t.startDate) : null;
+            const dateDay = startDate ? String(startDate.getDate()).padStart(2, "0") : "—";
+            const dateMonth = startDate ? startDate.toLocaleDateString("vi-VN", { month: "short" }) : "";
+            const dateYear = startDate ? startDate.getFullYear() : "";
             return (
-              <div key={t.id ?? t.Id} className="tournament-card">
-                <div className="tournament-card__header">
-                  <span className={`tournament-status ${statusKey === "ongoing" || statusKey === "started" ? "tournament-status--live" : "tournament-status--upcoming"}`}>
+              <article key={t.id ?? t.Id} className="tournament-feature">
+                <div className="tournament-feature__date">
+                  <span className="tournament-feature__day">{dateDay}</span>
+                  <span className="tournament-feature__month">{dateMonth}</span>
+                  <span className="tournament-feature__year">{dateYear || "—"}</span>
+                  <span
+                    className={`tournament-feature__status ${
+                      statusKey === "ongoing" || statusKey === "started"
+                        ? "tournament-feature__status--live"
+                        : "tournament-feature__status--upcoming"
+                    }`}
+                  >
                     {statusLabel}
                   </span>
-                  <span className="tournament-category">{t.startDate ? new Date(t.startDate).toLocaleDateString("vi-VN") : "—"}</span>
                 </div>
-                <h3>{t.name ?? t.Name}</h3>
-                <div className="tournament-card__meta">
-                  <span>🏁 {raceCount} cuộc đua</span>
+
+                <div className="tournament-feature__body">
+                  <h3 className="tournament-feature__title">{t.name ?? t.Name}</h3>
+                  <p className="tournament-feature__desc">{t.description ?? t.Description ?? "Không có mô tả."}</p>
+                  <span className="tournament-feature__races">{String(raceCount).padStart(2, "0")} cuộc đua</span>
+                  <Link to="/tournaments" className="tournament-feature__cta">
+                    <span>Khám phá giải đấu</span>
+                    <span className="tournament-feature__arrow" aria-hidden="true">→</span>
+                  </Link>
                 </div>
-                <p className="tournament-card__desc">{t.description ?? t.Description ?? "Không có mô tả."}</p>
-                <Link to="/tournaments" className="tournament-card__link">Xem chi tiết →</Link>
-              </div>
+
+                <div className="tournament-feature__image" aria-hidden="true" />
+              </article>
             );
           })}
         </div>
@@ -149,7 +228,7 @@ function HomePage() {
       {/* ── Bộ sưu tập ảnh (Marquee) ── */}
       <section className="marquee-section">
         <div className="section-header">
-          <span className="section-tag">Thư Viện</span>
+          <span className="section-eyebrow">Thư Viện</span>
           <h2>Khoảnh Khắc Đường Đua</h2>
         </div>
         <div className="marquee-track">
@@ -166,44 +245,48 @@ function HomePage() {
       {/* ── Top Kỵ Sĩ & Top Chủ Ngựa ── */}
       <section className="leader-section">
         <div className="section-header">
-          <span className="section-tag">Bảng Xếp Hạng</span>
+          <span className="section-eyebrow">Bảng Xếp Hạng</span>
           <h2>Top Kỵ Sĩ & Chủ Ngựa</h2>
           <p>Những cá nhân xuất sắc nhất trên đường đua mùa giải này.</p>
         </div>
-        <div className="leader-grid">
+        <div className="standings">
           {/* Kỵ Sĩ */}
-          <div className="leader-panel">
-            <h3>🏇 Top Kỵ Sĩ</h3>
-            <div className="leader-list">
-              {topJockeys.length === 0 ? (
-                <p className="muted">Chưa có dữ liệu.</p>
-              ) : topJockeys.map((j, idx) => (
-                <div key={j.id ?? j.name} className="leader-card">
-                  <span className="leader-card__rank">#{idx + 1}</span>
-                  <div className="leader-card__info">
-                    <strong>{j.name}</strong>
-                    <span>{j.totalRaces ?? 0} cuộc đua · {j.wins ?? 0} thắng · Tỷ lệ {j.winRate ?? 0}%</span>
+          <div className="standings__column">
+            <h3 className="standings__heading">Top Kỵ Sĩ</h3>
+            {topJockeys.length === 0 ? (
+              <p className="muted">Chưa có dữ liệu.</p>
+            ) : (
+              <div className="standings__list">
+                {topJockeys.map((j, idx) => (
+                  <div key={j.id ?? j.name} className="standings__row">
+                    <span className="standings__rank">{String(idx + 1).padStart(2, "0")}</span>
+                    <span className="standings__name">{j.name}</span>
+                    <span className="standings__stat">
+                      {j.totalRaces ?? 0} cuộc đua · {j.wins ?? 0} thắng · {j.winRate ?? 0}%
+                    </span>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
           {/* Chủ Ngựa */}
-          <div className="leader-panel">
-            <h3>🐎 Top Chủ Ngựa</h3>
-            <div className="leader-list">
-              {topOwners.length === 0 ? (
-                <p className="muted">Chưa có dữ liệu.</p>
-              ) : topOwners.map((o, idx) => (
-                <div key={o.name} className="leader-card">
-                  <span className="leader-card__rank">#{idx + 1}</span>
-                  <div className="leader-card__info">
-                    <strong>{o.name}</strong>
-                    <span>{o.horses} ngựa · {o.wins} thắng · {o.entries} lượt đua</span>
+          <div className="standings__column">
+            <h3 className="standings__heading">Top Chủ Ngựa</h3>
+            {topOwners.length === 0 ? (
+              <p className="muted">Chưa có dữ liệu.</p>
+            ) : (
+              <div className="standings__list">
+                {topOwners.map((o, idx) => (
+                  <div key={o.name} className="standings__row">
+                    <span className="standings__rank">{String(idx + 1).padStart(2, "0")}</span>
+                    <span className="standings__name">{o.name}</span>
+                    <span className="standings__stat">
+                      {o.horses} ngựa · {o.wins} thắng · {o.entries} lượt đua
+                    </span>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -211,40 +294,29 @@ function HomePage() {
       {/* ── Kết quả thi đấu gần đây ── */}
       <section className="results-section">
         <div className="section-header">
-          <span className="section-tag">Kết Quả</span>
+          <span className="section-eyebrow">Kết Quả</span>
           <h2>Kết Quả Thi Đấu Gần Đây</h2>
           <p>Cập nhật kết quả mới nhất từ các cuộc đua đã hoàn thành.</p>
         </div>
         {recentRaces.length === 0 ? (
           <p className="muted">Chưa có cuộc đua nào hoàn thành.</p>
         ) : (
-          <div className="results-table-wrap">
-            <table className="results-table">
-              <thead>
-                <tr>
-                  <th>Cuộc đua</th>
-                  <th>Địa điểm</th>
-                  <th>Cự ly</th>
-                  <th>Thời gian</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRaces.map((r) => (
-                  <tr key={r.id ?? r.Id}>
-                    <td className="results-race-name">{r.name ?? r.Name}</td>
-                    <td>{r.location ?? r.Location ?? "—"}</td>
-                    <td>{r.distance ?? r.Distance ?? "—"}m</td>
-                    <td className="results-time">{formatTime(r.scheduledAt ?? r.ScheduledAt)}</td>
-                    <td>
-                      <Link to="/live-results" className="results-more-link">Kết quả →</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <div className="results-list">
+              {recentRaces.map((r) => (
+                <article key={r.id ?? r.Id} className="results-row">
+                  <div className="results-row__main">
+                    <h3 className="results-row__title">{r.name ?? r.Name}</h3>
+                    <p className="results-row__meta">
+                      {r.location ?? r.Location ?? "—"} · {r.distance ?? r.Distance ?? "—"}m · {formatTime(r.scheduledAt ?? r.ScheduledAt)}
+                    </p>
+                  </div>
+                  <Link to="/live-results" className="results-row__link">Kết quả →</Link>
+                </article>
+              ))}
+            </div>
             <Link to="/live-results" className="results-more">Xem tất cả kết quả →</Link>
-          </div>
+          </>
         )}
       </section>
 

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { request } from "../../../services/apiClient";
 
 const STATUS_META = {
-  pending: { label: "Chờ thanh toán", color: "#b45309", bg: "rgba(245,158,11,0.12)" },
-  won: { label: "Thắng", color: "#166534", bg: "rgba(16,185,129,0.12)" },
-  lost: { label: "Thua", color: "#991b1b", bg: "rgba(239,68,68,0.1)" },
+  pending: { label: "Chờ thanh toán", color: "var(--hr-warning)", bg: "rgba(185,138,69,0.16)" },
+  won: { label: "Thắng", color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
+  lost: { label: "Thua", color: "var(--hr-danger)", bg: "rgba(201,105,90,0.16)" },
 };
 
 const fmtDate = (v) =>
@@ -43,15 +43,15 @@ export default function PredictionsManagementPage() {
     : items;
 
   if (loading)
-    return <div style={{ padding: 40, textAlign: "center", color: "#657086" }}>Đang tải...</div>;
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--hr-muted)" }}>Đang tải...</div>;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px" }}>
-      <h1 style={{ margin: "0 0 8px", fontSize: 28, color: "#172033" }}>Quản lý dự đoán</h1>
-      <p style={{ margin: "0 0 24px", fontSize: 13, color: "#657086" }}>
+      <h1 style={{ margin: "0 0 8px", fontSize: 28, color: "var(--hr-paper)" }}>Quản lý dự đoán</h1>
+      <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--hr-muted)" }}>
         Tổng quan đặt cược điểm của khán giả và trạng thái thanh toán.
       </p>
-      {error && <p style={{ color: "#c41e1e", marginBottom: 16 }}>{error}</p>}
+      {error && <p style={{ color: "var(--hr-danger)", marginBottom: 16 }}>{error}</p>}
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 20 }}>
         {[
@@ -62,25 +62,26 @@ export default function PredictionsManagementPage() {
           { label: "Thua", value: summary.lost ?? 0 },
           { label: "Chờ thanh toán", value: summary.pending ?? 0 },
         ].map((s) => (
-          <div key={s.label} style={{ borderRadius: 14, border: "1px solid rgba(143,100,32,0.16)", background: "rgba(255,250,240,0.96)", padding: "14px 16px" }}>
-            <span style={{ display: "block", fontSize: 11, color: "#657086", textTransform: "uppercase" }}>{s.label}</span>
-            <strong style={{ fontSize: 20, color: "#172033" }}>{s.value}</strong>
+          <div key={s.label} style={{ borderRadius: 14, border: "1px solid var(--hr-border)", background: "var(--hr-surface)", padding: "14px 16px" }}>
+            <span style={{ display: "block", fontSize: 11, color: "var(--hr-muted)", textTransform: "uppercase" }}>{s.label}</span>
+            <strong style={{ fontSize: 20, color: "var(--hr-paper)" }}>{s.value}</strong>
           </div>
         ))}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12 }}>
         <input
+          className="hr-field"
           placeholder="Tìm theo khán giả, cuộc đua, ngựa, giải đấu..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(143,100,32,0.2)", maxWidth: 380, flex: 1 }}
+          style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--hr-border-soft)", background: "var(--hr-surface-2)", color: "var(--hr-text)", maxWidth: 380, flex: 1 }}
         />
-        <span style={{ fontSize: 12, color: "#657086" }}>{filtered.length} dự đoán</span>
+        <span style={{ fontSize: 12, color: "var(--hr-muted)" }}>{filtered.length} dự đoán</span>
       </div>
 
-      <div style={{ overflowX: "auto", border: "1px solid rgba(231,198,120,.1)", borderRadius: 16 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "rgba(255,250,240,0.96)", fontSize: 13 }}>
+      <div style={{ overflowX: "auto", border: "1px solid var(--hr-border-soft)", borderRadius: 16 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--hr-surface)", fontSize: 13 }}>
           <thead>
             <tr>
               <th style={th}>Khán giả</th>
@@ -96,10 +97,10 @@ export default function PredictionsManagementPage() {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} style={{ padding: 20, textAlign: "center", color: "#657086" }}>Chưa có dự đoán nào.</td></tr>
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: "center", color: "var(--hr-muted)" }}>Chưa có dự đoán nào.</td></tr>
             ) : filtered.map((p) => {
               const st = (p.status ?? "").toLowerCase();
-              const meta = STATUS_META[st] ?? { label: p.status ?? "-", color: "#64748b", bg: "rgba(100,116,139,0.1)" };
+              const meta = STATUS_META[st] ?? { label: p.status ?? "-", color: "var(--hr-muted)", bg: "rgba(238,229,212,0.06)" };
               return (
                 <tr key={p.id}>
                   <td style={td}><strong>{p.spectatorName ?? "-"}</strong></td>
@@ -121,5 +122,5 @@ export default function PredictionsManagementPage() {
   );
 }
 
-const th = { padding: 12, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" };
-const td = { padding: 12, borderBottom: "1px solid rgba(231,198,120,.07)", color: "#34415b" };
+const th = { padding: 12, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" };
+const td = { padding: 12, borderBottom: "1px solid var(--hr-border-soft)", color: "var(--hr-text)" };

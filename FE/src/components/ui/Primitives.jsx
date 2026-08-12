@@ -139,28 +139,28 @@ export function Button({
 }) {
   const variants = {
     primary: {
-      background: colors.flame,
-      color: colors.paper,
-      border: "none",
-      hoverBg: colors.crimson,
+      background: "var(--hr-crimson)",
+      color: "var(--hr-paper)",
+      border: "1px solid transparent",
+      hoverBg: "var(--hr-crimson-hover)",
     },
     secondary: {
       background: "transparent",
-      color: colors.flame,
-      border: `2px solid ${colors.flame}`,
-      hoverBg: "transparent",
+      color: "var(--hr-text)",
+      border: "1px solid var(--hr-border)",
+      hoverBg: "rgba(238,229,212,0.06)",
     },
     ghost: {
       background: "transparent",
-      color: colors.stone,
-      border: `1px solid ${colors.parchment}`,
-      hoverBg: colors.cream,
+      color: "var(--hr-gold-soft)",
+      border: "1px solid var(--hr-border)",
+      hoverBg: "rgba(184,134,59,0.1)",
     },
     destructive: {
-      background: colors.statusRed,
-      color: "#7F1D1D",
-      border: "none",
-      hoverBg: "#E8B0A0",
+      background: "rgba(201,105,90,0.16)",
+      color: "var(--hr-danger)",
+      border: "1px solid rgba(201,105,90,0.35)",
+      hoverBg: "rgba(201,105,90,0.26)",
     },
   };
 
@@ -235,7 +235,7 @@ export function Input({
             display: "block",
             fontSize: typography.body.sizes.sm,
             fontWeight: typography.body.weight.medium,
-            color: colors.ink,
+            color: "var(--hr-text)",
             marginBottom: "6px",
           }}
         >
@@ -244,12 +244,13 @@ export function Input({
       )}
       <div style={{ position: "relative" }}>
         <input
+          className="hr-field"
           style={{
             width: "100%",
             borderRadius: radius.input,
-            border: `1px solid ${error ? colors.flame : colors.parchment}`,
-            background: colors.paper,
-            color: colors.ink,
+            border: `1px solid ${error ? "var(--hr-danger)" : "var(--hr-border-soft)"}`,
+            background: "var(--hr-surface-2)",
+            color: "var(--hr-text)",
             fontFamily: typography.body.fontFamily,
             outline: "none",
             transition: "border-color 0.2s ease",
@@ -265,7 +266,7 @@ export function Input({
               right: "12px",
               top: "50%",
               transform: "translateY(-50%)",
-              color: colors.flame,
+              color: "var(--hr-danger)",
               fontSize: "16px",
             }}
           >
@@ -277,7 +278,7 @@ export function Input({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.flame,
+            color: "var(--hr-danger)",
             marginTop: "4px",
             marginBottom: 0,
           }}
@@ -289,7 +290,7 @@ export function Input({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.ash,
+            color: "var(--hr-muted)",
             marginTop: "4px",
             marginBottom: 0,
           }}
@@ -318,7 +319,7 @@ export function Textarea({
             display: "block",
             fontSize: typography.body.sizes.sm,
             fontWeight: typography.body.weight.medium,
-            color: colors.ink,
+            color: "var(--hr-text)",
             marginBottom: "6px",
           }}
         >
@@ -327,12 +328,13 @@ export function Textarea({
       )}
       <textarea
         rows={rows}
+        className="hr-field"
         style={{
           width: "100%",
           borderRadius: radius.input,
-          border: `1px solid ${error ? colors.flame : colors.parchment}`,
-          background: colors.paper,
-          color: colors.ink,
+          border: `1px solid ${error ? "var(--hr-danger)" : "var(--hr-border-soft)"}`,
+          background: "var(--hr-surface-2)",
+          color: "var(--hr-text)",
           fontFamily: typography.body.fontFamily,
           fontSize: typography.body.sizes.md,
           padding: "10px 14px",
@@ -347,7 +349,7 @@ export function Textarea({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.flame,
+            color: "var(--hr-danger)",
             marginTop: "4px",
             marginBottom: 0,
           }}
@@ -359,7 +361,7 @@ export function Textarea({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.ash,
+            color: "var(--hr-muted)",
             marginTop: "4px",
             marginBottom: 0,
           }}
@@ -395,7 +397,7 @@ export function Select({
             display: "block",
             fontSize: typography.body.sizes.sm,
             fontWeight: typography.body.weight.medium,
-            color: colors.ink,
+            color: "var(--hr-text)",
             marginBottom: "6px",
           }}
         >
@@ -403,12 +405,13 @@ export function Select({
         </label>
       )}
       <select
+        className="hr-field"
         style={{
           width: "100%",
           borderRadius: radius.input,
-          border: `1px solid ${error ? colors.flame : colors.parchment}`,
-          background: colors.paper,
-          color: colors.ink,
+          border: `1px solid ${error ? "var(--hr-danger)" : "var(--hr-border-soft)"}`,
+          background: "var(--hr-surface-2)",
+          color: "var(--hr-text)",
           fontFamily: typography.body.fontFamily,
           outline: "none",
           transition: "border-color 0.2s ease",
@@ -428,7 +431,7 @@ export function Select({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.flame,
+            color: "var(--hr-danger)",
             marginTop: "4px",
             marginBottom: 0,
           }}
@@ -440,7 +443,7 @@ export function Select({
         <p
           style={{
             fontSize: typography.meta.sizes.sm,
-            color: colors.ash,
+            color: "var(--hr-muted)",
             marginTop: "4px",
             marginBottom: 0,
           }}

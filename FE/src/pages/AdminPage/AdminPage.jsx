@@ -362,7 +362,7 @@ function Dashboard() {
             {(() => {
               const activeRaces = data?.activeRaces ?? data?.ActiveRaces;
               if (!activeRaces || !Array.isArray(activeRaces) || activeRaces.length === 0) {
-                return <p style={{ color: "#657086", padding: 20, textAlign: "center" }}>Không có cuộc đua nào đang diễn ra hoặc sắp tới.</p>;
+                return <p style={{ color: "var(--hr-muted)", padding: 20, textAlign: "center" }}>Không có cuộc đua nào đang diễn ra hoặc sắp tới.</p>;
               }
               return activeRaces.map((r, i) => {
                 const status = (r.status ?? r.Status ?? "").toLowerCase();
@@ -389,7 +389,7 @@ function Dashboard() {
           </div>
           <div className="ad-card__body">
             {pendingItems.map((item) => {
-              const priorities = { high: { color: "#ef4444", bg: "rgba(239,68,68,0.06)", bar: "#ef4444" }, medium: { color: "#f59e0b", bg: "rgba(245,158,11,0.06)", bar: "#f59e0b" }, low: { color: "#64748b", bg: "rgba(100,116,139,0.06)", bar: "#94a3b8" } };
+              const priorities = { high: { color: "#ef4444", bg: "rgba(239,68,68,0.06)", bar: "#ef4444" }, medium: { color: "#f59e0b", bg: "rgba(245,158,11,0.06)", bar: "#f59e0b" }, low: { color: "var(--hr-muted)", bg: "rgba(238,229,212,0.05)", bar: "var(--hr-muted)" } };
               const p = priorities[item.priority];
               return (
                 <div key={item.label} className="ad-action-card" style={{ borderLeftColor: p.bar }}>
@@ -419,7 +419,7 @@ function Dashboard() {
         <div className="ad-card__body">
           <div className="ad-feed">
             {recentActivities.length === 0 ? (
-              <p style={{ color: "#657086", textAlign: "center", padding: 20 }}>Chưa có hoạt động nào.</p>
+              <p style={{ color: "var(--hr-muted)", textAlign: "center", padding: 20 }}>Chưa có hoạt động nào.</p>
             ) : recentActivities.map((a, i) => (
               <div key={i} className="ad-feed-item">
                 <div className="ad-feed-dot ad-feed-dot--green" />
@@ -879,9 +879,9 @@ function TournamentManagement() {
         <input placeholder="Mô tả" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} />
         <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} />
-        <label style={{ fontSize: 13, color: "#657086" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
+        <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
           <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} style={{ display: "block", marginTop: 4 }} />
-          {uploading ? <span style={{ color: "#8f6420", fontSize: 12 }}>Đang tải ảnh...</span> : null}
+          {uploading ? <span style={{ color: "var(--hr-gold-soft)", fontSize: 12 }}>Đang tải ảnh...</span> : null}
         </label>
         {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8, marginTop: 4 }} />}
         <button className="primary-button" disabled={uploading}>Lưu giải đấu</button>
@@ -894,7 +894,9 @@ function TournamentManagement() {
             {(item.nextTransitions ?? item.NextTransitions ?? []).map((t) => (
               <button
                 key={t.status}
-                style={{ background: t.isPrimary ? "rgba(16,185,129,0.12)" : "transparent", color: t.isPrimary ? "#0f7a5a" : "#34415b" }}
+                style={t.isPrimary
+                  ? { background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }
+                  : { background: "transparent", color: "var(--hr-text)", border: "1px solid var(--hr-border-soft)" }}
                 onClick={(e) => { e.stopPropagation(); changeStatus(id, t.status); }}
               >
                 {t.label}
@@ -1191,7 +1193,7 @@ function ScheduleManagement({ type }) {
           <input placeholder="Địa điểm" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
           <input type="number" min="1" placeholder="Số người tham gia tối đa" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} />
           <input type="number" min="100" placeholder="Khoảng cách (m)" value={form.distance} onChange={(e) => setForm({ ...form, distance: e.target.value })} />
-          <label style={{ fontSize: 13, color: "#657086" }}>Ảnh nền cuộc đua:
+          <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh nền cuộc đua:
             <input type="file" accept="image/*" onChange={async (e) => {
               const f = e.target.files?.[0]; if (!f) return;
               const fd = new FormData(); fd.append("file", f);
@@ -1219,7 +1221,7 @@ function ScheduleManagement({ type }) {
             const assignmentStatus =
               horse.jockeyAssignmentStatus ?? horse.JockeyAssignmentStatus;
             const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
-            return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "#94a3b8" : "inherit"}}>
+            return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
               {horse.name ?? horse.Name} · {jockeyName ? `${jockeyName} (${assignmentStatus || "Đã phân công"})` : "Không có kỵ sĩ"}
               {label}
             </option>;
@@ -1282,7 +1284,7 @@ function ScheduleManagement({ type }) {
                       Bắt đầu
                     </button>
                     {!canStart && (
-                      <span style={{ fontSize: 12, color: "#657086", alignSelf: "center" }}>
+                      <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>
                         {refAssigns.length === 0
                           ? "Chưa có trọng tài - hãy thêm trọng tài trước khi bắt đầu"
                           : `Chờ trọng tài xác nhận (${confirmedReferees}/${refAssigns.length})`}
@@ -1291,22 +1293,22 @@ function ScheduleManagement({ type }) {
                   </>
                 )}
                 {itemStatus === "inprogress" && (
-                  <span style={{ fontSize: 12, color: "#92400e", alignSelf: "center" }}>Đang đua - chờ trọng tài nộp kết quả và báo cáo.</span>
+                  <span style={{ fontSize: 12, color: "var(--hr-warning)", alignSelf: "center" }}>Đang đua - chờ trọng tài nộp kết quả và báo cáo.</span>
                 )}
                 {itemStatus === "awaitingresult" && (
-                  <span style={{ fontSize: 12, color: "#92400e", alignSelf: "center" }}>Chờ trọng tài nộp lại kết quả.</span>
+                  <span style={{ fontSize: 12, color: "var(--hr-warning)", alignSelf: "center" }}>Chờ trọng tài nộp lại kết quả.</span>
                 )}
                 {itemStatus === "resultapproved" && (
-                  <button style={{ background: "rgba(16,185,129,0.1)", color: "#0f7a5a" }} onClick={() => handleRaceAction(itemId, "end")}>
+                  <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "end")}>
                     Kết thúc
                   </button>
                 )}
                 {itemStatus === "resultpendingapproval" && (
                   <>
-                    <button style={{ background: "rgba(16,185,129,0.1)", color: "#0f7a5a" }} onClick={() => handleRaceAction(itemId, "approve")}>
+                    <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "approve")}>
                       Duyệt KQ
                     </button>
-                    <button style={{ background: "rgba(239,68,68,0.1)", color: "#dc2626" }} onClick={() => handleRaceAction(itemId, "reject")}>
+                    <button style={{ background: "rgba(201,105,90,0.16)", color: "var(--hr-danger)", border: "1px solid rgba(201,105,90,0.35)" }} onClick={() => handleRaceAction(itemId, "reject")}>
                       Từ chối
                     </button>
                   </>
@@ -1320,10 +1322,10 @@ function ScheduleManagement({ type }) {
             );
           })()}
           {type === "race" && expandedRaceId === itemId && (
-            <div style={{marginTop:12,padding:12,borderTop:"1px solid rgba(143,100,32,0.1)"}} onClick={e => e.stopPropagation()}>
-              <h4 style={{fontSize:14,margin:"0 0 8px",color:"#172033"}}>Ngựa tham gia</h4>
+            <div style={{marginTop:12,padding:12,borderTop:"1px solid var(--hr-border-soft)"}} onClick={e => e.stopPropagation()}>
+              <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Ngựa tham gia</h4>
               {raceEntries.length === 0 ? (
-                <p style={{color:"#657086",fontSize:13}}>Chưa có ngựa nào được phân công.</p>
+                <p style={{color:"var(--hr-muted)",fontSize:13}}>Chưa có ngựa nào được phân công.</p>
               ) : (
                 <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
                   <thead><tr>
@@ -1340,15 +1342,15 @@ function ScheduleManagement({ type }) {
               )}
               {raceReferees.length > 0 && (
                 <div style={{marginTop:12}}>
-                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"#172033"}}>Trọng tài</h4>
+                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Trọng tài</h4>
                   {raceReferees.map(r => {
                     const st = r.status ?? r.Status;
                     return (
                       <span key={r.id ?? r.Id} style={{
                         display:"inline-block",margin:"0 8px 4px 0",padding:"4px 12px",
                         borderRadius:8,fontSize:12,fontWeight:600,
-                        background:st==="Confirmed"?"rgba(22,101,52,.1)":st==="Assigned"?"rgba(245,158,11,.1)":"rgba(100,116,139,.1)",
-                        color:st==="Confirmed"?"#166534":st==="Assigned"?"#92400e":"#64748b"
+                        background:st==="Confirmed"?"rgba(112,139,104,.16)":st==="Assigned"?"rgba(185,138,69,.16)":"rgba(238,229,212,.06)",
+                        color:st==="Confirmed"?"var(--hr-success)":st==="Assigned"?"var(--hr-warning)":"var(--hr-muted)"
                       }}>
                         {r.refereeName ?? r.RefereeName} — {r.role==="Chief Referee"?"Trọng tài trưởng":"Trợ lý"}
                       </span>
@@ -1358,12 +1360,12 @@ function ScheduleManagement({ type }) {
               )}
               {raceViolations.length > 0 && (
                 <div style={{marginTop:12}}>
-                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"#c41e1e"}}>Vi phạm ({raceViolations.length})</h4>
+                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-danger)"}}>Vi phạm ({raceViolations.length})</h4>
                   {raceViolations.map(v => (
-                    <div key={v.id ?? v.Id} style={{padding:"8px 12px",marginBottom:6,borderRadius:8,background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.12)",fontSize:12}}>
-                      <strong style={{color:"#c41e1e"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
-                      <span style={{color:"#657086",marginLeft:8}}>— {v.horseName ?? v.HorseName} — {v.refereeName ?? v.RefereeName}</span>
-                      <p style={{margin:"4px 0 0",color:"#34415b"}}>{v.description ?? v.Description}</p>
+                    <div key={v.id ?? v.Id} style={{padding:"8px 12px",marginBottom:6,borderRadius:8,background:"rgba(201,105,90,0.12)",border:"1px solid rgba(201,105,90,0.3)",fontSize:12}}>
+                      <strong style={{color:"var(--hr-danger)"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
+                      <span style={{color:"var(--hr-muted)",marginLeft:8}}>— {v.horseName ?? v.HorseName} — {v.refereeName ?? v.RefereeName}</span>
+                      <p style={{margin:"4px 0 0",color:"var(--hr-text)"}}>{v.description ?? v.Description}</p>
                     </div>
                   ))}
                 </div>
@@ -1372,24 +1374,24 @@ function ScheduleManagement({ type }) {
                 const winnerHorseId = raceResult.winningHorseId ?? raceResult.WinningHorseId;
                 const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
                 return (
-                  <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(16,185,129,0.06)",border:"1px solid rgba(16,185,129,0.15)"}}>
-                    <h4 style={{fontSize:14,margin:"0 0 6px",color:"#0f7a5a"}}>Kết quả trọng tài nộp</h4>
-                    <p style={{margin:0,fontSize:13,color:"#172033"}}>
+                  <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)"}}>
+                    <h4 style={{fontSize:14,margin:"0 0 6px",color:"var(--hr-success)"}}>Kết quả trọng tài nộp</h4>
+                    <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
                       🏆 <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
                       {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
-                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"#657086",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
+                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
                     </p>
                   </div>
                 );
               })()}
               {raceReport && (
-                <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(139,92,246,0.06)",border:"1px solid rgba(139,92,246,0.15)"}}>
-                  <h4 style={{fontSize:14,margin:"0 0 6px",color:"#6d28d9"}}>📋 Báo cáo trọng tài</h4>
-                  <p style={{margin:0,fontSize:13,color:"#34415b"}}>{raceReport.details ?? raceReport.Details ?? "—"}</p>
+                <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.25)"}}>
+                  <h4 style={{fontSize:14,margin:"0 0 6px",color:"#c4b5fd"}}>📋 Báo cáo trọng tài</h4>
+                  <p style={{margin:0,fontSize:13,color:"var(--hr-text)"}}>{raceReport.details ?? raceReport.Details ?? "—"}</p>
                   {(raceReport.incidents ?? raceReport.Incidents) && (
-                    <p style={{margin:"6px 0 0",fontSize:12,color:"#657086"}}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>
+                    <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>
                   )}
-                  <span style={{display:"block",marginTop:6,fontSize:11,color:"#94a3b8"}}>
+                  <span style={{display:"block",marginTop:6,fontSize:11,color:"var(--hr-muted)"}}>
                     {raceReport.refereeName ?? raceReport.RefereeName ?? "Trọng tài"}
                     {raceReport.completedAt ?? raceReport.CompletedAt ? ` · ${new Date(raceReport.completedAt ?? raceReport.CompletedAt).toLocaleString("vi-VN")}` : ""}
                   </span>
@@ -1545,8 +1547,8 @@ function RefereeAssignmentManagement() {
       <PageTitle eyebrow="Giải đấu" title="Phân công trọng tài" description="Danh sách trọng tài được phân công cho từng giải đấu." />
       <Notice message={message} />
       <div className="admin-toolbar"><span>{assignments.length} phân công</span></div>
-      <div style={{ overflowX: "auto", border: "1px solid rgba(231,198,120,.1)", borderRadius: 16 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "rgba(255,250,240,0.96)" }}>
+      <div style={{ overflowX: "auto", border: "1px solid var(--hr-border-soft)", borderRadius: 16 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--hr-surface)" }}>
           <thead>
             <tr>
               <th style={th}>Trọng tài</th>
@@ -1561,13 +1563,13 @@ function RefereeAssignmentManagement() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "#657086" }}>Đang tải...</td></tr>
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "var(--hr-muted)" }}>Đang tải...</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "#657086" }}>Chưa có phân công nào.</td></tr>
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "var(--hr-muted)" }}>Chưa có phân công nào.</td></tr>
             ) : sorted.map(a => {
               const st = a.status ?? a.Status;
-              const stColor = st === "Confirmed" ? "#166534" : st === "Completed" ? "#4f46e5" : st === "Cancelled" ? "#c41e1e" : "#92400e";
-              const stBg = st === "Confirmed" ? "rgba(22,101,52,.12)" : st === "Completed" ? "rgba(79,70,229,.12)" : st === "Cancelled" ? "rgba(196,30,30,.12)" : "rgba(245,158,11,.12)";
+              const stColor = st === "Confirmed" ? "var(--hr-success)" : st === "Completed" ? "#a5b4fc" : st === "Cancelled" ? "var(--hr-danger)" : "var(--hr-warning)";
+              const stBg = st === "Confirmed" ? "rgba(112,139,104,.16)" : st === "Completed" ? "rgba(99,102,241,.16)" : st === "Cancelled" ? "rgba(201,105,90,.16)" : "rgba(185,138,69,.16)";
               return (
                 <tr key={a.id ?? a.Id}>
                   <td style={td}><strong>{a.refereeName ?? a.RefereeName ?? "-"}</strong></td>
@@ -1588,8 +1590,8 @@ function RefereeAssignmentManagement() {
   );
 }
 
-const th = { padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" };
-const td = { padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" };
+const th = { padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" };
+const td = { padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" };
 
 /* ─── Withdrawal Management ─── */
 
@@ -1629,32 +1631,32 @@ function WithdrawalManagement() {
       <PageTitle eyebrow="Tài chính" title="Quản lý rút tiền" description="Duyệt yêu cầu rút tiền từ người dùng." />
 
       {loading ? (
-        <p>Đang tải...</p>
+        <p style={{ color: "var(--hr-muted)" }}>Đang tải...</p>
       ) : list.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#657086" }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: "var(--hr-muted)" }}>
           <p>Không có yêu cầu rút tiền nào đang chờ.</p>
         </div>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(231,198,120,.1)", borderRadius: 16 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: "rgba(255, 250, 240, 0.96)" }}>
+        <div style={{ overflowX: "auto", border: "1px solid var(--hr-border-soft)", borderRadius: 16 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--hr-surface)" }}>
             <thead>
               <tr>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Người dùng</th>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Ngân hàng</th>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Số tài khoản</th>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Số tiền</th>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Ngày yêu cầu</th>
-                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#657086" }}>Thao tác</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Người dùng</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Ngân hàng</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Số tài khoản</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Số tiền</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Ngày yêu cầu</th>
+                <th style={{ padding: 15, textAlign: "left", borderBottom: "1px solid var(--hr-border-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "var(--hr-muted)" }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {list.map((w) => (
                 <tr key={w.id ?? w.Id}>
-                  <td style={{ padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" }}>{w.userName ?? w.UserName ?? "-"}</td>
-                  <td style={{ padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" }}>{w.bankName ?? w.BankName ?? "-"}</td>
-                  <td style={{ padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" }}>{w.accountNumber ?? w.AccountNumber ?? "-"}</td>
-                  <td style={{ padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" }}><strong>{(w.amount ?? w.Amount ?? 0).toLocaleString()} điểm</strong></td>
-                  <td style={{ padding: 15, borderBottom: "1px solid rgba(231,198,120,.07)", fontSize: 13, color: "#34415b" }}>{w.createdAt ? new Date(w.createdAt).toLocaleDateString() : "-"}</td>
+                  <td style={{ padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" }}>{w.userName ?? w.UserName ?? "-"}</td>
+                  <td style={{ padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" }}>{w.bankName ?? w.BankName ?? "-"}</td>
+                  <td style={{ padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" }}>{w.accountNumber ?? w.AccountNumber ?? "-"}</td>
+                  <td style={{ padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" }}><strong>{(w.amount ?? w.Amount ?? 0).toLocaleString()} điểm</strong></td>
+                  <td style={{ padding: 15, borderBottom: "1px solid var(--hr-border-soft)", fontSize: 13, color: "var(--hr-text)" }}>{w.createdAt ? new Date(w.createdAt).toLocaleDateString() : "-"}</td>
                   <td style={{ display: "flex", gap: 8 }}>
                     <button
                       style={{ padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", background: "#1a7d1a", color: "#fff", cursor: "pointer" }}

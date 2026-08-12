@@ -71,12 +71,12 @@ export default function NotificationBell() {
       {open && (
         <div style={{
           position: "absolute", right: 0, top: "calc(100% + 8px)", zIndex: 100,
-          width: 340, background: "rgba(255,255,255,0.96)", borderRadius: 14,
-          border: "1px solid rgba(231,198,120,0.15)", boxShadow: "0 16px 40px rgba(0,0,0,0.12)",
+          width: 340, background: "#1a1511", borderRadius: 10,
+          border: "1px solid rgba(184,134,59,0.18)", boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
           padding: 16,
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-            <strong style={{ fontSize: 14, color: "#1a1d23" }}>Thông báo</strong>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid rgba(238,229,212,0.08)" }}>
+            <strong style={{ fontSize: 14, color: "#eee5d4" }}>Thông báo</strong>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {notifs.length > 0 && (
                 <button
@@ -85,17 +85,17 @@ export default function NotificationBell() {
                   onClick={handleDeleteAll}
                   style={{
                     border: 0, background: "transparent", padding: 0, cursor: deletingAll ? "wait" : "pointer",
-                    color: "#dc2626", fontSize: 11, fontWeight: 600, opacity: deletingAll ? 0.6 : 1,
+                    color: "#c9695a", fontSize: 11, fontWeight: 600, opacity: deletingAll ? 0.6 : 1,
                   }}
                 >
                   {deletingAll ? "Đang xóa..." : "Xóa tất cả"}
                 </button>
               )}
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>{unread} chưa đọc</span>
+              <span style={{ fontSize: 11, color: "#aa9d8a" }}>{unread} chưa đọc</span>
             </div>
           </div>
           {notifs.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, padding: "20px 0", margin: 0 }}>Không có thông báo</p>
+            <p style={{ textAlign: "center", color: "#aa9d8a", fontSize: 13, padding: "20px 0", margin: 0 }}>Không có thông báo</p>
           ) : (
             <div style={{ display: "grid", gap: 4 }}>
               {notifs.map((n) => {
@@ -105,17 +105,17 @@ export default function NotificationBell() {
                   <div key={id} role="button" tabIndex={0} onClick={() => handleNotificationClick(n)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleNotificationClick(n); } }}
                     style={{
-                      padding: "10px 12px", borderRadius: 10, cursor: "pointer", fontSize: 13,
-                      background: isRead ? "transparent" : "rgba(242,210,139,0.06)",
-                      borderLeft: isRead ? "2px solid transparent" : "2px solid #f2d28b",
+                      padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13,
+                      background: isRead ? "transparent" : "rgba(184,134,59,0.07)",
+                      borderLeft: isRead ? "2px solid transparent" : "2px solid #b8863b",
                       transition: "background 0.15s",
                     }}
-                    onMouseEnter={(e) => e.target.style.background = "rgba(0,0,0,0.02)"}
-                    onMouseLeave={(e) => e.target.style.background = isRead ? "transparent" : "rgba(242,210,139,0.06)"}
+                    onMouseEnter={(e) => e.target.style.background = "rgba(238,229,212,0.04)"}
+                    onMouseLeave={(e) => e.target.style.background = isRead ? "transparent" : "rgba(184,134,59,0.07)"}
                   >
-                    <strong style={{ display: "block", color: "#1a1d23", marginBottom: 2 }}>{n.title ?? n.Title ?? "Thông báo"}</strong>
-                    <span style={{ color: "#64748b", fontSize: 12 }}>{n.message ?? n.Message ?? n.content ?? n.Content ?? ""}</span>
-                    <span style={{ display: "block", color: "#94a3b8", fontSize: 10, marginTop: 4 }}>
+                    <strong style={{ display: "block", color: "#eee5d4", marginBottom: 2 }}>{n.title ?? n.Title ?? "Thông báo"}</strong>
+                    <span style={{ color: "#aa9d8a", fontSize: 12 }}>{n.message ?? n.Message ?? n.content ?? n.Content ?? ""}</span>
+                    <span style={{ display: "block", color: "#aa9d8a", fontSize: 10, marginTop: 4 }}>
                       {n.createdAt ?? n.CreatedAt ? new Date(n.createdAt ?? n.CreatedAt).toLocaleDateString() : ""}
                     </span>
                   </div>

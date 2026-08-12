@@ -138,38 +138,38 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-      <div style={{background:"#fff",borderRadius:16,maxWidth:700,width:"100%",maxHeight:"90vh",overflow:"auto",padding:32}}>
-        <h2 style={{margin:"0 0 24px",fontSize:24,color:"#172033"}}>{isEdit ? "Sửa cuộc đua" : "Tạo cuộc đua mới"}</h2>
+    <div className="admin-modal-backdrop" onClick={onClose}>
+      <div className="admin-modal-panel" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{margin:"0 0 24px",fontSize:24}}>{isEdit ? "Sửa cuộc đua" : "Tạo cuộc đua mới"}</h2>
 
         {/* Tournament Info */}
         {(tournamentName || isEdit) && (
-          <div style={{padding:16,borderRadius:12,background:"rgba(143,100,32,0.06)",marginBottom:24,border:"1px solid rgba(143,100,32,0.15)"}}>
+          <div style={{padding:16,borderRadius:12,background:"rgba(184,134,59,0.08)",marginBottom:24,border:"1px solid var(--hr-border)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-              <div><span style={{fontSize:12,color:"#657086",display:"block"}}>Giải đấu</span><strong style={{fontSize:18,color:"#172033"}}>{tournamentName || "Đang tải..."}</strong></div>
-              <div style={{textAlign:"right"}}><span style={{fontSize:12,color:"#657086",display:"block"}}>Thời gian giải</span><strong style={{fontSize:14,color:"#172033"}}>{startLabel} → {endLabel}</strong></div>
+              <div><span style={{fontSize:12,color:"var(--hr-muted)",display:"block"}}>Giải đấu</span><strong style={{fontSize:18,color:"var(--hr-paper)"}}>{tournamentName || "Đang tải..."}</strong></div>
+              <div style={{textAlign:"right"}}><span style={{fontSize:12,color:"var(--hr-muted)",display:"block"}}>Thời gian giải</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{startLabel} → {endLabel}</strong></div>
             </div>
           </div>
         )}
 
-        {error && <div style={{padding:12,borderRadius:8,background:"rgba(239,68,68,0.1)",color:"#ef4444",fontSize:14,marginBottom:16}}>{error}</div>}
+        {error && <div style={{padding:12,borderRadius:8,background:"rgba(201,105,90,0.16)",border:"1px solid rgba(201,105,90,0.35)",color:"var(--hr-danger)",fontSize:14,marginBottom:16}}>{error}</div>}
 
         <form onSubmit={handleSubmit}>
           {/* Track */}
           <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"#34415b"}}>Đường đua</label>
+            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Đường đua</label>
             <div style={{display:"flex",gap:8}}>
-              <select value={form.trackId} onChange={(e) => updateForm("trackId", e.target.value)} style={{flex:1,padding:10,borderRadius:8,border:"1px solid rgba(143,100,32,0.2)",fontSize:14}}>
+              <select className="hr-field" value={form.trackId} onChange={(e) => updateForm("trackId", e.target.value)} style={{flex:1,padding:10,borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:14}}>
                 <option value="">-- Chọn đường đua --</option>
                 {tracks.map((t) => (<option key={t.id || t.Id} value={t.id || t.Id}>{t.name || t.Name}</option>))}
               </select>
-              <button type="button" onClick={() => setShowTrackForm(!showTrackForm)} style={{padding:"10px 16px",borderRadius:8,border:"1px solid #e6a54a",background:"transparent",color:"#e6a54a",cursor:"pointer",whiteSpace:"nowrap",fontSize:13,fontWeight:600}}>+ Tạo đường đua</button>
+              <button type="button" onClick={() => setShowTrackForm(!showTrackForm)} style={{padding:"10px 16px",borderRadius:8,border:"1px solid var(--hr-border)",background:"transparent",color:"var(--hr-gold-soft)",cursor:"pointer",whiteSpace:"nowrap",fontSize:13,fontWeight:600}}>+ Tạo đường đua</button>
             </div>
             {showTrackForm && (
               <div style={{marginTop:8,display:"flex",gap:8}}>
-                <input value={newTrackName} onChange={(e) => setNewTrackName(e.target.value)} placeholder="Tên đường đua mới" style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(143,100,32,0.2)",fontSize:13}} autoFocus />
-                <button type="button" onClick={handleCreateTrack} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#e6a54a",color:"#fff",cursor:"pointer",fontSize:13}}>Tạo</button>
-                <button type="button" onClick={() => setShowTrackForm(false)} style={{padding:"8px 12px",borderRadius:8,border:"none",background:"transparent",color:"#657086",cursor:"pointer",fontSize:13}}>Hủy</button>
+                <input className="hr-field" value={newTrackName} onChange={(e) => setNewTrackName(e.target.value)} placeholder="Tên đường đua mới" style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:13}} autoFocus />
+                <button type="button" onClick={handleCreateTrack} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"var(--hr-crimson)",color:"var(--hr-paper)",cursor:"pointer",fontSize:13,fontWeight:600}}>Tạo</button>
+                <button type="button" onClick={() => setShowTrackForm(false)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"transparent",color:"var(--hr-text)",cursor:"pointer",fontSize:13}}>Hủy</button>
               </div>
             )}
           </div>
@@ -178,15 +178,15 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
           {/* Rounds inline */}
           <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"#34415b"}}>Vòng đua ({rounds.length})</label>
+            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Vòng đua ({rounds.length})</label>
             {rounds.map((round, idx) => (
               <div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:8,marginBottom:8}}>
-                <input value={round.name} onChange={(e) => updateRound(idx, "name", e.target.value)} placeholder="VD: Vòng loại, Bán kết..." style={{padding:"10px 12px",borderRadius:8,border:"1px solid rgba(143,100,32,0.2)",fontSize:13}} />
-                <input type="datetime-local" value={round.scheduledAt} onChange={(e) => updateRound(idx, "scheduledAt", e.target.value)} style={{padding:"10px 12px",borderRadius:8,border:"1px solid rgba(143,100,32,0.2)",fontSize:13}} />
-                {rounds.length > 1 && <button type="button" onClick={() => removeRound(idx)} style={{padding:"10px 16px",borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer",fontSize:16}}>X</button>}
+                <input className="hr-field" value={round.name} onChange={(e) => updateRound(idx, "name", e.target.value)} placeholder="VD: Vòng loại, Bán kết..." style={{padding:"10px 12px",borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:13}} />
+                <input className="hr-field" type="datetime-local" value={round.scheduledAt} onChange={(e) => updateRound(idx, "scheduledAt", e.target.value)} style={{padding:"10px 12px",borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",colorScheme:"dark"}} />
+                {rounds.length > 1 && <button type="button" onClick={() => removeRound(idx)} style={{padding:"10px 16px",borderRadius:8,border:"1px solid rgba(201,105,90,.45)",background:"rgba(201,105,90,0.12)",color:"var(--hr-danger)",cursor:"pointer",fontSize:16,fontWeight:700}}>X</button>}
               </div>
             ))}
-            <button type="button" onClick={addRound} style={{background:"none",border:"none",color:"#8f6420",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}}>+ Thêm vòng</button>
+            <button type="button" onClick={addRound} style={{background:"none",border:"none",color:"var(--hr-gold-soft)",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}}>+ Thêm vòng</button>
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
@@ -194,18 +194,18 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
             <Input label="Số ngựa tối đa" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="2" max="20" />
           </div>
 
-          <Input label="Thời gian bắt đầu" type="datetime-local" value={form.scheduledAt} onChange={(e) => updateForm("scheduledAt", e.target.value)} required />
-          <Input label="Thời gian kết thúc (dự kiến)" type="datetime-local" value={form.scheduledEndAt} onChange={(e) => updateForm("scheduledEndAt", e.target.value)} />
+          <Input label="Thời gian bắt đầu" type="datetime-local" value={form.scheduledAt} onChange={(e) => updateForm("scheduledAt", e.target.value)} required style={{colorScheme:"dark"}} />
+          <Input label="Thời gian kết thúc (dự kiến)" type="datetime-local" value={form.scheduledEndAt} onChange={(e) => updateForm("scheduledEndAt", e.target.value)} style={{colorScheme:"dark"}} />
 
           {/* Referees */}
           <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"#34415b"}}>Chọn trọng tài ({selectedRefereeIds.length})</label>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",gap:8,maxHeight:180,overflowY:"auto",padding:8,border:"1px solid rgba(143,100,32,0.1)",borderRadius:8}}>
+            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Chọn trọng tài ({selectedRefereeIds.length})</label>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",gap:8,maxHeight:180,overflowY:"auto",padding:8,border:"1px solid var(--hr-border-soft)",borderRadius:8}}>
               {referees.map((r) => {
                 const id = r.id || r.Id;
                 const checked = selectedRefereeIds.includes(id);
                 return (
-                  <label key={id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:checked?"#eef2ff":"transparent",border:`2px solid ${checked?"#6366f1":"#e5e7eb"}`,borderRadius:6,cursor:"pointer",fontSize:13}}>
+                  <label key={id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:checked?"rgba(184,134,59,0.14)":"transparent",border:`1px solid ${checked?"var(--hr-focus)":"var(--hr-border-soft)"}`,borderRadius:6,cursor:"pointer",fontSize:13,color:"var(--hr-text)"}}>
                     <input type="checkbox" checked={checked} onChange={(e) => { e.target.checked ? setSelectedRefereeIds([...selectedRefereeIds, id]) : setSelectedRefereeIds(selectedRefereeIds.filter((i) => i !== id)); }} />
                     <span>{r.userFullName || r.UserFullName || r.fullName || r.FullName}</span>
                   </label>
@@ -214,9 +214,9 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
             </div>
           </div>
 
-          <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:24,paddingTop:16,borderTop:"1px solid rgba(143,100,32,0.1)"}}>
-            <button type="button" onClick={onClose} style={{padding:"10px 20px",borderRadius:8,border:"1px solid rgba(143,100,32,0.2)",background:"transparent",cursor:"pointer",fontSize:14,color:"#34415b"}}>Hủy</button>
-            <button type="submit" disabled={submitting} style={{padding:"10px 24px",borderRadius:8,border:"none",background:submitting?"#ccc":"#8f6420",color:"#fff",cursor:submitting?"not-allowed":"pointer",fontSize:14,fontWeight:600}}>{submitting ? "Đang xử lý..." : isEdit ? "Lưu" : "Tạo"}</button>
+          <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:24,paddingTop:16,borderTop:"1px solid var(--hr-border-soft)"}}>
+            <button type="button" onClick={onClose} style={{padding:"10px 20px",borderRadius:8,border:"1px solid var(--hr-border)",background:"transparent",cursor:"pointer",fontSize:14,color:"var(--hr-text)",fontWeight:600}}>Hủy</button>
+            <button type="submit" disabled={submitting} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"var(--hr-crimson)",color:"var(--hr-paper)",cursor:submitting?"not-allowed":"pointer",opacity:submitting?0.6:1,fontSize:14,fontWeight:600}}>{submitting ? "Đang xử lý..." : isEdit ? "Lưu" : "Tạo"}</button>
           </div>
         </form>
       </div>

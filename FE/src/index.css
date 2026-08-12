@@ -1,14 +1,55 @@
-@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Spectral:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Spectral:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap");
+
+/* ══════════════════════════════════════════════
+   HorseRacingSystem — global design tokens
+   Luxury / editorial horse-racing visual system,
+   extended app-wide from the Homepage redesign.
+   Contrast-checked against WCAG AA (see audit notes
+   in the design-system migration report).
+   ══════════════════════════════════════════════ */
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-family: "Sora", system-ui, sans-serif;
-  color: #172033;
-  background-color: #f7f3ea;
+
+  /* -- surfaces (page → card → elevated) -- */
+  --hr-bg: #120f0c;
+  --hr-bg-deep: #0d0b09;
+  --hr-surface: #1a1511;
+  --hr-surface-2: #211a14;
+  --hr-surface-soft: rgba(238, 229, 212, .045);
+
+  /* -- text -- */
+  --hr-paper: #eee5d4;
+  --hr-text: #e5d9c6;
+  --hr-muted: #aa9d8a;
+
+  /* -- accents -- */
+  --hr-gold: #b8863b;
+  --hr-gold-soft: #c9a563;
+  --hr-crimson: #9c3226;
+  --hr-crimson-hover: #ad3a2d;
+
+  /* -- hairlines -- */
+  --hr-border: rgba(184, 134, 59, .14);
+  --hr-border-soft: rgba(238, 229, 212, .08);
+  --hr-focus: rgba(184, 134, 59, .55);
+  --hr-focus-ring: rgba(184, 134, 59, .18);
+
+  /* -- semantic status (muted, text-safe ≥4.5:1 on --hr-bg) -- */
+  --hr-success: #708b68;
+  --hr-warning: #b98a45;
+  --hr-danger: #c9695a;
+  --hr-info: #6f8290;
+
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+
+  color: var(--hr-text);
+  background-color: var(--hr-bg);
 }
 
 * {
@@ -18,9 +59,9 @@
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 14% 0%, rgba(236, 202, 132, 0.32), transparent 34%),
-    radial-gradient(circle at 92% 8%, rgba(143, 179, 154, 0.2), transparent 30%),
-    linear-gradient(180deg, #fffaf0 0%, #f7f3ea 46%, #edf1ec 100%);
+    radial-gradient(circle at 14% 0%, rgba(184, 134, 59, 0.07), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(156, 50, 38, 0.06), transparent 30%),
+    linear-gradient(180deg, var(--hr-bg) 0%, var(--hr-bg) 46%, var(--hr-bg-deep) 100%);
   min-height: 100vh;
 }
 
@@ -33,6 +74,7 @@ h2,
 h3,
 h4 {
   font-family: "Spectral", "Times New Roman", serif;
+  color: var(--hr-paper);
   margin: 0;
 }
 
@@ -41,23 +83,43 @@ p {
   line-height: 1.6;
 }
 
+a {
+  color: var(--hr-gold-soft);
+}
+
 button,
 input,
-select {
+select,
+textarea {
   font-family: "Sora", system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(184, 134, 59, 0.32);
+  color: var(--hr-paper);
+}
+
+:focus-visible {
+  outline: 2px solid var(--hr-focus);
+  outline-offset: 2px;
 }
 
 .form-control,
 .form-select,
 .form-check-input {
-  background-color: rgba(255, 255, 255, 0.92);
-  border-color: rgba(23, 32, 51, 0.18);
-  color: #172033;
+  background-color: rgba(238, 229, 212, .035);
+  border-color: var(--hr-border-soft);
+  color: var(--hr-paper);
+}
+
+.form-control::placeholder {
+  color: var(--hr-muted);
 }
 
 .form-control:focus,
 .form-select:focus,
 .form-check-input:focus {
-  border-color: rgba(242, 210, 139, 0.72);
-  box-shadow: 0 0 0 0.2rem rgba(215, 170, 77, 0.18);
+  border-color: var(--hr-focus);
+  box-shadow: 0 0 0 2px var(--hr-focus-ring);
+  outline: none;
 }

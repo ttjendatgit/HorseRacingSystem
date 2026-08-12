@@ -31,12 +31,12 @@ export function AuditLogViewer() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h2>Nhật ký kiểm toán</h2>
-          <p style={{ color: "#657086", marginBottom: 16 }}>Theo dõi tất cả hành động và thay đổi hệ thống.</p>
+          <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Theo dõi tất cả hành động và thay đổi hệ thống.</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: "#657086", fontSize: 13 }}>{total} bản ghi</span>
+          <span style={{ color: "var(--hr-muted)", fontSize: 13 }}>{total} bản ghi</span>
           <button disabled={page === 0} onClick={() => setPage(page - 1)}>Trước</button>
-          <span style={{ color: "#e7c678" }}>{page + 1}/{maxPage + 1}</span>
+          <span style={{ color: "var(--hr-gold-soft)" }}>{page + 1}/{maxPage + 1}</span>
           <button disabled={page >= maxPage} onClick={() => setPage(page + 1)}>Sau</button>
         </div>
       </div>
@@ -94,12 +94,12 @@ export function NotificationManager() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h2>Thông báo</h2>
-          <p style={{ color: "#657086", marginBottom: 16 }}>Xem và quản lý thông báo hệ thống.</p>
+          <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Xem và quản lý thông báo hệ thống.</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: "#657086", fontSize: 13 }}>{items.length} bản ghi</span>
+          <span style={{ color: "var(--hr-muted)", fontSize: 13 }}>{items.length} bản ghi</span>
           <button disabled={page === 0} onClick={() => setPage(page - 1)}>Trước</button>
-          <span style={{ color: "#e7c678" }}>{page + 1}/{maxPage + 1}</span>
+          <span style={{ color: "var(--hr-gold-soft)" }}>{page + 1}/{maxPage + 1}</span>
           <button disabled={page >= maxPage} onClick={() => setPage(page + 1)}>Sau</button>
         </div>
       </div>
