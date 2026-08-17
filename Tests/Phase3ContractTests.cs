@@ -36,7 +36,8 @@ public class Phase3ContractTests
             SurfaceType = "turf", // lower-case to also prove case-insensitive parsing
             MinParticipants = 4,
             MaxParticipants = 16,
-            MaxRounds = 3
+            MaxRounds = 3,
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         });
 
         Assert.True(create.Result.Success, create.Result.Message);
@@ -60,7 +61,10 @@ public class Phase3ContractTests
         {
             Name = "Giải Tối Giản",
             StartDate = DateTime.UtcNow,
-            EndDate = DateTime.UtcNow.AddDays(5)
+            EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3,
+            MaxParticipants = 10,
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         });
 
         Assert.True(create.Result.Success, create.Result.Message);
@@ -69,8 +73,8 @@ public class Phase3ContractTests
         Assert.Null(t.Country);
         Assert.Null(t.Category);
         Assert.Null(t.SurfaceType);
-        Assert.Null(t.MinParticipants);
-        Assert.Null(t.MaxParticipants);
+        Assert.Equal(3, t.MinParticipants);
+        Assert.Equal(10, t.MaxParticipants);
         Assert.Equal(0m, t.PrizePool);
         // Must default to 1, never fall through to CLR int default 0.
         Assert.Equal(1, t.MaxRounds);
@@ -86,7 +90,8 @@ public class Phase3ContractTests
             Name = "Giải Lỗi",
             StartDate = DateTime.UtcNow,
             EndDate = DateTime.UtcNow.AddDays(5),
-            SurfaceType = "Grass" // not a SurfaceType member
+            SurfaceType = "Grass", // not a SurfaceType member
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         });
 
         Assert.False(create.Result.Success);
@@ -108,9 +113,10 @@ public class Phase3ContractTests
             Country = "VN",
             Category = "Grade 2",
             SurfaceType = "Dirt",
-            MinParticipants = 2,
+            MinParticipants = 3,
             MaxParticipants = 10,
-            MaxRounds = 5
+            MaxRounds = 5,
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         });
         var id = create.Result.Data!.Id;
 
@@ -129,7 +135,7 @@ public class Phase3ContractTests
         Assert.Equal("VN", t.Country);
         Assert.Equal("Grade 2", t.Category);
         Assert.Equal("Dirt", t.SurfaceType);
-        Assert.Equal(2, t.MinParticipants);
+        Assert.Equal(3, t.MinParticipants);
         Assert.Equal(10, t.MaxParticipants);
         Assert.Equal(5, t.MaxRounds);
     }
@@ -144,7 +150,10 @@ public class Phase3ContractTests
             Name = "Giải Zero",
             StartDate = DateTime.UtcNow,
             EndDate = DateTime.UtcNow.AddDays(5),
-            PrizePool = 999m
+            PrizePool = 999m,
+            MinParticipants = 3,
+            MaxParticipants = 10,
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         });
         var id = create.Result.Data!.Id;
 
@@ -162,7 +171,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5)
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 10, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
 
         var create = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
@@ -185,7 +195,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5), MaxParticipants = 20
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
 
         var round1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
@@ -201,14 +212,26 @@ public class Phase3ContractTests
     public async Task Round1_PlannedParticipants_Null_WhenTournamentMaxParticipantsUnset()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
+
+        // Draft-save now requires MaxParticipants (Phase4B), so a null-MaxParticipants Tournament
+        // can no longer be produced through CreateTournamentAsync. Seed directly via the DbContext
+        // to arrange this state (e.g. representing legacy data) and prove the read-side derivation
+        // still fails safe to null regardless of how the write-side validation evolves.
+        var tournament = new Tournament
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5)
-        })).Result.Data!.Id;
+            Id = Guid.NewGuid(),
+            Name = "T",
+            StartDate = DateTime.UtcNow,
+            EndDate = DateTime.UtcNow.AddDays(5),
+            Status = TournamentStatus.Draft,
+            CreatedAt = DateTime.UtcNow
+        };
+        f.Db.Add(tournament);
+        await f.Db.SaveChangesAsync();
 
         var round1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
-            Name = "R1", TournamentId = tournamentId, RoundNumber = 1,
+            Name = "R1", TournamentId = tournament.Id, RoundNumber = 1,
             ScheduledStartDate = DateTime.UtcNow, ScheduledEndDate = DateTime.UtcNow.AddDays(1)
         });
 
@@ -221,7 +244,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5), MaxParticipants = 20
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
 
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
@@ -244,7 +268,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5), MaxParticipants = 20
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
 
         // RoundNumber == 3 with no Round 2 ever created for this tournament.
@@ -263,7 +288,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5), MaxParticipants = 20
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
 
         // Two rounds both claiming RoundNumber == 1 (uniqueness is not enforced until Phase5).
@@ -292,7 +318,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5)
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 10, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
         var round = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -328,7 +355,8 @@ public class Phase3ContractTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5)
+            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
+            MinParticipants = 3, MaxParticipants = 10, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
         })).Result.Data!.Id;
         var round = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {

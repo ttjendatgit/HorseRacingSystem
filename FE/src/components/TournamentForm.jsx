@@ -17,6 +17,8 @@ function TournamentForm({ onClose, onSuccess }) {
     prizePool: 0,
     imageUrl: "",
     registrationDeadline: "",
+    minParticipants: 3,
+    maxParticipants: 10,
   });
 
   const updateForm = (field, value) => {
@@ -54,6 +56,8 @@ function TournamentForm({ onClose, onSuccess }) {
         prizePool: Number(form.prizePool),
         imageUrl: form.imageUrl || null,
         registrationDeadline: form.registrationDeadline ? new Date(form.registrationDeadline).toISOString() : null,
+        minParticipants: Number(form.minParticipants),
+        maxParticipants: Number(form.maxParticipants),
       };
 
       await createTournament(payload);
@@ -79,6 +83,10 @@ function TournamentForm({ onClose, onSuccess }) {
             <Input label="Ngày kết thúc" type="date" value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
           </div>
           <Input label="Hạn đăng ký" type="date" value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} style={{colorScheme:"dark"}} />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <Input label="Số người tham gia tối thiểu" type="number" value={form.minParticipants} onChange={(e) => updateForm("minParticipants", e.target.value)} min="3" required />
+            <Input label="Số người tham gia tối đa" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" required />
+          </div>
           <Input label="Tổng tiền thưởng (VND)" type="number" value={form.prizePool} onChange={(e) => updateForm("prizePool", e.target.value)} placeholder="100000000" min="0" />
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Ảnh đại diện</label>

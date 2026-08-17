@@ -790,10 +790,11 @@ function TournamentManagement() {
   const [items, setItems] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState("");
+  const [editingStatus, setEditingStatus] = useState(null);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "" });
+  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10 });
   const load = () => getAdminTournaments().then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   useEffect(() => {
     load();
@@ -817,11 +818,30 @@ function TournamentManagement() {
   const submit = async (event) => {
     event.preventDefault();
     try {
-      const payload = { ...form, startDate: new Date(form.startDate).toISOString(), endDate: new Date(form.endDate).toISOString() };
+      // Phase4B: when editing a Published tournament, omit immutable fields from the payload
+      // so the BE never sees them. Draft edits send everything.
+      const isPublished = editingId && editingStatus === 1; // TournamentStatus.Published == 1
+      const payload = {
+        name: form.name,
+        description: form.description,
+        imageUrl: form.imageUrl,
+      };
+      if (!isPublished) {
+        payload.startDate = new Date(form.startDate).toISOString();
+        payload.endDate = new Date(form.endDate).toISOString();
+        payload.minParticipants = Number(form.minParticipants);
+        payload.maxParticipants = Number(form.maxParticipants);
+      }
       if (editingId) await updateTournament(editingId, payload);
-      else await createTournament(payload);
+      else {
+        payload.startDate = new Date(form.startDate).toISOString();
+        payload.endDate = new Date(form.endDate).toISOString();
+        payload.minParticipants = Number(form.minParticipants);
+        payload.maxParticipants = Number(form.maxParticipants);
+        await createTournament(payload);
+      }
       setMessage(`Giải đấu ${editingId ? "đã cập nhật" : "đã tạo"} thành công.`);
-      setShowForm(false); setEditingId(""); load();
+      setShowForm(false); setEditingId(""); setEditingStatus(null); load();
     } catch (err) { setMessage(err.message); }
   };
   const edit = (item) => {
@@ -830,12 +850,15 @@ function TournamentManagement() {
       return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     };
     setEditingId(item.id ?? item.Id);
+    setEditingStatus(item.status ?? item.Status ?? null);
     setForm({
       name: item.name ?? item.Name ?? "",
       description: item.description ?? item.Description ?? "",
       startDate: toLocalInput(item.startDate ?? item.StartDate),
       endDate: toLocalInput(item.endDate ?? item.EndDate),
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
+      minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
+      maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
     });
     setShowForm(true);
   };
@@ -848,12 +871,23 @@ function TournamentManagement() {
     setSelectedT(item);
   };
 
+  // TournamentStatus.Cancelled backend enum value (BE/Models/Enums.cs) — NextTransitionDto.Status
+  // serializes as the raw int (no global string enum converter).
+  const CANCELLED_STATUS = 4;
+
   const changeStatus = async (id, newStatus) => {
     try {
+      const body = { newStatus };
+      if (newStatus === CANCELLED_STATUS) {
+        const reason = window.prompt("Nhập lý do hủy giải đấu:");
+        if (reason === null) return; // dismissed — do not call the API
+        if (!reason.trim()) { setMessage("Lý do hủy giải đấu không được để trống."); return; }
+        body.reason = reason.trim();
+      }
       await request(`/api/tournaments/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newStatus }),
+        body: JSON.stringify(body),
       });
       setMessage("Đã cập nhật trạng thái giải đấu.");
       load();
@@ -875,10 +909,13 @@ function TournamentManagement() {
         />
       )}
       {showForm && editingId && <form className="admin-form" onSubmit={submit}>
+        {editingStatus === 1 && <p style={{ color: "var(--hr-gold-soft)", fontSize: 13, marginBottom: 8 }}>⚠ Giải đấu đã công bố — chỉ có thể sửa Tên, Mô tả và Ảnh bìa.</p>}
         <input placeholder="Tên giải đấu" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <input placeholder="Mô tả" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} />
-        <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} />
+        <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
+        <input type="number" placeholder="Số người tham gia tối đa" required min="1" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} disabled={editingStatus === 1} />
         <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
           <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} style={{ display: "block", marginTop: 4 }} />
           {uploading ? <span style={{ color: "var(--hr-gold-soft)", fontSize: 12 }}>Đang tải ảnh...</span> : null}
