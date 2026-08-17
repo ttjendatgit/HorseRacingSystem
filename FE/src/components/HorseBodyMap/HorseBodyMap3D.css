@@ -1,0 +1,116 @@
+/* Bo sung cho HorseBodyMap3D — dung chung HorseBodyMap.css cho container/legend */
+
+.horse3d-stage {
+    position: relative;
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fafafa;
+}
+
+.horse3d-canvas {
+    width: 100%;
+    height: 460px;
+    position: relative;
+}
+
+@media (max-width: 640px) {
+    .horse3d-canvas {
+        height: 340px;
+    }
+}
+
+.horse3d-views {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.horse3d-view-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #3f3f46;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #d4d4d8;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.horse3d-view-btn:hover {
+    background: #fff;
+    border-color: #a1a1aa;
+}
+
+.horse3d-view-btn.active {
+    background: #18181b;
+    color: #fff;
+    border-color: #18181b;
+}
+
+.horse3d-label {
+    font: 600 11px/1.2 'Inter', system-ui, -apple-system, sans-serif;
+    color: #18181b;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid #e4e4e7;
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.horse3d-tooltip {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(24, 24, 27, 0.88);
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+.horse3d-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #71717a;
+}
+
+.horse3d-a11y {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    padding: 10px 8px 0;
+}
+
+.horse3d-chip {
+    padding: 3px 9px;
+    font-size: 11.5px;
+    color: #3f3f46;
+    background: #fff;
+    border: 1.5px solid #22c55e;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.horse3d-chip.selected {
+    background: #18181b;
+    color: #fff;
+}
+
+.horse3d-chip:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}

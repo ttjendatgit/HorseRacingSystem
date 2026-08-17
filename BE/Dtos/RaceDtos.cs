@@ -53,6 +53,10 @@ public class RaceDetailResponse
     public DateTime? ActualStartTime { get; set; }
     public DateTime? ActualEndTime { get; set; }
     public string Status { get; set; } = string.Empty;
+    /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
+    public string? ResultStatus { get; set; }
+    /// <summary>Set only when the most recent submission was rejected and awaits resubmission.</summary>
+    public string? RejectedReason { get; set; }
     public string? Location { get; set; }
     public string? Description { get; set; }
     public int MaxParticipants { get; set; }
@@ -60,6 +64,30 @@ public class RaceDetailResponse
     public int EntriesCount { get; set; }
     public int ActiveRefereesCount { get; set; }
     public string? RoundNames { get; set; }
+}
+
+/// <summary>
+/// Phase2B: replaces the raw RaceResult entity previously returned by
+/// GET /api/races/{id}/result. Exposes ResultStatus explicitly so callers
+/// never have to infer Official-ness from Race.Status.
+/// </summary>
+public class RaceResultResponse
+{
+    public Guid RaceId { get; set; }
+    public Guid WinningHorseId { get; set; }
+    public int TotalParticipants { get; set; }
+    public decimal? WinnerFinishTime { get; set; }
+    public DateTime RecordedAt { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    /// <summary>"Provisional" or "Official" — the single source of truth for officiating state.</summary>
+    public string ResultStatus { get; set; } = string.Empty;
+    /// <summary>Convenience flag, always equivalent to ResultStatus == "Official".</summary>
+    public bool IsOfficial { get; set; }
+    public string? RejectedReason { get; set; }
+    public bool IsDisputed { get; set; }
+    public decimal? WinnerPurse { get; set; }
+    public string? RankingsJson { get; set; }
+    public string? Notes { get; set; }
 }
 
 public class JockeyAssignedRaceResponse

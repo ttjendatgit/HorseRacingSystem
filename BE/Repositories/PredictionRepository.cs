@@ -55,7 +55,7 @@ public class PredictionRepository : IPredictionRepository
             .ToListAsync();
     }
 
-    public Task ExecuteUpdateLosersAsync(Guid raceId, Guid winningHorseId)
+    public Task<int> ExecuteUpdateLosersAsync(Guid raceId, Guid winningHorseId)
     {
         return _db.Predictions
             .Where(p => p.RaceId == raceId
@@ -67,7 +67,7 @@ public class PredictionRepository : IPredictionRepository
                 .SetProperty(p => p.SettledAt, DateTime.UtcNow));
     }
 
-    public Task ExecuteUpdateWinnersAsync(Guid raceId, Guid winningHorseId)
+    public Task<int> ExecuteUpdateWinnersAsync(Guid raceId, Guid winningHorseId)
     {
         return _db.Predictions
             .Where(p => p.RaceId == raceId
@@ -79,13 +79,35 @@ public class PredictionRepository : IPredictionRepository
                 .SetProperty(p => p.SettledAt, DateTime.UtcNow));
     }
 
-    public Task<List<Prediction>> GetWinnersByRaceAsync(Guid raceId)
+    public Task<List<Guid>> GetPendingWinnerIdsAsync(Guid raceId, Guid winningHorseId)
+    {
+        return _db.Predictions
+            .AsNoTracking()
+            .Where(p => p.RaceId == raceId
+                && p.Status == PredictionStatus.Pending
+                && p.PredictedHorseId == winningHorseId)
+            .Select(p => p.Id)
+            .ToListAsync();
+    }
+
+    public Task<List<Prediction>> GetByIdsAsync(IReadOnlyCollection<Guid> predictionIds)
     {
         return _db.Predictions
             .AsNoTracking()
             .Include(p => p.PredictedHorse)
-            .Where(p => p.RaceId == raceId && p.Status == PredictionStatus.Won)
+            .Where(p => predictionIds.Contains(p.Id))
             .ToListAsync();
+    }
+
+    public async Task<bool> RevertWonToPendingAsync(Guid predictionId)
+    {
+        var updated = await _db.Predictions
+            .Where(p => p.Id == predictionId && p.Status == PredictionStatus.Won)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Status, PredictionStatus.Pending)
+                .SetProperty(p => p.PayoutAmount, (decimal?)null)
+                .SetProperty(p => p.SettledAt, (DateTime?)null));
+        return updated > 0;
     }
 
     public async Task DeleteAsync(Guid id)

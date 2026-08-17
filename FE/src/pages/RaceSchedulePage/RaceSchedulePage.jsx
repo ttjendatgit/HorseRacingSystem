@@ -11,7 +11,7 @@ const fDate = (v) =>
     : "Chưa xác định";
 
 const statusLabel = (s) => {
-  const m = { scheduled: "Đã lên lịch", inprogress: "Đang diễn ra", finished: "Đã kết thúc", cancelled: "Đã hủy", awaitingresult: "Chờ kết quả", resultpendingapproval: "Chờ duyệt", resultapproved: "Đã duyệt kết quả" };
+  const m = { scheduled: "Đã lên lịch", registrationopen: "Mở đăng ký", registrationclosed: "Đóng đăng ký", inprogress: "Đang diễn ra", finished: "Đã kết thúc", cancelled: "Đã hủy" };
   return m[(s ?? "").toLowerCase()] ?? s ?? "Đã lên lịch";
 };
 

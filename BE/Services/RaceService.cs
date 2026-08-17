@@ -56,7 +56,22 @@ public class RaceService : IRaceService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kết quả");
         }
 
-        return ServiceResult<object>.Ok(result);
+        return ServiceResult<object>.Ok(new RaceResultResponse
+        {
+            RaceId = result.RaceId,
+            WinningHorseId = result.WinningHorseId,
+            TotalParticipants = result.TotalParticipants,
+            WinnerFinishTime = result.WinnerFinishTime,
+            RecordedAt = result.RecordedAt,
+            ApprovedAt = result.ApprovedAt,
+            ResultStatus = result.Status.ToString(),
+            IsOfficial = result.Status == HorseRacing.Models.RaceResultStatus.Official,
+            RejectedReason = result.RejectedReason,
+            IsDisputed = result.IsDisputed,
+            WinnerPurse = result.WinnerPurse,
+            RankingsJson = result.RankingsJson,
+            Notes = result.Notes
+        });
     }
 
     public async Task<ServiceResult<object>> GetTournamentsAsync()

@@ -11,17 +11,37 @@ public enum UserRole
     Referee = 5
 }
 
+/// <summary>
+/// Event-progress lifecycle of a Race only. Does NOT encode result/officiating
+/// state — see <see cref="RaceResultStatus"/> for that.
+/// RegistrationOpen/RegistrationClosed are transitional compatibility values
+/// retained from the pre-split model; they represent a registration-window
+/// concern, not event progress. TODO(Phase R — Registration Model): extract
+/// them into a dedicated registration concept and shrink this enum to
+/// {Scheduled, InProgress, Finished, Cancelled}.
+/// </summary>
 public enum RaceStatus
 {
     Scheduled = 1,
     InProgress = 2,
     Finished = 3,
     Cancelled = 4,
-    AwaitingResult = 5,
-    ResultPendingApproval = 6,
+
+    // Transitional registration-window compatibility values (see TODO above).
     RegistrationOpen = 7,
-    RegistrationClosed = 8,
-    ResultApproved = 9
+    RegistrationClosed = 8
+}
+
+/// <summary>
+/// Result/officiating lifecycle of a RaceResult. Only Official may be used by
+/// qualification, ranking, prize, and prediction settlement. Rejection is
+/// review metadata (RaceResult.RejectedReason), not a separate status — a
+/// rejected result remains Provisional until resubmitted and approved.
+/// </summary>
+public enum RaceResultStatus
+{
+    Provisional = 1,
+    Official = 2
 }
 
 public enum TournamentStatus
@@ -37,7 +57,8 @@ public enum RegistrationStatus
 {
     Pending = 1,
     Approved = 2,
-    Rejected = 3
+    Rejected = 3,
+    Withdrawn = 4
 }
 
 public enum JockeyInvitationStatus

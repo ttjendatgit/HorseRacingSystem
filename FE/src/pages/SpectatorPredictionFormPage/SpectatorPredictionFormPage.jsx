@@ -19,10 +19,6 @@ const getStatusMessage = (status) => {
     case "inprogress": return "Cuộc đua đang diễn ra, đã khóa cược.";
     case "finished": return "Cuộc đua đã kết thúc, không thể đặt cược.";
     case "cancelled": return "Cuộc đua đã bị hủy.";
-    case "awaitingresult":
-    case "resultpendingapproval":
-    case "resultapproved":
-      return "Cuộc đua đang chờ công bố kết quả chính thức, đã khóa cược.";
     default: return "Cuộc đua đã khóa — không thể đặt cược.";
   }
 };
@@ -174,9 +170,7 @@ function SpectatorPredictionFormPage() {
         if (selectedTournament && tid !== selectedTournament) return false;
         // Only show races that can be bet on: Scheduled only
         const status = (race?.status ?? race?.Status ?? "").toLowerCase().trim();
-        if (status === "finished" || status === "cancelled" || status === "inprogress" ||
-            status === "awaitingresult" || status === "resultpendingapproval" ||
-            status === "resultapproved") return false;
+        if (status === "finished" || status === "cancelled" || status === "inprogress") return false;
         return true;
       })
       .map((race) => {

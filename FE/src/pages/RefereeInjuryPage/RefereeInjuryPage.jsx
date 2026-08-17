@@ -4,7 +4,7 @@ import {
   createInjury,
   markRecovered,
 } from "../../services/managementApi";
-import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap";
+import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
 import "./RefereeInjuryPage.css";
 
 const SEVERITY_OPTIONS = [
@@ -85,8 +85,8 @@ function RefereeInjuryPage() {
       const list = Array.isArray(data?.data)
         ? data.data
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
       setInjuries(list);
     } catch (e) {
       setError("Không thể tải danh sách chấn thương: " + e.message);

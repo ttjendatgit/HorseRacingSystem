@@ -29,6 +29,10 @@ function LiveResultsPage() {
   }, [selectedId]);
 
   const rankings = ranking?.rankings ?? ranking?.Rankings ?? ranking?.positions ?? [];
+  const resultStatus = (
+    ranking?.resultStatus ?? ranking?.ResultStatus ?? ""
+  ).toLowerCase();
+  const isOfficial = resultStatus === "official";
 
   return (
     <div className="live-results-page">
@@ -59,6 +63,11 @@ function LiveResultsPage() {
       ) : (
         <div className="result-panel">
           <h2>{ranking.raceName ?? ranking.race?.name ?? "Kết Quả Cuộc Đua"}</h2>
+          {resultStatus && !isOfficial && (
+            <p className="empty-state" style={{ color: "#b45309", fontWeight: 600 }}>
+              ⏳ Kết quả tạm thời — đang chờ admin duyệt thành chính thức. Thứ hạng bên dưới chưa phải kết quả cuối cùng.
+            </p>
+          )}
           {rankings.length > 0 ? (
             <table className="results-table">
               <thead>
@@ -73,7 +82,7 @@ function LiveResultsPage() {
                 {rankings.map((p, i) => (
                   <tr key={`${p.horseName ?? "horse"}-${i}`}>
                     <td>{p.position ?? i + 1}</td>
-                    <td>{p.horseName ?? "-"}</td>
+                    <td>{isOfficial && p.won ? "🏆 " : ""}{p.horseName ?? "-"}</td>
                     <td>{p.jockeyName ?? "-"}</td>
                     <td>{p.time ?? "-"}</td>
                   </tr>
@@ -82,7 +91,8 @@ function LiveResultsPage() {
             </table>
           ) : (
             <p className="winner-card">
-              Người chiến thắng: <strong>{ranking.winningHorseName ?? ranking.winningHorse?.name ?? "Chưa xác định"}</strong>
+              {isOfficial ? "Người chiến thắng: " : "Ngựa dẫn đầu (tạm thời): "}
+              <strong>{ranking.winningHorseName ?? ranking.winningHorse?.name ?? "Chưa xác định"}</strong>
             </p>
           )}
         </div>

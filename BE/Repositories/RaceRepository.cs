@@ -34,6 +34,7 @@ public class RaceRepository : IRaceRepository
             .Include(r => r.Entries)
             .Include(r => r.RefereeAssignments)
             .Include(r => r.Tournament)
+            .Include(r => r.Result)
             .FirstOrDefaultAsync(r => r.Id == raceId);
     }
 
@@ -42,6 +43,7 @@ public class RaceRepository : IRaceRepository
         return _db.Races
             .Include(r => r.Entries)
             .ThenInclude(e => e.Horse)
+            .Include(r => r.Result)
             .FirstOrDefaultAsync(r => r.Id == raceId);
     }
 
@@ -50,6 +52,7 @@ public class RaceRepository : IRaceRepository
         return _db.Races
             .Include(r => r.Entries)
             .Include(r => r.RefereeAssignments)
+            .Include(r => r.Result)
             .Where(r => r.TournamentId == tournamentId)
             .OrderBy(r => r.ScheduledAt)
             .ToListAsync();
@@ -60,6 +63,7 @@ public class RaceRepository : IRaceRepository
         return _db.Races
             .Include(r => r.Entries)
             .Include(r => r.RefereeAssignments)
+            .Include(r => r.Result)
             .Where(r => r.RoundId == roundId)
             .OrderBy(r => r.ScheduledAt)
             .ToListAsync();

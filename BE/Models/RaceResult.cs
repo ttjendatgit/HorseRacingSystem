@@ -31,13 +31,31 @@ public class RaceResult
 
     public DateTime? ApprovedAt { get; set; }
 
-    public ApprovalStatus ApprovalStatus { get; set; } = ApprovalStatus.Pending;
+    /// <summary>
+    /// Authoritative result lifecycle (Phase2B). Business logic must read/write
+    /// this field, not ApprovalStatus/IsOfficial below.
+    /// </summary>
+    public RaceResultStatus Status { get; set; } = RaceResultStatus.Provisional;
 
     [MaxLength(1000)]
     public string? RejectedReason { get; set; }
 
     public bool IsDisputed { get; set; } = false;
 
+    /// <summary>
+    /// Legacy pre-Phase2B field, retained for rollback safety only. No longer
+    /// written by normal application flow — use Status == Official instead.
+    /// Candidate for removal once Phase2 cleanup confirms no reader depends on it.
+    /// </summary>
+    [Obsolete("Superseded by Status. Kept for rollback safety only; do not write in new code.")]
+    public ApprovalStatus ApprovalStatus { get; set; } = ApprovalStatus.Pending;
+
+    /// <summary>
+    /// Legacy pre-Phase2B field, retained for rollback safety only. No longer
+    /// written by normal application flow — use Status == Official instead.
+    /// Candidate for removal once Phase2 cleanup confirms no reader depends on it.
+    /// </summary>
+    [Obsolete("Superseded by Status == RaceResultStatus.Official. Kept for rollback safety only; do not write in new code.")]
     public bool IsOfficial { get; set; } = false;
 
     [Column(TypeName = "decimal(18,2)")]

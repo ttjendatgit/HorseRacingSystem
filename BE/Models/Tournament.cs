@@ -46,6 +46,15 @@ public class Tournament
 
     public DateTime? RegistrationDeadline { get; set; }
 
+    public int? MinParticipants { get; set; }
+
+    public int? MaxParticipants { get; set; }
+
+    public Guid? CancelledBy { get; set; }
+
+    [MaxLength(1000)]
+    public string? CancellationReason { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
