@@ -99,6 +99,7 @@ public class RaceManagementService : IRaceManagementService
                 MaxParticipants = request.MaxParticipants,
                 Distance = request.Distance,
                 RoundNames = request.RoundNames,
+                QualificationSlots = request.QualificationSlots,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -160,6 +161,8 @@ public class RaceManagementService : IRaceManagementService
                 race.ScheduledEndAt = request.ScheduledEndAt.Value;
             if (request.TrackId.HasValue)
                 race.TrackId = request.TrackId;
+            if (request.QualificationSlots.HasValue)
+                race.QualificationSlots = request.QualificationSlots.Value;
 
             race.UpdatedAt = DateTime.UtcNow;
             await _raceRepo.UpdateAsync(race);
@@ -706,32 +709,7 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
-    private RaceDetailResponse MapToDetailResponse(Race race)
-    {
-        return new RaceDetailResponse
-        {
-            Id = race.Id,
-            Name = race.Name,
-            TournamentId = race.TournamentId,
-            RoundId = race.RoundId,
-            ScheduledAt = race.ScheduledAt,
-            ActualStartTime = race.ActualStartTime,
-            ActualEndTime = race.ActualEndTime,
-            Status = race.Status.ToString(),
-            ResultStatus = race.Result?.Status.ToString(),
-            RejectedReason = race.Result?.RejectedReason,
-            Location = race.Location,
-            Description = race.Description,
-            MaxParticipants = race.MaxParticipants,
-            Distance = race.Distance,
-            EntriesCount = race.Entries?.Count ?? 0,
-            ActiveRefereesCount = race.RefereeAssignments?.Count(a => a.Status != RefereeAssignmentStatus.Cancelled) ?? 0,
-            RoundNames = race.RoundNames,
-            ScheduledEndAt = race.ScheduledEndAt,
-            TrackId = race.TrackId,
-            TrackName = race.Track?.Name
-        };
-    }
+    private RaceDetailResponse MapToDetailResponse(Race race) => RaceDetailResponseMapper.ToDetailResponse(race);
 
     private async Task RecalculateOddsAsync(Guid raceId)
     {

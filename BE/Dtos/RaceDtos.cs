@@ -9,6 +9,16 @@ public class RaceSummaryDto
     public Guid TournamentId { get; set; }
     public DateTime ScheduledAt { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    // Phase3B additions
+    public Guid RoundId { get; set; }
+    public int? RoundNumber { get; set; }
+    public string? RoundName { get; set; }
+    public Guid? TrackId { get; set; }
+    public string? TrackName { get; set; }
+    public int? QualificationSlots { get; set; }
+    /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
+    public string? ResultStatus { get; set; }
 }
 
 // Additional Race DTOs for BE2
@@ -25,6 +35,7 @@ public class CreateRaceRequest
     public int MaxParticipants { get; set; } = 12;
     public int Distance { get; set; } = 2000;
     public string? RoundNames { get; set; }
+    public int? QualificationSlots { get; set; }
 }
 
 public class UpdateRaceRequest
@@ -38,6 +49,7 @@ public class UpdateRaceRequest
     public int? MaxParticipants { get; set; }
     public int? Distance { get; set; }
     public string? RoundNames { get; set; }
+    public int? QualificationSlots { get; set; }
 }
 
 public class RaceDetailResponse
@@ -45,7 +57,10 @@ public class RaceDetailResponse
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public Guid TournamentId { get; set; }
-    public Guid? RoundId { get; set; }
+    /// <summary>Non-nullable: Race.RoundId is required/DB NOT NULL since Phase1.</summary>
+    public Guid RoundId { get; set; }
+    public int? RoundNumber { get; set; }
+    public string? RoundName { get; set; }
     public DateTime ScheduledAt { get; set; }
     public DateTime? ScheduledEndAt { get; set; }
     public Guid? TrackId { get; set; }
@@ -60,6 +75,7 @@ public class RaceDetailResponse
     public string? Location { get; set; }
     public string? Description { get; set; }
     public int MaxParticipants { get; set; }
+    public int? QualificationSlots { get; set; }
     public int Distance { get; set; }
     public int EntriesCount { get; set; }
     public int ActiveRefereesCount { get; set; }

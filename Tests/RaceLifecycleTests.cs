@@ -624,9 +624,9 @@ public class RaceLifecycleTests
         public Task<ServiceResult<RefereeAssignmentResponse>> ConfirmAssignmentAsync(ConfirmRefereeAssignmentRequest request) => throw new NotSupportedException();
     }
 
-    private sealed record SeededRace(Guid Id, Guid WinnerHorseId, Guid LoserHorseId);
+    internal sealed record SeededRace(Guid Id, Guid WinnerHorseId, Guid LoserHorseId);
 
-    private sealed class LifecycleFixture : IAsyncDisposable
+    internal sealed class LifecycleFixture : IAsyncDisposable
     {
         public SqliteConnection Connection { get; }
         public ApplicationDbContext Db { get; }
@@ -639,6 +639,11 @@ public class RaceLifecycleTests
         public ILiveResultService LiveResult { get; }
         public IAdminService Admin { get; }
         public IPredictionService Prediction { get; }
+        public ITournamentService TournamentSvc { get; }
+        public IRoundService RoundSvc { get; }
+        public IRaceService RaceSvc { get; }
+        public ITournamentRepository TournamentRepo { get; }
+        public IRoundRepository RoundRepoPublic { get; }
         public FaultInjectingWalletService FaultWallet { get; private set; } = null!;
 
         private readonly IOwnerRepository _ownerRepo;
@@ -694,6 +699,14 @@ public class RaceLifecycleTests
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
                 RaceResultRepo, EntryRepo, _reportRepo, UnitOfWork);
+
+            TournamentRepo = _tournamentRepo;
+            RoundRepoPublic = _roundRepo;
+            TournamentSvc = new TournamentService(
+                _tournamentRepo, new FakeNotificationService(), _userRepo, RaceRepo, EntryRepo,
+                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork);
+            RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
+            RaceSvc = new RaceService(RaceRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
         }
 
         public static async Task<LifecycleFixture> CreateAsync()
