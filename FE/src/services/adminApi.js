@@ -66,6 +66,12 @@ export const createRound = (tournamentId, payload) =>
     body: JSON.stringify({ ...payload, tournamentId }),
   });
 
+export const updateRound = (roundId, payload) =>
+  request(`/api/tournaments/rounds/${roundId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 export const getTournamentRaces = async (tournamentId) =>
   unwrap(await request(`/api/races/management/tournament/${tournamentId}`));
 

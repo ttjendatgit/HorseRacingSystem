@@ -226,11 +226,16 @@ public class TournamentValidationTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest());
         var tournamentId = create.Result.Data!.Id;
+        var tournamentStart = create.Result.Data.StartDate;
 
+        // Phase5B Fix2: the Round's schedule must fall inside the Tournament's own window
+        // (Tournament.StartDate <= Round.Start < Round.End <= Tournament.EndDate) or CreateRoundAsync
+        // now friendly-rejects it up front — this test is about the (still-missing) Race/Track
+        // structural readiness, not Round/Tournament containment, so keep the Round in-window.
         var round = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "Round 1", TournamentId = tournamentId, RoundNumber = 1,
-            ScheduledStartDate = DateTime.UtcNow, ScheduledEndDate = DateTime.UtcNow.AddDays(1)
+            ScheduledStartDate = tournamentStart, ScheduledEndDate = tournamentStart.AddDays(1)
         });
         Assert.True(round.Result.Success, round.Result.Message);
 
@@ -524,11 +529,15 @@ public class TournamentValidationTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest());
         var tournamentId = create.Result.Data!.Id;
+        var tournamentStart = create.Result.Data.StartDate;
 
+        // Phase5B Fix2: Round schedule must fall inside the Tournament's own window or
+        // CreateRoundAsync now friendly-rejects it up front — unrelated to what this test covers
+        // (the cancellation cascade), so keep the Round in-window.
         var round = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "R1", TournamentId = tournamentId, RoundNumber = 1,
-            ScheduledStartDate = DateTime.UtcNow, ScheduledEndDate = DateTime.UtcNow.AddDays(1)
+            ScheduledStartDate = tournamentStart, ScheduledEndDate = tournamentStart.AddDays(1)
         });
         var roundId = round.Result.Data!.Id;
 

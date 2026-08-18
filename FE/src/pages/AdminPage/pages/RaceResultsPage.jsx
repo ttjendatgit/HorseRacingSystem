@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
+import { apiToVNDate } from "../../../utils/vnDateTime";
 
 // RaceStatus — event lifecycle only. Retained numeric values (see BE Enums.cs).
 const STATUS_NUM = {
@@ -39,14 +40,8 @@ const STATUS_COLOR = {
 // settled winner; "Provisional" must always read as pending/unconfirmed
 // (see the render below, gated on det.resultStatus).
 
-const fmtDate = (v) =>
-  v
-    ? new Date(v).toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
-    : "-";
+// Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js.
+const fmtDate = (v) => (v ? apiToVNDate(v) : "-");
 
 export default function RaceResultsPage() {
   const [groups, setGroups] = useState([]);
@@ -259,9 +254,9 @@ export default function RaceResultsPage() {
                         <div style={{ fontWeight: 700, fontSize: 15, color: "var(--hr-paper)" }}>
                           {race.name ?? race.Name}
                         </div>
-                        {(race.roundNames ?? race.RoundNames) && (
+                        {(race.roundNumber ?? race.RoundNumber) && (
                           <div style={{ fontSize: 12, color: "var(--hr-gold-soft)", marginTop: 2 }}>
-                            {race.roundNames ?? race.RoundNames}
+                            Vòng {race.roundNumber ?? race.RoundNumber}{(race.roundName ?? race.RoundName) ? ` — ${race.roundName ?? race.RoundName}` : ""}
                           </div>
                         )}
                       </div>

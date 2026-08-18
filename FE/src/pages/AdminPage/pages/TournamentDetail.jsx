@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { request } from "../../../services/apiClient";
 import RaceForm from "../../../components/RaceForm";
+import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
 
 // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
 // RegistrationClosed are transitional compatibility values (see BE Enums.cs).
+// NOT Owner/Horse Tournament registration (TournamentHorseRegistration, deferred Registration
+// phase) — "Mở đăng ký"/"Đóng đăng ký" below only flip Race.Status and gate the Admin's direct
+// horse-assignment path (AssignHorseToRaceAsync) + Start readiness. Kept as-is: it's the only
+// currently working way to progress a Race to Start until the real Registration phase replaces it.
 const raceStatusBg = (s) => ({scheduled:"rgba(37,99,235,0.1)",registrationopen:"rgba(16,185,129,0.1)",registrationclosed:"rgba(100,116,139,0.1)",inprogress:"rgba(245,158,11,0.1)",finished:"rgba(16,185,129,0.1)",cancelled:"rgba(239,68,68,0.1)"})[s]||"rgba(100,116,139,0.1)";
 const raceStatusColor = (s) => ({scheduled:"#60a5fa",registrationopen:"var(--hr-success)",registrationclosed:"var(--hr-muted)",inprogress:"#f59e0b",finished:"#10b981",cancelled:"#ef4444"})[s]||"var(--hr-muted)";
 const raceStatusLabel = (s) => ({scheduled:"Sắp diễn ra",registrationopen:"Mở đăng ký",registrationclosed:"Đã đóng đăng ký",inprogress:"Đang đua",finished:"Đã kết thúc",cancelled:"Đã hủy"})[s]||s||"Không xác định";
@@ -14,7 +20,9 @@ const resultStatusBg = (s) => ({provisional:"rgba(245,158,11,0.14)",official:"rg
 const resultStatusColor = (s) => ({provisional:"var(--hr-warning)",official:"var(--hr-success)"})[s]||"var(--hr-muted)";
 const resultStatusLabel = (s) => ({provisional:"Tạm thời (chờ duyệt)",official:"Chính thức"})[s]||"";
 
-const fmtDate2 = (v) => v?new Date(v).toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
+// Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js.
+const fmtDate2 = (v) => apiToVNDate(v);
+const fmtDateTime2 = (v) => apiToVNDisplay(v);
 
 function OddsEditor({ raceId, horseId, odds, setMessage }) {
   const [val, setVal] = useState(String(odds));
@@ -45,6 +53,8 @@ function OddsEditor({ raceId, horseId, odds, setMessage }) {
 
 export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces }) {
   const tId = t.id??t.Id;
+  const isDraft = (t.statusName??t.StatusName) === "Draft";
+  const navigate = useNavigate();
   const [races, setRaces] = useState([]);
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [editRaceData, setEditRaceData] = useState(null);
@@ -62,15 +72,17 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
     <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div><h2 style={{margin:"0 0 4px",fontSize:24,color:"var(--hr-paper)",fontFamily:"var(--font-display)"}}>{t.name??t.Name}</h2>
-          <p style={{margin:0,fontSize:13,color:"var(--hr-muted)"}}>{(t.venue??t.Venue)?"📍 "+(t.venue??t.Venue)+" · ":""}📅 {fmtDate2(t.startDate??t.StartDate)} → {fmtDate2(t.endDate??t.EndDate)}</p></div>
+          <p style={{margin:0,fontSize:13,color:"var(--hr-muted)"}}>{(t.venue??t.Venue)?"📍 "+(t.venue??t.Venue)+" · ":""}📅 {fmtDateTime2(t.startDate??t.StartDate)} → {fmtDateTime2(t.endDate??t.EndDate)}</p>
+          <p style={{margin:"2px 0 0",fontSize:13,color:"var(--hr-muted)"}}>⏳ Hạn đăng ký ngựa: {fmtDateTime2(t.registrationDeadline??t.RegistrationDeadline) || "Chưa thiết lập"}</p></div>
         <div style={{display:"flex",gap:8}}>
+          {isDraft && <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>navigate(`/admin/rounds?tournamentId=${tId}`)}>+ Tạo vòng đấu</button>}
           <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>setShowRaceForm(true)}>+ Tạo cuộc đua</button>
         </div>
       </div>
     </div>
-    {showRaceForm && !editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate}
+    {showRaceForm && !editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate} tournamentRegistrationDeadline={t.registrationDeadline??t.RegistrationDeadline}
       onClose={()=>setShowRaceForm(false)} onSuccess={()=>{setShowRaceForm(false);setMessage("Cuộc đua đã tạo!");viewTournament();}}/>}
-    {editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate}
+    {editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate} tournamentRegistrationDeadline={t.registrationDeadline??t.RegistrationDeadline}
       raceData={editRaceData} onClose={()=>setEditRaceData(null)} onSuccess={()=>{setEditRaceData(null);setMessage("Đã cập nhật!");viewTournament();}}/>}
     <h3 style={{margin:"0 0 12px",fontSize:18,color:"var(--hr-paper)"}}>Cuộc đua ({races.length})</h3>
     {races.length===0 ? <p style={{color:"var(--hr-muted)",fontSize:14}}>Chưa có cuộc đua nào.</p>
@@ -119,8 +131,10 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
         </div>
         {exp&&<div style={{padding:"0 16px 16px",borderTop:"1px solid var(--hr-border-soft)"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,padding:"12px 0"}}>
+            <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Vòng đấu</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{(race.roundNumber??race.RoundNumber)?`Vòng ${race.roundNumber??race.RoundNumber}${(race.roundName??race.RoundName)?" — "+(race.roundName??race.RoundName):""}`:"—"}</strong></div>
+            <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Đường đua</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{race.trackName??race.TrackName??"Chưa chọn"}</strong></div>
             <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Khoảng cách</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{(race.distance??race.Distance??0)}m</strong></div>
-            <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Ngựa</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{det.entries?.length||(race.entriesCount??race.EntriesCount??0)}/{race.maxParticipants??race.MaxParticipants??12}</strong></div>
+            <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Ngựa</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{det.entries?.length||(race.entriesCount??race.EntriesCount??0)}/{race.maxParticipants??race.MaxParticipants}</strong></div>
             <div><span style={{fontSize:10,color:"var(--hr-muted)",display:"block"}}>Bắt đầu</span><strong style={{fontSize:14,color:"var(--hr-paper)"}}>{fmtDate2(race.scheduledAt??race.ScheduledAt)}</strong></div>
           </div>
           {det.entries?.length>0 && <div style={{marginTop:8}}>
@@ -140,7 +154,6 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
               ))}</tbody>
             </table>
           </div>}
-          {(race.roundNames||race.RoundNames)&&<div style={{marginTop:8}}><h4 style={{fontSize:12,margin:"0 0 4px",color:"var(--hr-paper)"}}>Vòng đấu</h4><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{(race.roundNames||race.RoundNames||"").split(",").map((n,i)=><span key={i} style={{padding:"2px 8px",borderRadius:6,background:"rgba(184,134,59,0.12)",fontSize:11,color:"var(--hr-gold-soft)"}}>{n.trim()}</span>)}</div></div>}
           {det.refAssignments?.length>0&&<div style={{marginTop:6}}><h4 style={{fontSize:12,margin:"0 0 4px",color:"var(--hr-paper)"}}>Trọng tài</h4>{det.refAssignments.map((r,i)=>{const ss=(r.status||r.Status||"").toLowerCase();return(<div key={i} style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,fontSize:11}}><span style={{width:6,height:6,borderRadius:"50%",background:ss==="confirmed"?"#10b981":"#f59e0b"}}/><span style={{color:"var(--hr-text)"}}>{r.refereeName||r.RefereeName}</span><span style={{color:"var(--hr-muted)"}}>{ss==="confirmed"?"✅":"⏳"}</span></div>)})}</div>}
           {st==="finished"&&det.result&&(()=>{
             const dRst=(det.result.resultStatus||det.result.ResultStatus||"").toLowerCase();

@@ -282,35 +282,14 @@ public class Phase3ContractTests
         Assert.Null(round3.Result.Data!.PlannedParticipants);
     }
 
-    [Fact]
-    public async Task RoundN_DuplicatePredecessor_PlannedParticipantsIsNull_NotGuessed()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
-        {
-            Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
-            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
-        })).Result.Data!.Id;
-
-        // Two rounds both claiming RoundNumber == 1 (uniqueness is not enforced until Phase5).
-        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
-        {
-            Name = "R1a", TournamentId = tournamentId, RoundNumber = 1,
-            ScheduledStartDate = DateTime.UtcNow, ScheduledEndDate = DateTime.UtcNow.AddDays(1), AdvanceCount = 4
-        });
-        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
-        {
-            Name = "R1b", TournamentId = tournamentId, RoundNumber = 1,
-            ScheduledStartDate = DateTime.UtcNow, ScheduledEndDate = DateTime.UtcNow.AddDays(1), AdvanceCount = 9
-        });
-        var round2 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
-        {
-            Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
-            ScheduledStartDate = DateTime.UtcNow.AddDays(2), ScheduledEndDate = DateTime.UtcNow.AddDays(3)
-        });
-
-        Assert.Null(round2.Result.Data!.PlannedParticipants);
-    }
+    // RoundN_DuplicatePredecessor_PlannedParticipantsIsNull_NotGuessed removed (Phase5): the
+    // scenario it tested — two Rounds sharing a RoundNumber within one Tournament — is no longer
+    // constructible at all, not even by seeding directly via the DbContext, now that Phase5 adds a
+    // real UNIQUE(TournamentId, RoundNumber) DB index (enforced in tests too, since EnsureCreatedAsync
+    // builds schema straight from the model). ComputePlannedParticipantsAsync's Count!=1 defensive
+    // fallback still exists in source as defense-in-depth but the "2+ rows" branch of it is now
+    // unreachable through any supported path; RoundN_MissingPredecessor_PlannedParticipantsIsNull
+    // still covers the reachable "Count==0" branch.
 
     [Fact]
     public async Task ActualParticipants_SameHorseAcrossTwoRacesInSameRound_CountsOnce()

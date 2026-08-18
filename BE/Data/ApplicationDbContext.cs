@@ -456,6 +456,11 @@ public class ApplicationDbContext : DbContext
             .HasIndex(e => new { e.RaceId, e.HorseId })
             .IsUnique();
 
+        // Phase5: Round.RoundNumber must be unique within its Tournament (spec §21.3).
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => new { r.TournamentId, r.RoundNumber })
+            .IsUnique();
+
         // ── Transaction indexes ──
         modelBuilder.Entity<Transaction>()
             .HasIndex(t => t.Reference);

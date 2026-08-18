@@ -4,7 +4,6 @@ import {
   approveJockey,
   assignHorseToRace,
   cancelRace,
-  createRace,
   createRound,
   createTournament,
   deleteTournament,
@@ -26,6 +25,7 @@ import {
   setUserActive,
   startRace,
   updateOwnerHorseStatus,
+  updateRound,
   updateTournament,
 } from "../../services/adminApi";
 import { getAvailableJockeys } from "../../services/jockeyApi";
@@ -46,6 +46,7 @@ import HorseManagementPage from "./pages/HorseManagementPage";
 import RefereeManagementPage from "./pages/RefereeManagementPage";
 import TournamentDetail from "./pages/TournamentDetail";
 import PredictionsManagementPage from "./pages/PredictionsManagementPage";
+import { apiToVNInput, apiToVNDisplay, apiToVNDate, apiToUtcDate, vnInputToApiUtc, vnNowInput } from "../../utils/vnDateTime";
 import "./AdminPage.css";
 
 function AdminHorseImage({ imageUrl, name, className = "" }) {
@@ -110,16 +111,15 @@ const navGroups = [
   ] },
 ];
 
-const formatDate = (value) =>
-  value
-    ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value))
-    : "-";
+// Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js. The backend
+// serializes every Tournament/Round/Race (and other) DateTime as a naive UTC instant (no Z/offset,
+// Npgsql legacy-timestamp mode — see BE/Program.cs), so display/input conversion always goes
+// through that shared utility rather than new Date(value) + the browser's own local timezone.
+const formatDate = (value) => (value ? apiToVNDate(value) : "-");
 
-const inputDate = (days = 0) => {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 16);
-};
+const formatDateTime = (value) => (value ? apiToVNDisplay(value) : "-");
+
+const inputDate = (days = 0) => vnNowInput(days);
 
 const isGuid = (value) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -827,15 +827,15 @@ function TournamentManagement() {
         imageUrl: form.imageUrl,
       };
       if (!isPublished) {
-        payload.startDate = new Date(form.startDate).toISOString();
-        payload.endDate = new Date(form.endDate).toISOString();
+        payload.startDate = vnInputToApiUtc(form.startDate);
+        payload.endDate = vnInputToApiUtc(form.endDate);
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
       }
       if (editingId) await updateTournament(editingId, payload);
       else {
-        payload.startDate = new Date(form.startDate).toISOString();
-        payload.endDate = new Date(form.endDate).toISOString();
+        payload.startDate = vnInputToApiUtc(form.startDate);
+        payload.endDate = vnInputToApiUtc(form.endDate);
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
         await createTournament(payload);
@@ -845,17 +845,13 @@ function TournamentManagement() {
     } catch (err) { setMessage(err.message); }
   };
   const edit = (item) => {
-    const toLocalInput = (value) => {
-      const date = new Date(value);
-      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    };
     setEditingId(item.id ?? item.Id);
     setEditingStatus(item.status ?? item.Status ?? null);
     setForm({
       name: item.name ?? item.Name ?? "",
       description: item.description ?? item.Description ?? "",
-      startDate: toLocalInput(item.startDate ?? item.StartDate),
-      endDate: toLocalInput(item.endDate ?? item.EndDate),
+      startDate: apiToVNInput(item.startDate ?? item.StartDate),
+      endDate: apiToVNInput(item.endDate ?? item.EndDate),
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
       minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
       maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
@@ -912,8 +908,15 @@ function TournamentManagement() {
         {editingStatus === 1 && <p style={{ color: "var(--hr-gold-soft)", fontSize: 13, marginBottom: 8 }}>⚠ Giải đấu đã công bố — chỉ có thể sửa Tên, Mô tả và Ảnh bìa.</p>}
         <input placeholder="Tên giải đấu" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <input placeholder="Mô tả" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
-        <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Thời gian bắt đầu *
+          <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        </label>
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Thời gian kết thúc *
+          <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        </label>
+        {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
         <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
         <input type="number" placeholder="Số người tham gia tối đa" required min="1" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} disabled={editingStatus === 1} />
         <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
@@ -927,7 +930,7 @@ function TournamentManagement() {
         const id = item.id ?? item.Id;
         return <article key={id} className="admin-tournament-card" role="button" tabIndex={0} style={{ position: "relative", overflow: "hidden", cursor:"pointer" }} onClick={() => viewT(item)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); viewT(item); } }}>
           {item.imageUrl ?? item.ImageUrl ? <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${(item.imageUrl ?? item.ImageUrl)})`, backgroundSize: "cover", backgroundPosition: "center", opacity: 0.15, pointerEvents: "none" }} /> : null}
-          <div style={{ position: "relative", zIndex: 1 }}><span className={(item.isActive ?? item.IsActive) ? "status status--active" : "status status--inactive"}>{(item.isActive ?? item.IsActive) ? "Hoạt động" : "Không hoạt động"}</span><h3>{item.name ?? item.Name}</h3><p>{item.description ?? item.Description ?? "Không có mô tả"}</p></div><dl style={{ position: "relative", zIndex: 1 }}><div><dt>Bắt đầu</dt><dd>{formatDate(item.startDate ?? item.StartDate)}</dd></div><div><dt>Vòng đấu</dt><dd>{item.roundCount ?? item.RoundCount ?? 0}</dd></div><div><dt>Cuộc đua</dt><dd>{item.raceCount ?? item.RaceCount ?? 0}</dd></div></dl><div className="admin-actions" style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ position: "relative", zIndex: 1 }}><span className={(item.isActive ?? item.IsActive) ? "status status--active" : "status status--inactive"}>{(item.isActive ?? item.IsActive) ? "Hoạt động" : "Không hoạt động"}</span><h3>{item.name ?? item.Name}</h3><p>{item.description ?? item.Description ?? "Không có mô tả"}</p></div><dl style={{ position: "relative", zIndex: 1 }}><div><dt>Bắt đầu</dt><dd>{formatDateTime(item.startDate ?? item.StartDate)}</dd></div><div><dt>Kết thúc</dt><dd>{formatDateTime(item.endDate ?? item.EndDate)}</dd></div><div><dt>Vòng đấu</dt><dd>{item.roundCount ?? item.RoundCount ?? 0}</dd></div><div><dt>Cuộc đua</dt><dd>{item.raceCount ?? item.RaceCount ?? 0}</dd></div></dl><div className="admin-actions" style={{ position: "relative", zIndex: 1 }}>
             {(item.nextTransitions ?? item.NextTransitions ?? []).map((t) => (
               <button
                 key={t.status}
@@ -955,6 +958,8 @@ function TournamentManagement() {
 }
 
 function ScheduleManagement({ type }) {
+  const location = useLocation();
+  const preselectTournamentId = new URLSearchParams(location.search).get("tournamentId") || "";
   const [tournaments, setTournaments] = useState([]);
   const [selected, setSelected] = useState("");
   const [items, setItems] = useState([]);
@@ -972,9 +977,6 @@ function ScheduleManagement({ type }) {
   const [busyHorseIdsAll, setBusyHorseIdsAll] = useState(new Set());
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
-  const [tournamentRounds, setTournamentRounds] = useState([]);
-  const [roundsLoading, setRoundsLoading] = useState(false);
-  const [roundsError, setRoundsError] = useState("");
 
   const refreshBusyHorses = async () => {
     try {
@@ -1030,11 +1032,25 @@ function ScheduleManagement({ type }) {
     official: "Chính thức",
   };
 
-  const [form, setForm] = useState(type === "round"
-    ? { name: "", roundNumber: 1, scheduledStartDate: inputDate(7), scheduledEndDate: inputDate(8), description: "" }
-    : { name: "", roundId: "", scheduledAt: inputDate(7), location: "", description: "", maxParticipants: 12, distance: 2000, imageUrl: "" });
+  // Race creation lives exclusively in RaceForm.jsx (the single canonical Race payload builder) —
+  // this page only builds Round create/update payloads (same form for both, per Phase5B).
+  const defaultRoundForm = { name: "", roundNumber: 1, scheduledStartDate: inputDate(7), scheduledEndDate: inputDate(8), description: "", advanceCount: "" };
+  const [form, setForm] = useState(defaultRoundForm);
+  const [editingRoundId, setEditingRoundId] = useState("");
 
-  useEffect(() => { getAdminTournaments().then((data) => { const list = Array.isArray(data) ? data : []; setTournaments(list); setSelected(list[0]?.id ?? list[0]?.Id ?? ""); }).catch((err) => setMessage(err.message)); }, []);
+  useEffect(() => {
+    getAdminTournaments().then((data) => {
+      const list = Array.isArray(data) ? data : [];
+      setTournaments(list);
+      // Deep-link from Tournament Detail's "+ Tạo vòng đấu" (?tournamentId=...) preselects the
+      // Tournament so the Admin doesn't have to find it again in the dropdown — falls back to the
+      // first Tournament when the id is absent or no longer matches.
+      const preselected = preselectTournamentId && list.some((item) => (item.id ?? item.Id) === preselectTournamentId)
+        ? preselectTournamentId
+        : (list[0]?.id ?? list[0]?.Id ?? "");
+      setSelected(preselected);
+    }).catch((err) => setMessage(err.message));
+  }, []);
   useEffect(() => {
     if (type !== "race") return;
 
@@ -1073,23 +1089,6 @@ function ScheduleManagement({ type }) {
     const fetcher = type === "round" ? getTournamentRounds : getTournamentRaces;
     fetcher(selected).then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   }, [selected, type]);
-
-  const loadRounds = async () => {
-    if (type !== "race" || !selected) { setTournamentRounds([]); return; }
-    setRoundsLoading(true);
-    setRoundsError("");
-    try {
-      const data = await getTournamentRounds(selected);
-      setTournamentRounds(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setRoundsError(err.message || "Không thể tải danh sách vòng đấu.");
-      setTournamentRounds([]);
-    } finally {
-      setRoundsLoading(false);
-    }
-  };
-
-  useEffect(() => { loadRounds(); }, [selected, type]);
 
   const selectedHorse = approvedHorses.find(
     (horse) => (horse.id ?? horse.Id) === assignment.horseId,
@@ -1144,21 +1143,69 @@ function ScheduleManagement({ type }) {
     });
   };
 
+  const startEditRound = (round) => {
+    setEditingRoundId(round.id ?? round.Id);
+    // Nullish coalescing only — AdvanceCount = 0 is a valid, meaningful value (Final Round)
+    // and must round-trip through the form unchanged, never collapsing to "".
+    const advanceCount = round.advanceCount ?? round.AdvanceCount;
+    setForm({
+      name: round.name ?? round.Name ?? "",
+      roundNumber: round.roundNumber ?? round.RoundNumber ?? 1,
+      scheduledStartDate: apiToVNInput(round.scheduledStartDate ?? round.ScheduledStartDate),
+      scheduledEndDate: apiToVNInput(round.scheduledEndDate ?? round.ScheduledEndDate),
+      description: round.description ?? round.Description ?? "",
+      advanceCount: advanceCount === null || advanceCount === undefined ? "" : advanceCount,
+    });
+  };
+
+  const cancelEditRound = () => {
+    setEditingRoundId("");
+    setForm(defaultRoundForm);
+  };
+
   const submit = async (event) => {
     event.preventDefault();
-    if (type === "race" && !form.roundId) {
-      setMessage("Vui lòng chọn vòng đấu (Round) trước khi tạo cuộc đua.");
+    // Phase5B fix: friendly client-side containment check before hitting the API — the backend
+    // stays authoritative (same rules re-checked there), this just avoids a round-trip for the
+    // obvious case of a Round scheduled outside its Tournament's window. Vietnam-timezone policy
+    // (Asia/Ho_Chi_Minh) — see FE/src/utils/vnDateTime.js.
+    const roundStartUtc = vnInputToApiUtc(form.scheduledStartDate);
+    const roundEndUtc = vnInputToApiUtc(form.scheduledEndDate);
+    const roundStart = apiToUtcDate(roundStartUtc);
+    const roundEnd = apiToUtcDate(roundEndUtc);
+    if (selectedTournament) {
+      const tStart = apiToUtcDate(selectedTournament.startDate ?? selectedTournament.StartDate);
+      const tEnd = apiToUtcDate(selectedTournament.endDate ?? selectedTournament.EndDate);
+      if (roundStart < tStart) {
+        setMessage("Thời gian bắt đầu Vòng đấu không được trước thời gian bắt đầu Giải đấu.");
+        return;
+      }
+      if (roundEnd > tEnd) {
+        setMessage("Thời gian kết thúc Vòng đấu không được sau thời gian kết thúc Giải đấu.");
+        return;
+      }
+    }
+    if (roundStart >= roundEnd) {
+      setMessage("Thời gian bắt đầu Vòng đấu phải trước thời gian kết thúc.");
       return;
     }
     try {
-      if (type === "round") {
-        await createRound(selected, { ...form, scheduledStartDate: new Date(form.scheduledStartDate).toISOString(), scheduledEndDate: new Date(form.scheduledEndDate).toISOString() });
-        setItems(await getTournamentRounds(selected));
+      const payload = {
+        ...form,
+        scheduledStartDate: roundStartUtc,
+        scheduledEndDate: roundEndUtc,
+        advanceCount: form.advanceCount === "" ? null : Number(form.advanceCount),
+      };
+      if (editingRoundId) {
+        await updateRound(editingRoundId, payload);
+        setMessage("Vòng đấu đã cập nhật thành công.");
+        setEditingRoundId("");
+        setForm(defaultRoundForm);
       } else {
-        await createRace({ ...form, tournamentId: selected, roundId: form.roundId || null, scheduledAt: new Date(form.scheduledAt).toISOString(), maxParticipants: Number(form.maxParticipants), distance: Number(form.distance) });
-        setItems(await getTournamentRaces(selected));
+        await createRound(selected, payload);
+        setMessage("Vòng đấu đã tạo thành công.");
       }
-      setMessage(`${type === "round" ? "Vòng đấu" : "Cuộc đua"} đã tạo thành công.`);
+      setItems(await getTournamentRounds(selected));
     } catch (err) { setMessage(err.message); }
   };
 
@@ -1226,18 +1273,27 @@ function ScheduleManagement({ type }) {
   };
 
   const title = type === "round" ? "Quản lý vòng đấu" : "Quản lý cuộc đua & lên lịch";
+  const selectedTournament = tournaments.find((t) => (t.id ?? t.Id) === selected);
+  // Structural Round edit ("Sửa") is only exposed while the parent Tournament is Draft — Phase5
+  // locks Round/Race structural mutation to Draft-only, so the action must never be offered once
+  // the Tournament is Published/Ongoing/Finished/Cancelled, even though the backend already rejects it.
+  const isDraftTournament = (selectedTournament?.statusName ?? selectedTournament?.StatusName) === "Draft";
   return (
     <>
       <PageTitle
         eyebrow="Quản lý giải đấu"
         title={title}
         description={type === "round" ? "Xây dựng giai đoạn giải đấu và xác định khung thời gian." : "Sắp xếp cuộc đua, đặt lịch và chuẩn bị phân công ngựa."}
-        action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>Tạo cuộc đua</button> : null}
+        action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null}
       />
       <Notice message={message} />
       {showRaceForm && (
         <RaceForm
           tournamentId={selected}
+          tournamentName={selectedTournament?.name ?? selectedTournament?.Name}
+          tournamentStartDate={selectedTournament?.startDate ?? selectedTournament?.StartDate}
+          tournamentEndDate={selectedTournament?.endDate ?? selectedTournament?.EndDate}
+          tournamentRegistrationDeadline={selectedTournament?.registrationDeadline ?? selectedTournament?.RegistrationDeadline}
           onClose={() => setShowRaceForm(false)}
           onSuccess={async () => {
             setShowRaceForm(false);
@@ -1247,59 +1303,56 @@ function ScheduleManagement({ type }) {
           }}
         />
       )}
-      <div className="admin-select-row"><label>Giải đấu<select className="admin-select" value={selected} onChange={(e) => { setSelected(e.target.value); if (type === "race") setForm((prev) => ({ ...prev, roundId: "" })); }}>{tournaments.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}</select></label></div>
-      <form className="admin-form" onSubmit={submit}>
-        <input placeholder={`Tên ${type === "round" ? "vòng đấu" : "cuộc đua"}`} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        {type === "round" ? <>
-          <input type="number" min="1" value={form.roundNumber} onChange={(e) => setForm({ ...form, roundNumber: Number(e.target.value) })} />
-          <input type="datetime-local" value={form.scheduledStartDate} onChange={(e) => setForm({ ...form, scheduledStartDate: e.target.value })} min={inputDate(0)} />
-          <input type="datetime-local" value={form.scheduledEndDate} onChange={(e) => setForm({ ...form, scheduledEndDate: e.target.value })} min={inputDate(0)} />
-        </> : <>
+      <div className="admin-select-row"><label>Giải đấu<select className="admin-select" value={selected} onChange={(e) => { setSelected(e.target.value); cancelEditRound(); }}>{tournaments.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}</select></label></div>
+      {/* Round creation stays dedicated here — Race creation/edit lives exclusively in the
+          RaceForm modal above (single canonical Race payload builder, Phase5B consolidation). */}
+      {type === "round" && selectedTournament && (
+        <div style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--hr-border-soft)", background: "var(--hr-surface-2)", marginBottom: 12, fontSize: 13 }}>
+          <div><span style={{ color: "var(--hr-muted)" }}>Giải đấu: </span><strong style={{ color: "var(--hr-paper)" }}>{selectedTournament.name ?? selectedTournament.Name}</strong></div>
+          <div><span style={{ color: "var(--hr-muted)" }}>Thời gian giải: </span><strong style={{ color: "var(--hr-paper)" }}>{formatDateTime(selectedTournament.startDate ?? selectedTournament.StartDate)} → {formatDateTime(selectedTournament.endDate ?? selectedTournament.EndDate)}</strong></div>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--hr-muted)" }}>Vòng đấu phải nằm hoàn toàn trong thời gian của Giải đấu.</p>
+        </div>
+      )}
+      {type === "round" && (
+        <form className="admin-form" onSubmit={submit}>
+          {editingRoundId && <p style={{ color: "var(--hr-gold-soft)", fontSize: 13, marginBottom: 8 }}>✎ Đang sửa vòng đấu.</p>}
           <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
-            Vòng đấu (Round)
-            <select
-              className="admin-select"
-              required
-              value={form.roundId}
-              disabled={roundsLoading || tournamentRounds.length === 0}
-              onChange={(e) => setForm({ ...form, roundId: e.target.value })}
-            >
-              <option value="">
-                {roundsLoading ? "Đang tải..." : tournamentRounds.length === 0 ? "-- Chưa có vòng đấu --" : "-- Chọn vòng đấu --"}
-              </option>
-              {tournamentRounds.map((r) => (
-                <option key={r.id ?? r.Id} value={r.id ?? r.Id}>
-                  Vòng {r.roundNumber ?? r.RoundNumber} — {r.name ?? r.Name}
-                </option>
-              ))}
-            </select>
+            Tên vòng đấu *
+            <input placeholder="Ví dụ: Vòng loại, Bán kết, Chung kết." required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </label>
-          {roundsError && (
-            <p style={{ fontSize: 12, color: "var(--hr-danger)", margin: "0 0 8px" }}>
-              {roundsError}{" "}
-              <button type="button" onClick={loadRounds} style={{ background: "none", border: "none", color: "var(--hr-gold-soft)", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0 }}>Thử lại</button>
-            </p>
-          )}
-          {!roundsLoading && !roundsError && selected && tournamentRounds.length === 0 && (
-            <p style={{ fontSize: 12, color: "var(--hr-warning)", margin: "0 0 8px" }}>
-              Giải đấu này chưa có vòng đấu (Round) nào. Vui lòng tạo vòng đấu trước khi tạo cuộc đua.
-            </p>
-          )}
-          <input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} min={inputDate(0)} />
-          <input placeholder="Địa điểm" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <input type="number" min="1" placeholder="Số người tham gia tối đa" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} />
-          <input type="number" min="100" placeholder="Khoảng cách (m)" value={form.distance} onChange={(e) => setForm({ ...form, distance: e.target.value })} />
-          <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh nền cuộc đua:
-            <input type="file" accept="image/*" onChange={async (e) => {
-              const f = e.target.files?.[0]; if (!f) return;
-              const fd = new FormData(); fd.append("file", f);
-              try { const r = await request("/api/auth/upload-document", { method: "POST", body: fd }); const d = r?.data ?? r; setForm((p) => ({ ...p, imageUrl: d?.url ?? "" })); } catch { /* ignore */ }
-            }} style={{ display: "block", marginTop: 4 }} />
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Ví dụ: Vòng loại, Bán kết, Chung kết.</p>
+
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Số thứ tự vòng *
+            <input type="number" min="1" required value={form.roundNumber} onChange={(e) => setForm({ ...form, roundNumber: Number(e.target.value) })} />
           </label>
-          {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8 }} />}
-        </>}
-        <button className="primary-button" disabled={!selected || (type === "race" && (roundsLoading || tournamentRounds.length === 0 || !form.roundId))}>Tạo {type === "round" ? "vòng đấu" : "cuộc đua"}</button>
-      </form>
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Thứ tự vòng trong giải đấu, bắt đầu từ 1.</p>
+
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Thời gian bắt đầu *
+            <input type="datetime-local" required value={form.scheduledStartDate} onChange={(e) => setForm({ ...form, scheduledStartDate: e.target.value })}
+              min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)}
+              max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
+          </label>
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Thời gian kết thúc *
+            <input type="datetime-local" required value={form.scheduledEndDate} onChange={(e) => setForm({ ...form, scheduledEndDate: e.target.value })}
+              min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)}
+              max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
+          </label>
+
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Số ngựa đi tiếp *
+            <input type="number" min="0" placeholder="Số ngựa đi tiếp" value={form.advanceCount} onChange={(e) => setForm({ ...form, advanceCount: e.target.value })} />
+          </label>
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Nhập 0 nếu đây là Vòng chung kết. (AdvanceCount)</p>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="primary-button" disabled={!selected}>{editingRoundId ? "Lưu vòng đấu" : "Tạo vòng đấu"}</button>
+            {editingRoundId && <button type="button" className="ghost-button" onClick={cancelEditRound}>Hủy</button>}
+          </div>
+        </form>
+      )}
       {type === "race" && <form className="admin-form" onSubmit={assignHorse}>
         <select className="admin-select" required value={assignment.raceId} onChange={(e) => setAssignment({ ...assignment, raceId: e.target.value })}>
           <option value="">Chọn cuộc đua để phân công ngựa</option>
@@ -1344,6 +1397,33 @@ function ScheduleManagement({ type }) {
         const itemId = item.id ?? item.Id;
         const itemStatus = (item.status ?? item.Status ?? "").toLowerCase();
         const itemResultStatus = (item.resultStatus ?? item.ResultStatus ?? "").toLowerCase();
+
+        if (type === "round") {
+          const roundNumber = item.roundNumber ?? item.RoundNumber;
+          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value (Final Round
+          // hint below) and must never be treated as "not set".
+          const advanceCount = item.advanceCount ?? item.AdvanceCount;
+          return (
+            <article key={itemId} className="admin-simple-card">
+              <span className="badge">#{roundNumber}</span>
+              {advanceCount === 0 && (
+                <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>
+              )}
+              <h3>{item.name ?? item.Name}</h3>
+              <div style={{ fontSize: 13, color: "var(--hr-text)", marginTop: 4, display: "grid", gap: 2 }}>
+                <span>Bắt đầu: {formatDateTime(item.scheduledStartDate ?? item.ScheduledStartDate)}</span>
+                <span>Kết thúc: {formatDateTime(item.scheduledEndDate ?? item.ScheduledEndDate)}</span>
+                <span>Số ngựa đi tiếp: {advanceCount ?? "Chưa thiết lập"}</span>
+              </div>
+              {isDraftTournament && (
+                <div className="admin-actions" style={{ marginTop: 8 }}>
+                  <button onClick={() => startEditRound(item)}>Sửa</button>
+                </div>
+              )}
+            </article>
+          );
+        }
+
         return <article key={itemId} className="admin-simple-card" style={{cursor:"pointer"}} onClick={async () => {
           if (type !== "race") return;
           if (expandedRaceId === itemId) { setExpandedRaceId(null); return; }
@@ -1365,15 +1445,15 @@ function ScheduleManagement({ type }) {
             setRaceReport(reportRes?.data ?? reportRes ?? null);
           } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
         }}>
-          <span className="badge">{raceStatusLabel[itemStatus] ?? item.status ?? item.Status ?? `#${item.roundNumber ?? item.RoundNumber ?? ""}`}</span>
+          <span className="badge">{raceStatusLabel[itemStatus] ?? item.status ?? item.Status}</span>
           {itemResultStatus && (
             <span className="badge" style={{marginLeft:4,background:itemResultStatus==="official"?"rgba(112,139,104,0.16)":"rgba(185,138,69,0.16)",color:itemResultStatus==="official"?"var(--hr-success)":"var(--hr-warning)"}}>
               {resultStatusLabel[itemResultStatus] ?? itemResultStatus}
             </span>
           )}
           <h3>{item.name ?? item.Name}</h3>
-          <p>{formatDate(item.scheduledAt ?? item.ScheduledAt ?? item.scheduledStartDate ?? item.ScheduledStartDate)}</p>
-          <small>{type === "round" ? `${item.raceCount ?? item.RaceCount ?? 0} cuộc đua` : `${item.entriesCount ?? item.EntriesCount ?? 0} ngựa đã phân công`}</small>
+          <p>{formatDate(item.scheduledAt ?? item.ScheduledAt)}</p>
+          <small>{item.entriesCount ?? item.EntriesCount ?? 0} ngựa đã phân công</small>
           {type === "race" && (() => {
             const refAssigns = assignmentsByRace.get(itemId) ?? [];
             const confirmedReferees = refAssigns.filter(a => (a.status ?? a.Status) === "Confirmed").length;

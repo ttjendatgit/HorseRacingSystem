@@ -75,7 +75,7 @@ public class TournamentService : ITournamentService
                 RegistrationDeadline = request.RegistrationDeadline,
                 ImageUrl = request.ImageUrl,
                 Status = TournamentStatus.Draft,
-                IsActive = false, // Will be true when Published
+                IsActive = false, // IsActive means Ongoing in this codebase (Phase5B) — Published stays false
                 CreatedAt = DateTime.UtcNow,
                 PrizePool = request.PrizePool,
                 Venue = request.Venue,
@@ -292,6 +292,24 @@ public class TournamentService : ITournamentService
                 var draftErrors = ValidateTournamentFields(candidateTournament);
                 if (draftErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", draftErrors));
+
+                // Phase5B fix: a Draft StartDate/EndDate edit must not strand an existing Round
+                // outside the candidate window. Reject before mutating the entity.
+                if (request.StartDate.HasValue || request.EndDate.HasValue)
+                {
+                    var existingRounds = await _db.Rounds
+                        .Where(r => r.TournamentId == tournament.Id)
+                        .OrderBy(r => r.RoundNumber)
+                        .ToListAsync();
+
+                    var offendingRound = existingRounds.FirstOrDefault(r =>
+                        r.ScheduledStartDate < candidateStartDate || r.ScheduledEndDate > candidateEndDate);
+                    if (offendingRound != null)
+                    {
+                        return ServiceResult<TournamentResponse>.Fail(400,
+                            $"Không thể thay đổi thời gian giải đấu vì Vòng {offendingRound.RoundNumber} (\"{offendingRound.Name}\") sẽ nằm ngoài khoảng thời gian mới của giải đấu.");
+                    }
+                }
             }
 
             // All validation passed — now apply values to the tracked entity.
@@ -394,19 +412,26 @@ public class TournamentService : ITournamentService
                 return ServiceResult<TournamentResponse>.Fail(400,
                     $"Không thể chuyển từ {currentStatus} sang {newStatus}");
 
-            // Phase4B §1: Publish is all-or-nothing per locked V1.1 §4.2. Tournament-level checks
-            // are real; the Round/Race structural checks (Sequence, Final Round, AdvanceCount,
-            // Track, QualificationSlots) are Phase5's job. Until Phase5 lands, this transition
-            // NEVER completes — Tournament.Status/PublishedAt/IsActive are never touched here.
+            // Publish is all-or-nothing per locked V1.1 §4.2/§6/§7/§8: Phase4's Tournament-level
+            // checks plus Phase5's Round/Race structural readiness must ALL pass before the
+            // transition completes.
             if (newStatus == TournamentStatus.Published)
             {
-                var publishErrors = await ValidatePublishTournamentFieldsAsync(tournament);
+                var publishErrors = await ValidatePublishReadinessAsync(tournament);
                 if (publishErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", publishErrors));
 
-                // Phase5 internal note: Round/Race structural readiness checks not yet implemented.
-                return ServiceResult<TournamentResponse>.Fail(400,
-                    "Giải đấu chưa thể công bố vì cấu hình Vòng đấu/Cuộc đua chưa hoàn tất.");
+                tournament.Status = newStatus;
+                tournament.UpdatedAt = DateTime.UtcNow;
+                tournament.PublishedAt = DateTime.UtcNow;
+                // IsActive means Ongoing in this codebase, not Published — stays false until the
+                // later Published -> Ongoing transition (§17).
+                tournament.IsActive = false;
+
+                await _tournamentRepo.UpdateAsync(tournament);
+                await _unitOfWork.SaveChangesAsync();
+
+                return ServiceResult<TournamentResponse>.Ok(await MapToResponseAsync(tournament));
             }
 
             if (newStatus == TournamentStatus.Cancelled)
@@ -556,6 +581,237 @@ public class TournamentService : ITournamentService
             errors.Add("Giải đấu phải có ít nhất 1 Vòng đấu (Round) trước khi công bố.");
 
         return errors;
+    }
+
+    /// <summary>
+    /// Phase5: complete Publish readiness = Phase4's Tournament-level checks + Phase5's Round/Race
+    /// structural checks (sequence, Final Round, AdvanceCount, Race presence, schedule hierarchy,
+    /// Track existence/capacity/overlap, QualificationSlots, Round capacity coverage). All-or-nothing:
+    /// every meaningful failure is collected and joined via the existing ApiResult.Message convention.
+    /// </summary>
+    private async Task<List<string>> ValidatePublishReadinessAsync(Tournament tournament)
+    {
+        var errors = await ValidatePublishTournamentFieldsAsync(tournament);
+        errors.AddRange(await ValidateStructuralReadinessAsync(tournament));
+        return errors;
+    }
+
+    /// <summary>
+    /// Phase5 structural readiness (V1.1 §6/§7/§8). Final-Round-dependent checks (race count vs
+    /// final, QualificationSlots exact-zero-vs-required-sum) only run once the sequence AND the
+    /// Final-Round invariant (exactly one AdvanceCount=0, highest RoundNumber) are BOTH independently
+    /// valid — never derived merely from MAX(RoundNumber), per the locked Phase5 decision. Facts that
+    /// don't depend on which Round is Final (RoundNumber sequence, per-Race MaxParticipants, schedule
+    /// containment, Track existence/capacity/overlap) are still validated even when the sequence or
+    /// Final Round is ambiguous, so those errors surface immediately rather than being masked.
+    /// </summary>
+    private async Task<List<string>> ValidateStructuralReadinessAsync(Tournament tournament)
+    {
+        var errors = new List<string>();
+
+        var rounds = await _db.Rounds
+            .Where(r => r.TournamentId == tournament.Id)
+            .Include(r => r.Races)
+            .OrderBy(r => r.RoundNumber)
+            .ToListAsync();
+
+        if (rounds.Count == 0)
+            return errors; // already reported by ValidatePublishTournamentFieldsAsync
+
+        // ── Sequence: unique, gapless, starts at 1 ──
+        var sequenceValid = rounds.Select(r => r.RoundNumber).OrderBy(n => n)
+            .SequenceEqual(Enumerable.Range(1, rounds.Count));
+        if (!sequenceValid)
+            errors.Add("Thứ tự Vòng đấu (RoundNumber) phải liên tục, không trùng, và bắt đầu từ 1.");
+
+        // ── Final Round: exactly one AdvanceCount=0, and it must be the highest RoundNumber ──
+        Round? finalRound = null;
+        if (sequenceValid)
+        {
+            var zeroAdvanceRounds = rounds.Where(r => r.AdvanceCount == 0).ToList();
+            if (zeroAdvanceRounds.Count == 0)
+                errors.Add("Giải đấu phải có đúng 1 Vòng chung kết (AdvanceCount = 0).");
+            else if (zeroAdvanceRounds.Count > 1)
+                errors.Add("Chỉ được có đúng 1 Vòng chung kết (AdvanceCount = 0).");
+            else
+            {
+                var candidate = zeroAdvanceRounds[0];
+                if (candidate.RoundNumber != rounds.Max(r => r.RoundNumber))
+                    errors.Add("Vòng chung kết (AdvanceCount = 0) phải là Vòng đấu cuối cùng (RoundNumber lớn nhất).");
+                else
+                    finalRound = candidate;
+            }
+        }
+
+        // ── AdvanceCount: universal bounds (non-null, >= 0), for every Round regardless of Final ──
+        foreach (var round in rounds)
+        {
+            if (!round.AdvanceCount.HasValue)
+                errors.Add($"Vòng {round.RoundNumber}: AdvanceCount là bắt buộc trước khi công bố.");
+            else if (round.AdvanceCount.Value < 0)
+                errors.Add($"Vòng {round.RoundNumber}: AdvanceCount không được âm.");
+        }
+
+        // ── AdvanceCount: Final-dependent bounds (non-final > 0, final = 0, < PlannedParticipants) ──
+        if (sequenceValid && finalRound != null)
+        {
+            foreach (var round in rounds)
+            {
+                if (!round.AdvanceCount.HasValue) continue; // already reported above
+
+                var isFinal = round.Id == finalRound.Id;
+                if (isFinal && round.AdvanceCount.Value != 0)
+                    errors.Add($"Vòng chung kết (Vòng {round.RoundNumber}) phải có AdvanceCount = 0.");
+                if (!isFinal && round.AdvanceCount.Value <= 0)
+                    errors.Add($"Vòng {round.RoundNumber} (không phải chung kết) phải có AdvanceCount > 0.");
+
+                var planned = PlannedParticipantsFor(round, rounds, tournament);
+                if (planned.HasValue && round.AdvanceCount.Value >= planned.Value)
+                    errors.Add($"Vòng {round.RoundNumber}: AdvanceCount phải nhỏ hơn số lượng dự kiến tham gia (PlannedParticipants = {planned.Value}).");
+            }
+        }
+
+        // ── Per-Round Race structure: presence, schedule, Track, QualificationSlots, capacity ──
+        foreach (var round in rounds)
+        {
+            var isFinalRound = sequenceValid && finalRound != null && round.Id == finalRound.Id;
+            var races = round.Races?.ToList() ?? new List<Race>();
+
+            if (sequenceValid && finalRound != null)
+            {
+                if (isFinalRound && races.Count != 1)
+                    errors.Add($"Vòng chung kết (Vòng {round.RoundNumber}) phải có đúng 1 Cuộc đua.");
+                else if (!isFinalRound && races.Count == 0)
+                    errors.Add($"Vòng {round.RoundNumber} phải có ít nhất 1 Cuộc đua.");
+            }
+
+            // Round <-> Tournament schedule: inclusive containment, strict internal duration.
+            if (tournament.StartDate > round.ScheduledStartDate)
+                errors.Add($"Vòng {round.RoundNumber}: Thời gian bắt đầu không được trước ngày bắt đầu giải đấu.");
+            if (round.ScheduledStartDate >= round.ScheduledEndDate)
+                errors.Add($"Vòng {round.RoundNumber}: Thời gian bắt đầu phải trước thời gian kết thúc.");
+
+            // Round ordering: Round(N+1).Start >= Round(N).End (non-strict — back-to-back allowed).
+            if (sequenceValid && round.RoundNumber > 1)
+            {
+                var previousRound = rounds.First(r => r.RoundNumber == round.RoundNumber - 1);
+                if (round.ScheduledStartDate < previousRound.ScheduledEndDate)
+                    errors.Add($"Vòng {round.RoundNumber}: Thời gian bắt đầu không được trước thời gian kết thúc Vòng {previousRound.RoundNumber}.");
+            }
+
+            if (round.ScheduledEndDate > tournament.EndDate)
+                errors.Add($"Vòng {round.RoundNumber}: Thời gian kết thúc không được sau ngày kết thúc giải đấu.");
+
+            var raceCapacitySum = 0;
+            var qualificationSum = 0;
+            var qualificationIncomplete = false;
+
+            foreach (var race in races)
+            {
+                if (race.MaxParticipants <= 0)
+                    errors.Add($"Cuộc đua \"{race.Name}\" (Vòng {round.RoundNumber}): MaxParticipants phải lớn hơn 0.");
+                raceCapacitySum += race.MaxParticipants;
+
+                // Race <-> Round schedule: inclusive containment, strict internal duration.
+                if (round.ScheduledStartDate > race.ScheduledAt)
+                    errors.Add($"Cuộc đua \"{race.Name}\": Thời gian bắt đầu không được trước thời gian bắt đầu Vòng đấu.");
+                if (!race.ScheduledEndAt.HasValue)
+                {
+                    errors.Add($"Cuộc đua \"{race.Name}\": Thời gian kết thúc (ScheduledEndAt) là bắt buộc trước khi công bố.");
+                }
+                else
+                {
+                    if (race.ScheduledAt >= race.ScheduledEndAt.Value)
+                        errors.Add($"Cuộc đua \"{race.Name}\": Thời gian bắt đầu phải trước thời gian kết thúc.");
+                    if (race.ScheduledEndAt.Value > round.ScheduledEndDate)
+                        errors.Add($"Cuộc đua \"{race.Name}\": Thời gian kết thúc không được sau thời gian kết thúc Vòng đấu.");
+                }
+
+                // Track existence + capacity.
+                Track? track = null;
+                if (!race.TrackId.HasValue)
+                {
+                    errors.Add($"Cuộc đua \"{race.Name}\": Đường đua (Track) là bắt buộc trước khi công bố.");
+                }
+                else
+                {
+                    track = await _db.Tracks.FirstOrDefaultAsync(t => t.Id == race.TrackId.Value);
+                    if (track == null)
+                        errors.Add($"Cuộc đua \"{race.Name}\": Đường đua đã chọn không tồn tại.");
+                    else if (!track.Capacity.HasValue)
+                        errors.Add($"Cuộc đua \"{race.Name}\": Sức chứa (Capacity) của đường đua \"{track.Name}\" chưa được thiết lập.");
+                    else if (race.MaxParticipants > track.Capacity.Value)
+                        errors.Add($"Cuộc đua \"{race.Name}\": MaxParticipants ({race.MaxParticipants}) vượt quá sức chứa đường đua ({track.Capacity.Value}).");
+                }
+
+                // Track overlap — tournament-wide (§L convention: own Tournament always checked;
+                // other Tournaments only reserve the Track while Published/Ongoing).
+                if (race.TrackId.HasValue && race.ScheduledEndAt.HasValue)
+                {
+                    var overlap = await TrackScheduleHelper.HasOverlapAsync(
+                        _db, tournament.Id, race.TrackId.Value, race.ScheduledAt, race.ScheduledEndAt.Value, race.Id);
+                    if (overlap)
+                        errors.Add($"Cuộc đua \"{race.Name}\": Trùng lịch đường đua với một Cuộc đua khác.");
+                }
+
+                // QualificationSlots — Final-dependent, so gated on a resolved Final Round.
+                if (isFinalRound)
+                {
+                    if (!race.QualificationSlots.HasValue || race.QualificationSlots.Value != 0)
+                        errors.Add($"Cuộc đua \"{race.Name}\" (Vòng chung kết): QualificationSlots phải bằng 0.");
+                }
+                else if (sequenceValid && finalRound != null)
+                {
+                    if (!race.QualificationSlots.HasValue)
+                    {
+                        errors.Add($"Cuộc đua \"{race.Name}\": QualificationSlots là bắt buộc trước khi công bố.");
+                        qualificationIncomplete = true;
+                    }
+                    else
+                    {
+                        if (race.QualificationSlots.Value < 0)
+                            errors.Add($"Cuộc đua \"{race.Name}\": QualificationSlots không được âm.");
+                        if (race.QualificationSlots.Value >= race.MaxParticipants)
+                            errors.Add($"Cuộc đua \"{race.Name}\": QualificationSlots phải nhỏ hơn MaxParticipants.");
+                        qualificationSum += race.QualificationSlots.Value;
+                    }
+                }
+            }
+
+            // Round capacity coverage: PlannedParticipants(Round) <= SUM(Race.MaxParticipants).
+            // Applies to the Final Round too. Skipped when there are no Races — that gap is
+            // already reported by the race-presence check above, avoid a redundant message.
+            if (sequenceValid && races.Count > 0)
+            {
+                var planned = PlannedParticipantsFor(round, rounds, tournament);
+                if (planned.HasValue && planned.Value > raceCapacitySum)
+                    errors.Add($"Vòng {round.RoundNumber}: Tổng MaxParticipants của các Cuộc đua ({raceCapacitySum}) không đủ cho số lượng dự kiến tham gia ({planned.Value}).");
+            }
+
+            // Qualification slot sum == AdvanceCount, non-final Rounds only.
+            if (!isFinalRound && sequenceValid && finalRound != null && !qualificationIncomplete
+                && races.Count > 0 && round.AdvanceCount.HasValue)
+            {
+                if (qualificationSum != round.AdvanceCount.Value)
+                    errors.Add($"Vòng {round.RoundNumber}: Tổng QualificationSlots ({qualificationSum}) phải bằng AdvanceCount ({round.AdvanceCount.Value}).");
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// PlannedParticipants(Round 1) = Tournament.MaxParticipants; PlannedParticipants(Round N&gt;1) =
+    /// Round(N-1).AdvanceCount. Mirrors RoundService.ComputePlannedParticipantsAsync's semantics but
+    /// operates over an already-loaded, sequence-valid Round list (caller guarantees exactly one Round
+    /// per RoundNumber) instead of re-querying — safe to call only once `sequenceValid` is true.
+    /// </summary>
+    private static int? PlannedParticipantsFor(Round round, List<Round> rounds, Tournament tournament)
+    {
+        if (round.RoundNumber == 1)
+            return tournament.MaxParticipants;
+
+        return rounds.FirstOrDefault(r => r.RoundNumber == round.RoundNumber - 1)?.AdvanceCount;
     }
 
     public async Task<ServiceResult<TournamentStatsDto>> GetStatsAsync(Guid id)
@@ -849,6 +1105,31 @@ public class RoundService : IRoundService
                 return ServiceResult<RoundResponse>.Fail(404, "Không tìm thấy giải đấu");
             }
 
+            if (tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<RoundResponse>.Fail(400,
+                    "Không thể thêm Vòng đấu vì giải đấu không còn ở trạng thái Bản nháp.");
+            }
+
+            if (request.RoundNumber < 1)
+            {
+                return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
+            }
+
+            var scheduleErrors = ValidateRoundScheduleWithinTournament(tournament, request.ScheduledStartDate, request.ScheduledEndDate);
+            if (scheduleErrors.Count > 0)
+            {
+                return ServiceResult<RoundResponse>.Fail(400, string.Join("; ", scheduleErrors));
+            }
+
+            var duplicateRoundNumber = await _db.Rounds.AnyAsync(r =>
+                r.TournamentId == request.TournamentId && r.RoundNumber == request.RoundNumber);
+            if (duplicateRoundNumber)
+            {
+                return ServiceResult<RoundResponse>.Fail(400,
+                    $"RoundNumber {request.RoundNumber} đã tồn tại trong giải đấu này.");
+            }
+
             var round = new Round
             {
                 Id = Guid.NewGuid(),
@@ -921,6 +1202,43 @@ public class RoundService : IRoundService
                 return ServiceResult<RoundResponse>.Fail(404, "Không tìm thấy vòng đấu");
             }
 
+            if (round.Tournament != null && round.Tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<RoundResponse>.Fail(400,
+                    "Không thể chỉnh sửa Vòng đấu vì giải đấu không còn ở trạng thái Bản nháp.");
+            }
+
+            if (request.RoundNumber.HasValue)
+            {
+                if (request.RoundNumber.Value < 1)
+                {
+                    return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
+                }
+
+                var duplicateRoundNumber = await _db.Rounds.AnyAsync(r =>
+                    r.TournamentId == round.TournamentId && r.RoundNumber == request.RoundNumber.Value && r.Id != round.Id);
+                if (duplicateRoundNumber)
+                {
+                    return ServiceResult<RoundResponse>.Fail(400,
+                        $"RoundNumber {request.RoundNumber.Value} đã tồn tại trong giải đấu này.");
+                }
+            }
+
+            if (request.ScheduledStartDate.HasValue || request.ScheduledEndDate.HasValue)
+            {
+                var candidateStart = request.ScheduledStartDate ?? round.ScheduledStartDate;
+                var candidateEnd = request.ScheduledEndDate ?? round.ScheduledEndDate;
+                var tournamentForSchedule = round.Tournament ?? await _tournamentRepo.GetByIdAsync(round.TournamentId);
+                if (tournamentForSchedule != null)
+                {
+                    var scheduleErrors = ValidateRoundScheduleWithinTournament(tournamentForSchedule, candidateStart, candidateEnd);
+                    if (scheduleErrors.Count > 0)
+                    {
+                        return ServiceResult<RoundResponse>.Fail(400, string.Join("; ", scheduleErrors));
+                    }
+                }
+            }
+
             if (!string.IsNullOrEmpty(request.Name))
                 round.Name = request.Name;
             if (request.RoundNumber.HasValue)
@@ -957,6 +1275,12 @@ public class RoundService : IRoundService
             if (round == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy vòng đấu");
 
+            if (round.Tournament != null && round.Tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<bool>.Fail(400,
+                    "Không thể xóa Vòng đấu vì giải đấu không còn ở trạng thái Bản nháp.");
+            }
+
             await using var transaction = await _db.Database.BeginTransactionAsync();
             var raceIds = await _db.Races
                 .Where(r => r.RoundId == id)
@@ -976,6 +1300,29 @@ public class RoundService : IRoundService
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi xóa vòng đấu: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Phase5B fix: reject an obviously-out-of-window Round at Create/Update time instead of
+    /// waiting for Publish. Same containment rules as the Publish-time schedule check in
+    /// TournamentService.ValidateStructuralReadinessAsync (inclusive Tournament boundaries,
+    /// strict internal Round duration) — kept separate since this runs against RoundService's
+    /// own Tournament reference rather than a pre-loaded Round list.
+    /// </summary>
+    private static List<string> ValidateRoundScheduleWithinTournament(Tournament tournament, DateTime start, DateTime end)
+    {
+        var errors = new List<string>();
+
+        if (tournament.StartDate > start)
+            errors.Add("Thời gian bắt đầu Vòng đấu không được trước ngày bắt đầu giải đấu.");
+
+        if (start >= end)
+            errors.Add("Thời gian bắt đầu Vòng đấu phải trước thời gian kết thúc.");
+
+        if (end > tournament.EndDate)
+            errors.Add("Thời gian kết thúc Vòng đấu không được sau ngày kết thúc giải đấu.");
+
+        return errors;
     }
 
     private async Task<RoundResponse> MapToResponseAsync(Round round)
