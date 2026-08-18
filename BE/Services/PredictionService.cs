@@ -128,6 +128,39 @@ public class PredictionService : IPredictionService
         });
     }
 
+    /// <summary>
+    /// Phase2B: settlement is only valid for a Finished race with an Official
+    /// result — never on Finished alone, since a Finished race may still carry
+    /// a Provisional (or no) result.
+    ///
+    /// Idempotency: the payout loop operates ONLY on the prediction IDs this
+    /// specific invocation claims (captured by GetPendingWinnerIdsAsync
+    /// before any mutation), never on a fresh "all Won predictions for this
+    /// race" read. This matters specifically for the retry-after-partial-
+    /// failure case: if winner A was already paid by an earlier invocation
+    /// and winner B's payout failed and was reverted to Pending, a retry's
+    /// bulk update legitimately transitions B (and only B) from Pending to
+    /// Won — but a query of "all Won for this race" at that point would
+    /// still include A, and a payout loop driven by that query would re-pay
+    /// A a second time. Scoping to the pre-captured claimed-ID set makes
+    /// that impossible: A is never in the retry's claimed set because it was
+    /// no longer Pending when the retry captured its IDs.
+    ///
+    /// Partial-failure recovery: a winner whose wallet payout throws is
+    /// reverted from Won back to Pending via PredictionRepository.
+    /// RevertWonToPendingAsync — a direct single-row bulk update, not a
+    /// tracked-entity mutation, so the revert cannot be silently lost to a
+    /// stale already-tracked entity in the DbContext's identity map — so it
+    /// is picked up correctly by a later retry's claimed-ID capture instead
+    /// of being silently stranded as "Won" with no payout ever recorded.
+    /// The payout exception is deliberately caught here rather than left to
+    /// propagate: AdminService.ApproveRaceResultAsync's TransactionScope
+    /// must still commit the Provisional-&gt;Official transition and the
+    /// other winners' successful payouts even if one spectator's wallet
+    /// operation fails — see RaceLifecycleTests.
+    /// Settlement_PartialPayoutFailure_DoesNotStrandOrDoublePay for the
+    /// failure-injection proof that this is race-scoped and safe to retry.
+    /// </summary>
     public async Task<ServiceResult<object>> SettlePredictionAsync(Guid raceId, Guid winningHorseId)
     {
         var race = await _races.GetByIdWithEntriesAsync(raceId);
@@ -141,15 +174,36 @@ public class PredictionService : IPredictionService
             return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Cuộc đua chưa kết thúc");
         }
 
-        // Atomically mark losers first — only Pending predictions NOT for the winning horse
-        await _predictions.ExecuteUpdateLosersAsync(raceId, winningHorseId);
+        if (race.Result == null || race.Result.Status != RaceResultStatus.Official)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Kết quả cuộc đua chưa chính thức (Official).");
+        }
+
+        // Capture exactly which winning predictions THIS invocation is
+        // claiming, before any mutation — see the idempotency note above.
+        var claimedWinnerIds = await _predictions.GetPendingWinnerIdsAsync(raceId, winningHorseId);
+
+        // Atomically mark losers — only Pending predictions NOT for the winning horse
+        var losersAffected = await _predictions.ExecuteUpdateLosersAsync(raceId, winningHorseId);
 
         // Atomically mark winners — sets PayoutAmount = PotentialPayout (or BetAmount * 2 as default)
-        // and transitions status from Pending to Won
-        await _predictions.ExecuteUpdateWinnersAsync(raceId, winningHorseId);
+        // and transitions status from Pending to Won. Affects exactly the
+        // rows captured above (nothing else could have gone Pending->Won for
+        // this race/horse in between, since only this code path does that).
+        var winnersAffected = await _predictions.ExecuteUpdateWinnersAsync(raceId, winningHorseId);
 
-        // Now load winners to pay them
-        var winners = await _predictions.GetWinnersByRaceAsync(raceId);
+        if (losersAffected == 0 && winnersAffected == 0)
+        {
+            // Nothing was Pending — either there were never any predictions, or
+            // settlement already ran for this race. Either way, there is
+            // nothing new to pay.
+            return ServiceResult<object>.Ok(new { raceId, winningHorseId, settled = 0, alreadySettled = true });
+        }
+
+        // Pay exactly the claimed set — never a fresh "all Won" read.
+        var winners = claimedWinnerIds.Count > 0
+            ? await _predictions.GetByIdsAsync(claimedWinnerIds)
+            : new List<Prediction>();
         var failed = new List<Guid>();
 
         foreach (var w in winners)
@@ -164,10 +218,9 @@ public class PredictionService : IPredictionService
             catch (Exception ex)
             {
                 failed.Add(w.Id);
-                // Revert winner status back to Pending so it can be retried
-                w.Status = PredictionStatus.Pending;
-                w.PayoutAmount = null;
-                w.SettledAt = null;
+                // Revert winner status back to Pending so it can be retried —
+                // a direct bulk update, independent of change-tracker state.
+                await _predictions.RevertWonToPendingAsync(w.Id);
                 Console.WriteLine($"Failed to pay winner {w.Id}: {ex.Message}");
                 continue;
             }
@@ -193,7 +246,8 @@ public class PredictionService : IPredictionService
         {
             raceId,
             winningHorseId,
-            settled = winners.Count
+            settled = winners.Count - failed.Count,
+            failed = failed.Count
         });
     }
 

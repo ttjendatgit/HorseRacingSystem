@@ -161,6 +161,16 @@ public class AdminController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    // Retry settlement for predictions left Pending by a prior payout
+    // failure. Winner is derived from the Official RaceResult, never from
+    // the request body.
+    [HttpPost("races/{raceId:guid}/settle-predictions")]
+    public async Task<ActionResult> SettlePredictions(Guid raceId)
+    {
+        var result = await _adminService.SettlePredictionsAsync(raceId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
     [HttpGet("predictions")]
     public async Task<ActionResult> GetPredictions()
     {

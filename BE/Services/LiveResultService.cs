@@ -122,6 +122,7 @@ public class LiveResultService : ILiveResultService
                 RaceId = raceId,
                 RaceName = race.Name,
                 RaceDate = race.ScheduledAt,
+                ResultStatus = result?.Status.ToString(),
                 Rankings = rankings
             };
 
@@ -161,6 +162,12 @@ public class LiveResultService : ILiveResultService
         }
     }
 
+    /// <summary>
+    /// Handles both first submission and resubmission of a Provisional result.
+    /// Phase2B: gated purely on RaceStatus == Finished (event-progress) and
+    /// RaceResultStatus (result-lifecycle). Never mutates Race.Status. Cannot
+    /// be used to edit an Official result.
+    /// </summary>
     public async Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, RaceResultRequest request)
     {
         try
@@ -178,46 +185,44 @@ public class LiveResultService : ILiveResultService
                 return ServiceResult<bool>.Error("Ngựa thắng không có trong danh sách tham gia cuộc đua này", 400);
             }
 
-            if (race.Status != RaceStatus.AwaitingResult && race.Status != RaceStatus.ResultPendingApproval && race.Status != RaceStatus.InProgress)
+            if (race.Status != RaceStatus.Finished)
             {
-                return ServiceResult<bool>.Error($"Không thể cập nhật kết quả cho cuộc đua với trạng thái '{race.Status}'.", 400);
+                return ServiceResult<bool>.Error($"Không thể nộp kết quả cho cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải đã kết thúc.", 400);
             }
 
             var existingResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
 
             if (existingResult != null)
             {
+                if (existingResult.Status == RaceResultStatus.Official)
+                {
+                    return ServiceResult<bool>.Error("Kết quả đã chính thức (Official) và không thể nộp lại qua đường thông thường.", 400);
+                }
+
+                // Resubmission: remains Provisional, clears rejection metadata.
                 existingResult.WinningHorseId = request.WinningHorseId;
                 existingResult.Notes = request.Notes;
                 existingResult.RecordedAt = DateTime.UtcNow;
-                existingResult.ApprovalStatus = ApprovalStatus.Pending;
-                existingResult.IsOfficial = false;
+                existingResult.Status = RaceResultStatus.Provisional;
                 existingResult.RejectedReason = null;
                 await _raceResultRepo.UpdateAsync(existingResult);
-                race.Status = RaceStatus.ResultPendingApproval;
-                if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
-                race.UpdatedAt = DateTime.UtcNow;
-                await _raceRepo.UpdateAsync(race);
                 await _unitOfWork.SaveChangesAsync();
                 return ServiceResult<bool>.Success(true);
             }
 
-            // Create new result
+            // First submission
             var result = new RaceResult
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
                 WinningHorseId = request.WinningHorseId,
                 RecordedAt = DateTime.UtcNow,
-                ApprovalStatus = ApprovalStatus.Pending,
+                Status = RaceResultStatus.Provisional,
+                RejectedReason = null,
                 Notes = request.Notes
             };
 
             await _raceResultRepo.AddAsync(result);
-            race.Status = RaceStatus.ResultPendingApproval;
-            if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
-            race.UpdatedAt = DateTime.UtcNow;
-            await _raceRepo.UpdateAsync(race);
             await _unitOfWork.SaveChangesAsync();
 
             return ServiceResult<bool>.Success(true);

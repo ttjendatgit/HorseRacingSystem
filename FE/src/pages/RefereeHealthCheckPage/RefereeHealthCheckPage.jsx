@@ -7,7 +7,7 @@ import {
   rejectHorseForRace,
 } from "../../services/refereeApi";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
-import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap";
+import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
 import "./RefereeHealthCheckPage.css";
 
 const STATUS_MAP = {
@@ -509,8 +509,8 @@ function RefereeHealthCheckPage() {
                         <span className="rh-item__time">
                           {check.createdAt
                             ? new Date(check.createdAt).toLocaleString(
-                                "vi-VN"
-                              )
+                              "vi-VN"
+                            )
                             : ""}
                         </span>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { request } from "../services/apiClient";
-import { Input } from "./ui/Primitives";
+import { getTournamentRounds } from "../services/adminApi";
+import { Input, Select } from "./ui/Primitives";
 
 function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamentEndDate, raceData, onClose, onSuccess }) {
   const isEdit = !!raceData;
@@ -11,6 +12,9 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
   const [referees, setReferees] = useState([]);
   const [showTrackForm, setShowTrackForm] = useState(false);
   const [newTrackName, setNewTrackName] = useState("");
+  const [tournamentRounds, setTournamentRounds] = useState([]);
+  const [roundsLoading, setRoundsLoading] = useState(false);
+  const [roundsError, setRoundsError] = useState("");
 
   const fmtDate = (v) => v ? new Date(v).toISOString().slice(0, 10) : "";
   const startLabel = fmtDate(tournamentStartDate);
@@ -19,6 +23,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
   const [form, setForm] = useState({
     tournamentId: tournamentId || "",
+    roundId: raceData?.roundId || raceData?.RoundId || "",
     trackId: raceData?.trackId || "",
     name: raceData?.name || raceData?.Name || "",
     distance: raceData?.distance || raceData?.Distance || 1200,
@@ -50,10 +55,30 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
     } catch { /* empty */ }
   };
 
+  const loadRounds = async () => {
+    if (!tournamentId) { setTournamentRounds([]); return; }
+    setRoundsLoading(true);
+    setRoundsError("");
+    try {
+      const list = await getTournamentRounds(tournamentId);
+      setTournamentRounds(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setRoundsError(err.message || "Không thể tải danh sách vòng đấu.");
+      setTournamentRounds([]);
+    } finally {
+      setRoundsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadTracks();
     loadReferees();
   }, []);
+
+  useEffect(() => {
+    loadRounds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournamentId]);
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -92,6 +117,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
     e.preventDefault();
     if (submittingRef.current) return;
     if (!form.name.trim()) { setError("Vui lòng nhập tên cuộc đua."); return; }
+    if (!isEdit && !form.roundId) { setError("Vui lòng chọn vòng đấu (Round) trước khi tạo cuộc đua."); return; }
     if (!form.scheduledAt) { setError("Vui lòng chọn thời gian bắt đầu."); return; }
     submittingRef.current = true;
     setSubmitting(true);
@@ -100,6 +126,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
     try {
       const racePayload = {
         tournamentId: form.tournamentId,
+        roundId: form.roundId || null,
         trackId: form.trackId || null,
         name: form.name,
         distance: Number(form.distance),
@@ -155,6 +182,45 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
         {error && <div style={{padding:12,borderRadius:8,background:"rgba(201,105,90,0.16)",border:"1px solid rgba(201,105,90,0.35)",color:"var(--hr-danger)",fontSize:14,marginBottom:16}}>{error}</div>}
 
         <form onSubmit={handleSubmit}>
+          {/* Round (structured hierarchy — required) */}
+          {!isEdit && (
+            <div style={{marginBottom:16}}>
+              <Select
+                label="Vòng đấu (Round) *"
+                value={form.roundId}
+                onChange={(e) => updateForm("roundId", e.target.value)}
+                disabled={roundsLoading || !!roundsError || tournamentRounds.length === 0}
+                required
+                options={
+                  roundsLoading
+                    ? [{ value: "", label: "Đang tải danh sách vòng đấu..." }]
+                    : tournamentRounds.length === 0
+                    ? [{ value: "", label: "-- Chưa có vòng đấu --" }]
+                    : [
+                        { value: "", label: "-- Chọn vòng đấu --" },
+                        ...tournamentRounds.map((r) => ({
+                          value: r.id ?? r.Id,
+                          label: `Vòng ${r.roundNumber ?? r.RoundNumber} — ${r.name ?? r.Name}`,
+                        })),
+                      ]
+                }
+                error={roundsError || undefined}
+                hint={
+                  !roundsError && !roundsLoading && tournamentRounds.length === 0
+                    ? "Giải đấu này chưa có vòng đấu nào. Vui lòng tạo vòng đấu (Round) trước khi tạo cuộc đua."
+                    : !roundsError && !roundsLoading
+                    ? "Chọn vòng đấu mà cuộc đua này thuộc về."
+                    : undefined
+                }
+              />
+              {roundsError && (
+                <button type="button" onClick={loadRounds} style={{background:"none",border:"none",color:"var(--hr-gold-soft)",cursor:"pointer",fontSize:12,fontWeight:600,padding:0,marginTop:-8}}>
+                  Thử lại
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Track */}
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Đường đua</label>
@@ -176,9 +242,10 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
           <Input label="Tên cuộc đua" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="Ví dụ: Chung kết 1200m" required />
 
-          {/* Rounds inline */}
+          {/* Legacy display-only labels — cosmetic tags shown on the race detail page, NOT the structural Round above */}
           <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Vòng đua ({rounds.length})</label>
+            <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:2,color:"var(--hr-text)"}}>Nhãn hiển thị ({rounds.length})</label>
+            <p style={{margin:"0 0 6px",fontSize:12,color:"var(--hr-muted)"}}>Chỉ để hiển thị (không phải Vòng đấu chính thức ở trên).</p>
             {rounds.map((round, idx) => (
               <div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:8,marginBottom:8}}>
                 <input className="hr-field" value={round.name} onChange={(e) => updateRound(idx, "name", e.target.value)} placeholder="VD: Vòng loại, Bán kết..." style={{padding:"10px 12px",borderRadius:8,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:13}} />
@@ -216,7 +283,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
           <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:24,paddingTop:16,borderTop:"1px solid var(--hr-border-soft)"}}>
             <button type="button" onClick={onClose} style={{padding:"10px 20px",borderRadius:8,border:"1px solid var(--hr-border)",background:"transparent",cursor:"pointer",fontSize:14,color:"var(--hr-text)",fontWeight:600}}>Hủy</button>
-            <button type="submit" disabled={submitting} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"var(--hr-crimson)",color:"var(--hr-paper)",cursor:submitting?"not-allowed":"pointer",opacity:submitting?0.6:1,fontSize:14,fontWeight:600}}>{submitting ? "Đang xử lý..." : isEdit ? "Lưu" : "Tạo"}</button>
+            <button type="submit" disabled={submitting || (!isEdit && (roundsLoading || tournamentRounds.length === 0 || !form.roundId))} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"var(--hr-crimson)",color:"var(--hr-paper)",cursor:(submitting || (!isEdit && (roundsLoading || tournamentRounds.length === 0 || !form.roundId)))?"not-allowed":"pointer",opacity:(submitting || (!isEdit && (roundsLoading || tournamentRounds.length === 0 || !form.roundId)))?0.6:1,fontSize:14,fontWeight:600}}>{submitting ? "Đang xử lý..." : isEdit ? "Lưu" : "Tạo"}</button>
           </div>
         </form>
       </div>

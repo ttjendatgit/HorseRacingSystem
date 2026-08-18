@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Transactions;
 using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -23,8 +22,6 @@ public class RaceManagementService : IRaceManagementService
     private readonly IRoundRepository _roundRepo;
     private readonly IPredictionRepository _predictionRepo;
     private readonly IRefereeAssignmentRepository _assignmentRepo;
-    private readonly IRaceResultRepository _raceResultRepo;
-    private readonly IPredictionService _predictionService;
     private readonly IWalletService _walletService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<RaceManagementService> _logger;
@@ -40,8 +37,6 @@ public class RaceManagementService : IRaceManagementService
         IRoundRepository roundRepo,
         IPredictionRepository predictionRepo,
         IRefereeAssignmentRepository assignmentRepo,
-        IRaceResultRepository raceResultRepo,
-        IPredictionService predictionService,
         IWalletService walletService,
         IUnitOfWork unitOfWork,
         ILogger<RaceManagementService> logger,
@@ -56,8 +51,6 @@ public class RaceManagementService : IRaceManagementService
         _roundRepo = roundRepo;
         _predictionRepo = predictionRepo;
         _assignmentRepo = assignmentRepo;
-        _raceResultRepo = raceResultRepo;
-        _predictionService = predictionService;
         _walletService = walletService;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -75,12 +68,28 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<RaceDetailResponse>.Error("Không tìm thấy giải đấu", 404);
             }
 
+            if (!request.RoundId.HasValue || request.RoundId.Value == Guid.Empty)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Vòng đấu (Round) là bắt buộc để tạo cuộc đua.", 400);
+            }
+
+            var round = await _roundRepo.GetByIdAsync(request.RoundId.Value);
+            if (round == null)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Không tìm thấy vòng đấu.", 404);
+            }
+
+            if (round.TournamentId != request.TournamentId)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Vòng đấu không thuộc giải đấu đã chọn.", 400);
+            }
+
             var race = new Race
             {
                 Id = Guid.NewGuid(),
                 Name = request.Name,
-                TournamentId = request.TournamentId,
-                RoundId = request.RoundId,
+                TournamentId = round.TournamentId,
+                RoundId = round.Id,
                 ScheduledAt = request.ScheduledAt,
                 ScheduledEndAt = request.ScheduledEndAt,
                 TrackId = request.TrackId,
@@ -90,6 +99,7 @@ public class RaceManagementService : IRaceManagementService
                 MaxParticipants = request.MaxParticipants,
                 Distance = request.Distance,
                 RoundNames = request.RoundNames,
+                QualificationSlots = request.QualificationSlots,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -151,6 +161,8 @@ public class RaceManagementService : IRaceManagementService
                 race.ScheduledEndAt = request.ScheduledEndAt.Value;
             if (request.TrackId.HasValue)
                 race.TrackId = request.TrackId;
+            if (request.QualificationSlots.HasValue)
+                race.QualificationSlots = request.QualificationSlots.Value;
 
             race.UpdatedAt = DateTime.UtcNow;
             await _raceRepo.UpdateAsync(race);
@@ -580,6 +592,14 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
+    /// <summary>
+    /// Transitions InProgress -> Finished. Phase2B: this is an event-progress-only
+    /// action — it marks that the physical race has concluded. It no longer
+    /// requires, reads, or creates a RaceResult, and no longer settles
+    /// predictions (settlement now happens when a result becomes Official —
+    /// see AdminService.ApproveRaceResultAsync). Method name kept as
+    /// EndRaceAsync / endpoint kept as POST .../end for API compatibility.
+    /// </summary>
     public async Task<ServiceResult<bool>> EndRaceAsync(Guid raceId)
     {
         try
@@ -590,43 +610,18 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
-            if (race.Status != RaceStatus.ResultApproved)
+            if (race.Status != RaceStatus.InProgress)
             {
-                return ServiceResult<bool>.Fail(400, $"Không thể kết thúc cuộc đua với trạng thái '{race.Status}'. Chỉ được kết thúc sau khi duyệt kết quả của trọng tài.");
+                return ServiceResult<bool>.Fail(400, $"Không thể kết thúc cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải đang diễn ra.");
             }
 
-            var entries = await _entryRepo.GetByRaceAsync(raceId);
-            if (entries.Count == 0)
-            {
-                return ServiceResult<bool>.Fail(400, "Không thể kết thúc cuộc đua khi chưa có ngựa tham gia.");
-            }
+            race.Status = RaceStatus.Finished;
+            if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
+            race.UpdatedAt = DateTime.UtcNow;
 
-            var raceResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
-            if (raceResult == null || raceResult.ApprovalStatus != ApprovalStatus.Approved)
-            {
-                return ServiceResult<bool>.Fail(400, "Kết quả cuộc đua chưa được duyệt.");
-            }
-
-            // Wrap in transaction: if settlement fails, race + result roll back
-            using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
-            try
-            {
-                race.Status = RaceStatus.Finished;
-                if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
-                race.UpdatedAt = DateTime.UtcNow;
-
-                await _raceRepo.UpdateAsync(race);
-                await _unitOfWork.SaveChangesAsync();
-
-                await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
-
-                scope.Complete();
-                return ServiceResult<bool>.Ok(true);
-            }
-            catch (Exception ex)
-            {
-                return ServiceResult<bool>.Fail(500, "Lỗi thanh toán dự đoán. Vui lòng thử lại.");
-            }
+            await _raceRepo.UpdateAsync(race);
+            await _unitOfWork.SaveChangesAsync();
+            return ServiceResult<bool>.Ok(true);
         }
         catch (Exception ex)
         {
@@ -644,7 +639,14 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
-            if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.InProgress && race.Status != RaceStatus.AwaitingResult && race.Status != RaceStatus.ResultPendingApproval)
+            // Finished is terminal under the locked V1.1 lifecycle regardless of
+            // result status (Provisional or Official) — the event already
+            // happened. Only pre-Finished races can be cancelled. This preserves
+            // the pre-Phase2B intent (Scheduled/InProgress were always
+            // cancellable) while dropping AwaitingResult/ResultPendingApproval,
+            // which no longer exist as distinct RaceStatus values — both are
+            // now Finished, which is non-cancellable.
+            if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.InProgress)
             {
                 return ServiceResult<bool>.Fail(400, $"Không thể hủy cuộc đua với trạng thái '{race.Status}'.");
             }
@@ -707,30 +709,7 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
-    private RaceDetailResponse MapToDetailResponse(Race race)
-    {
-        return new RaceDetailResponse
-        {
-            Id = race.Id,
-            Name = race.Name,
-            TournamentId = race.TournamentId,
-            RoundId = race.RoundId,
-            ScheduledAt = race.ScheduledAt,
-            ActualStartTime = race.ActualStartTime,
-            ActualEndTime = race.ActualEndTime,
-            Status = race.Status.ToString(),
-            Location = race.Location,
-            Description = race.Description,
-            MaxParticipants = race.MaxParticipants,
-            Distance = race.Distance,
-            EntriesCount = race.Entries?.Count ?? 0,
-            ActiveRefereesCount = race.RefereeAssignments?.Count(a => a.Status != RefereeAssignmentStatus.Cancelled) ?? 0,
-            RoundNames = race.RoundNames,
-            ScheduledEndAt = race.ScheduledEndAt,
-            TrackId = race.TrackId,
-            TrackName = race.Track?.Name
-        };
-    }
+    private RaceDetailResponse MapToDetailResponse(Race race) => RaceDetailResponseMapper.ToDetailResponse(race);
 
     private async Task RecalculateOddsAsync(Guid raceId)
     {

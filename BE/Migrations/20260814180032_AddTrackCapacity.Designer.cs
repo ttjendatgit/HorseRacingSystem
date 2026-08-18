@@ -3,6 +3,7 @@ using System;
 using HorseRacing.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HorseRacing.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260814180032_AddTrackCapacity")]
+    partial class AddTrackCapacity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -922,7 +925,7 @@ namespace HorseRacing.Migrations
                     b.Property<int?>("QualificationSlots")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("RoundId")
+                    b.Property<Guid?>("RoundId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("RoundNames")
@@ -1117,10 +1120,6 @@ namespace HorseRacing.Migrations
                     b.Property<string>("RejectedReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<int>("TotalParticipants")
                         .HasColumnType("integer");
@@ -2025,8 +2024,7 @@ namespace HorseRacing.Migrations
                     b.HasOne("HorseRacing.Models.Round", "Round")
                         .WithMany("Races")
                         .HasForeignKey("RoundId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("HorseRacing.Models.Tournament", "Tournament")
                         .WithMany("Races")

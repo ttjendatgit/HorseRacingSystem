@@ -935,6 +935,9 @@ function ScheduleManagement({ type }) {
   const [busyHorseIdsAll, setBusyHorseIdsAll] = useState(new Set());
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
+  const [tournamentRounds, setTournamentRounds] = useState([]);
+  const [roundsLoading, setRoundsLoading] = useState(false);
+  const [roundsError, setRoundsError] = useState("");
 
   const refreshBusyHorses = async () => {
     try {
@@ -973,16 +976,21 @@ function ScheduleManagement({ type }) {
   }, [assignment.raceId]);
 
   const VIOLATION_LABELS = { 1: "Hành vi nguy hiểm", 2: "Xuất phát sai", 3: "Can thiệp", 4: "Phúc lợi động vật", 5: "Vi phạm thiết bị", 6: "Khác" };
+  // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
+  // RegistrationClosed are transitional compatibility values (see BE Enums.cs).
   const raceStatusLabel = {
     scheduled: "Sắp diễn ra",
     registrationopen: "Mở đăng ký",
     registrationclosed: "Đóng đăng ký",
     inprogress: "Đang đua",
-    awaitingresult: "Chờ kết quả",
-    resultpendingapproval: "Chờ duyệt",
-    resultapproved: "Đã duyệt KQ",
     finished: "Đã kết thúc",
     cancelled: "Đã hủy",
+  };
+
+  // Result status (RaceResultStatus) — separate concern from race progress.
+  const resultStatusLabel = {
+    provisional: "Tạm thời (chờ duyệt)",
+    official: "Chính thức",
   };
 
   const [form, setForm] = useState(type === "round"
@@ -1028,6 +1036,23 @@ function ScheduleManagement({ type }) {
     const fetcher = type === "round" ? getTournamentRounds : getTournamentRaces;
     fetcher(selected).then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   }, [selected, type]);
+
+  const loadRounds = async () => {
+    if (type !== "race" || !selected) { setTournamentRounds([]); return; }
+    setRoundsLoading(true);
+    setRoundsError("");
+    try {
+      const data = await getTournamentRounds(selected);
+      setTournamentRounds(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setRoundsError(err.message || "Không thể tải danh sách vòng đấu.");
+      setTournamentRounds([]);
+    } finally {
+      setRoundsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadRounds(); }, [selected, type]);
 
   const selectedHorse = approvedHorses.find(
     (horse) => (horse.id ?? horse.Id) === assignment.horseId,
@@ -1084,6 +1109,10 @@ function ScheduleManagement({ type }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (type === "race" && !form.roundId) {
+      setMessage("Vui lòng chọn vòng đấu (Round) trước khi tạo cuộc đua.");
+      return;
+    }
     try {
       if (type === "round") {
         await createRound(selected, { ...form, scheduledStartDate: new Date(form.scheduledStartDate).toISOString(), scheduledEndDate: new Date(form.scheduledEndDate).toISOString() });
@@ -1126,10 +1155,10 @@ function ScheduleManagement({ type }) {
   const handleRaceAction = async (raceId, action) => {
     const labels = { start: "bắt đầu", end: "kết thúc", cancel: "hủy", approve: "duyệt kết quả", reject: "từ chối kết quả" };
     if (action === "approve") {
-      if (!window.confirm("Duyệt kết quả này? Sau khi duyệt, bạn có thể kết thúc cuộc đua để thanh toán dự đoán.")) return;
+      if (!window.confirm("Duyệt kết quả này thành chính thức (Official)? Dự đoán sẽ được thanh toán ngay sau khi duyệt.")) return;
       try {
         await approveRaceResult(raceId);
-        setMessage("Kết quả đã được duyệt. Kết thúc cuộc đua để thanh toán dự đoán.");
+        setMessage("Kết quả đã chính thức (Official). Dự đoán đã được thanh toán.");
         setItems(await getTournamentRaces(selected));
         refreshBusyHorses();
       } catch (err) { setMessage(err.message); }
@@ -1140,14 +1169,14 @@ function ScheduleManagement({ type }) {
       if (!reason) return;
       try {
         await rejectRaceResult(raceId, reason);
-        setMessage("Kết quả đã bị từ chối. Trọng tài cần nộp lại.");
+        setMessage("Kết quả tạm thời đã bị từ chối. Trọng tài cần nộp lại.");
         setItems(await getTournamentRaces(selected));
         refreshBusyHorses();
       } catch (err) { setMessage(err.message); }
       return;
     }
     if (action === "end") {
-      if (!window.confirm("Kết thúc cuộc đua? Kết quả sẽ được công bố cho khán giả và dự đoán sẽ được thanh toán theo tỉ lệ cược.")) return;
+      if (!window.confirm("Kết thúc cuộc đua? Thao tác này chỉ đánh dấu cuộc đua đã diễn ra xong — trọng tài sẽ nộp kết quả sau đó.")) return;
     } else if (!window.confirm(`${labels[action].charAt(0).toUpperCase() + labels[action].slice(1)} cuộc đua này?`)) return;
     try {
       if (action === "start") await startRace(raceId);
@@ -1181,7 +1210,7 @@ function ScheduleManagement({ type }) {
           }}
         />
       )}
-      <div className="admin-select-row"><label>Giải đấu<select className="admin-select" value={selected} onChange={(e) => setSelected(e.target.value)}>{tournaments.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}</select></label></div>
+      <div className="admin-select-row"><label>Giải đấu<select className="admin-select" value={selected} onChange={(e) => { setSelected(e.target.value); if (type === "race") setForm((prev) => ({ ...prev, roundId: "" })); }}>{tournaments.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}</select></label></div>
       <form className="admin-form" onSubmit={submit}>
         <input placeholder={`Tên ${type === "round" ? "vòng đấu" : "cuộc đua"}`} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         {type === "round" ? <>
@@ -1189,6 +1218,36 @@ function ScheduleManagement({ type }) {
           <input type="datetime-local" value={form.scheduledStartDate} onChange={(e) => setForm({ ...form, scheduledStartDate: e.target.value })} min={inputDate(0)} />
           <input type="datetime-local" value={form.scheduledEndDate} onChange={(e) => setForm({ ...form, scheduledEndDate: e.target.value })} min={inputDate(0)} />
         </> : <>
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Vòng đấu (Round)
+            <select
+              className="admin-select"
+              required
+              value={form.roundId}
+              disabled={roundsLoading || tournamentRounds.length === 0}
+              onChange={(e) => setForm({ ...form, roundId: e.target.value })}
+            >
+              <option value="">
+                {roundsLoading ? "Đang tải..." : tournamentRounds.length === 0 ? "-- Chưa có vòng đấu --" : "-- Chọn vòng đấu --"}
+              </option>
+              {tournamentRounds.map((r) => (
+                <option key={r.id ?? r.Id} value={r.id ?? r.Id}>
+                  Vòng {r.roundNumber ?? r.RoundNumber} — {r.name ?? r.Name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {roundsError && (
+            <p style={{ fontSize: 12, color: "var(--hr-danger)", margin: "0 0 8px" }}>
+              {roundsError}{" "}
+              <button type="button" onClick={loadRounds} style={{ background: "none", border: "none", color: "var(--hr-gold-soft)", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0 }}>Thử lại</button>
+            </p>
+          )}
+          {!roundsLoading && !roundsError && selected && tournamentRounds.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--hr-warning)", margin: "0 0 8px" }}>
+              Giải đấu này chưa có vòng đấu (Round) nào. Vui lòng tạo vòng đấu trước khi tạo cuộc đua.
+            </p>
+          )}
           <input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} min={inputDate(0)} />
           <input placeholder="Địa điểm" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
           <input type="number" min="1" placeholder="Số người tham gia tối đa" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} />
@@ -1202,7 +1261,7 @@ function ScheduleManagement({ type }) {
           </label>
           {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8 }} />}
         </>}
-        <button className="primary-button" disabled={!selected}>Tạo {type === "round" ? "vòng đấu" : "cuộc đua"}</button>
+        <button className="primary-button" disabled={!selected || (type === "race" && (roundsLoading || tournamentRounds.length === 0 || !form.roundId))}>Tạo {type === "round" ? "vòng đấu" : "cuộc đua"}</button>
       </form>
       {type === "race" && <form className="admin-form" onSubmit={assignHorse}>
         <select className="admin-select" required value={assignment.raceId} onChange={(e) => setAssignment({ ...assignment, raceId: e.target.value })}>
@@ -1247,6 +1306,7 @@ function ScheduleManagement({ type }) {
       <section className="admin-card-grid">{items.map((item) => {
         const itemId = item.id ?? item.Id;
         const itemStatus = (item.status ?? item.Status ?? "").toLowerCase();
+        const itemResultStatus = (item.resultStatus ?? item.ResultStatus ?? "").toLowerCase();
         return <article key={itemId} className="admin-simple-card" style={{cursor:"pointer"}} onClick={async () => {
           if (type !== "race") return;
           if (expandedRaceId === itemId) { setExpandedRaceId(null); return; }
@@ -1269,6 +1329,11 @@ function ScheduleManagement({ type }) {
           } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
         }}>
           <span className="badge">{raceStatusLabel[itemStatus] ?? item.status ?? item.Status ?? `#${item.roundNumber ?? item.RoundNumber ?? ""}`}</span>
+          {itemResultStatus && (
+            <span className="badge" style={{marginLeft:4,background:itemResultStatus==="official"?"rgba(112,139,104,0.16)":"rgba(185,138,69,0.16)",color:itemResultStatus==="official"?"var(--hr-success)":"var(--hr-warning)"}}>
+              {resultStatusLabel[itemResultStatus] ?? itemResultStatus}
+            </span>
+          )}
           <h3>{item.name ?? item.Name}</h3>
           <p>{formatDate(item.scheduledAt ?? item.ScheduledAt ?? item.scheduledStartDate ?? item.ScheduledStartDate)}</p>
           <small>{type === "round" ? `${item.raceCount ?? item.RaceCount ?? 0} cuộc đua` : `${item.entriesCount ?? item.EntriesCount ?? 0} ngựa đã phân công`}</small>
@@ -1278,7 +1343,7 @@ function ScheduleManagement({ type }) {
             const canStart = confirmedReferees >= 1;
             return (
               <div className="admin-actions admin-race-actions">
-                {itemStatus !== "inprogress" && itemStatus !== "finished" && itemStatus !== "awaitingresult" && itemStatus !== "resultpendingapproval" && itemStatus !== "resultapproved" && itemStatus !== "cancelled" && (
+                {itemStatus !== "inprogress" && itemStatus !== "finished" && itemStatus !== "cancelled" && (
                   <>
                     <button onClick={() => handleRaceAction(itemId, "start")} disabled={!canStart} title={canStart ? "" : "Chờ trọng tài chấp nhận lời mời"}>
                       Bắt đầu
@@ -1293,17 +1358,14 @@ function ScheduleManagement({ type }) {
                   </>
                 )}
                 {itemStatus === "inprogress" && (
-                  <span style={{ fontSize: 12, color: "var(--hr-warning)", alignSelf: "center" }}>Đang đua - chờ trọng tài nộp kết quả và báo cáo.</span>
-                )}
-                {itemStatus === "awaitingresult" && (
-                  <span style={{ fontSize: 12, color: "var(--hr-warning)", alignSelf: "center" }}>Chờ trọng tài nộp lại kết quả.</span>
-                )}
-                {itemStatus === "resultapproved" && (
                   <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "end")}>
-                    Kết thúc
+                    Kết thúc cuộc đua
                   </button>
                 )}
-                {itemStatus === "resultpendingapproval" && (
+                {itemStatus === "finished" && !itemResultStatus && (
+                  <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>Đã kết thúc — chờ trọng tài nộp kết quả.</span>
+                )}
+                {itemStatus === "finished" && itemResultStatus === "provisional" && (
                   <>
                     <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "approve")}>
                       Duyệt KQ
@@ -1313,7 +1375,13 @@ function ScheduleManagement({ type }) {
                     </button>
                   </>
                 )}
-                {itemStatus !== "finished" && itemStatus !== "cancelled" && (
+                {itemStatus === "finished" && itemResultStatus === "official" && (
+                  <span style={{ fontSize: 12, color: "var(--hr-success)", fontWeight: 600, alignSelf: "center" }}>✓ Chính thức</span>
+                )}
+                {/* Backend cancellation gate (RaceManagementService.CancelRaceAsync) only
+                    allows Scheduled or InProgress — RegistrationOpen/RegistrationClosed/
+                    Finished/Cancelled must not show this action. */}
+                {(itemStatus === "scheduled" || itemStatus === "inprogress") && (
                   <button className="admin-danger" onClick={() => handleRaceAction(itemId, "cancel")}>
                     Hủy
                   </button>
@@ -1370,16 +1438,21 @@ function ScheduleManagement({ type }) {
                   ))}
                 </div>
               )}
-              {(itemStatus === "resultpendingapproval" || itemStatus === "resultapproved") && raceResult && (() => {
+              {itemStatus === "finished" && raceResult && (() => {
+                const resultStatusVal = (raceResult.resultStatus ?? raceResult.ResultStatus ?? "").toLowerCase();
+                const isOfficial = resultStatusVal === "official";
                 const winnerHorseId = raceResult.winningHorseId ?? raceResult.WinningHorseId;
                 const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
                 return (
-                  <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)"}}>
-                    <h4 style={{fontSize:14,margin:"0 0 6px",color:"var(--hr-success)"}}>Kết quả trọng tài nộp</h4>
+                  <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`}}>
+                    <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>
+                      {isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}
+                    </h4>
                     <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
-                      🏆 <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
+                      {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
                       {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
                       {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
+                      {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <span style={{display:"block",fontSize:12,color:"var(--hr-danger)",marginTop:4}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</span> : null}
                     </p>
                   </div>
                 );

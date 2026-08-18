@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using HorseRacing.Data;
+using HorseRacing.Dtos;
 using HorseRacing.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,19 @@ public class TracksController : ControllerBase
     public async Task<ActionResult> GetAll()
     {
         var tracks = await _db.Tracks.OrderBy(t => t.Name).ToListAsync();
-        return Ok(new { success = true, data = tracks.Select(t => new { t.Id, t.Name, t.Description, t.Length, t.CreatedAt }) });
+        return Ok(new
+        {
+            success = true,
+            data = tracks.Select(t => new TrackResponse
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Description = t.Description,
+                Length = t.Length,
+                Capacity = t.Capacity,
+                CreatedAt = t.CreatedAt
+            })
+        });
     }
 
     [HttpPost]
@@ -41,19 +54,25 @@ public class TracksController : ControllerBase
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
             Length = request.Length,
+            Capacity = request.Capacity,
             CreatedAt = DateTime.UtcNow
         };
 
         _db.Tracks.Add(track);
         await _db.SaveChangesAsync();
 
-        return Ok(new { success = true, data = new { track.Id, track.Name, track.Description, track.Length, track.CreatedAt } });
+        return Ok(new
+        {
+            success = true,
+            data = new TrackResponse
+            {
+                Id = track.Id,
+                Name = track.Name,
+                Description = track.Description,
+                Length = track.Length,
+                Capacity = track.Capacity,
+                CreatedAt = track.CreatedAt
+            }
+        });
     }
-}
-
-public class CreateTrackRequest
-{
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public int? Length { get; set; }
 }

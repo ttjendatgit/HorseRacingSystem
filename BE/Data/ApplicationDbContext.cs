@@ -170,6 +170,10 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(rr => rr.WinningHorseId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<RaceResult>()
+            .Property(rr => rr.Status)
+            .HasConversion<string>();
+
         // BE2 Model Configurations
         modelBuilder.Entity<Round>()
             .HasMany(r => r.Races)

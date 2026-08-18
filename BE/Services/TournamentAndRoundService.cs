@@ -55,6 +55,16 @@ public class TournamentService : ITournamentService
     {
         try
         {
+            HorseRacing.Models.SurfaceType? surfaceType = null;
+            if (!string.IsNullOrWhiteSpace(request.SurfaceType))
+            {
+                if (!Enum.TryParse<HorseRacing.Models.SurfaceType>(request.SurfaceType, ignoreCase: true, out var parsedSurfaceType))
+                {
+                    return ServiceResult<TournamentResponse>.Fail(400, $"SurfaceType không hợp lệ: '{request.SurfaceType}'. Giá trị hợp lệ: Dirt, Turf, Synthetic, Sand.");
+                }
+                surfaceType = parsedSurfaceType;
+            }
+
             var tournament = new Tournament
             {
                 Id = Guid.NewGuid(),
@@ -66,7 +76,15 @@ public class TournamentService : ITournamentService
                 ImageUrl = request.ImageUrl,
                 Status = TournamentStatus.Draft,
                 IsActive = false, // Will be true when Published
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                PrizePool = request.PrizePool,
+                Venue = request.Venue,
+                Country = request.Country,
+                Category = request.Category,
+                SurfaceType = surfaceType,
+                MinParticipants = request.MinParticipants,
+                MaxParticipants = request.MaxParticipants,
+                MaxRounds = request.MaxRounds
             };
 
             await _tournamentRepo.AddAsync(tournament);
@@ -183,6 +201,17 @@ public class TournamentService : ITournamentService
                     $"Không thể chỉnh sửa giải đấu ở trạng thái {tournament.Status}. Chỉ có thể chỉnh sửa khi ở trạng thái Bản nháp hoặc Đã công bố.");
             }
 
+            // Validate before mutating anything, so an invalid SurfaceType never leaves a partial update in memory.
+            HorseRacing.Models.SurfaceType? parsedSurfaceType = tournament.SurfaceType;
+            if (!string.IsNullOrWhiteSpace(request.SurfaceType))
+            {
+                if (!Enum.TryParse<HorseRacing.Models.SurfaceType>(request.SurfaceType, ignoreCase: true, out var newSurfaceType))
+                {
+                    return ServiceResult<TournamentResponse>.Fail(400, $"SurfaceType không hợp lệ: '{request.SurfaceType}'. Giá trị hợp lệ: Dirt, Turf, Synthetic, Sand.");
+                }
+                parsedSurfaceType = newSurfaceType;
+            }
+
             if (!string.IsNullOrEmpty(request.Name))
                 tournament.Name = request.Name;
             if (request.Description != null)
@@ -197,6 +226,23 @@ public class TournamentService : ITournamentService
                 tournament.IsActive = request.IsActive.Value;
             if (request.ImageUrl != null)
                 tournament.ImageUrl = request.ImageUrl;
+
+            // Phase3B additions — null/omitted leaves the existing value untouched (see UpdateTournamentRequest).
+            if (request.PrizePool.HasValue)
+                tournament.PrizePool = request.PrizePool.Value;
+            if (request.Venue != null)
+                tournament.Venue = request.Venue;
+            if (request.Country != null)
+                tournament.Country = request.Country;
+            if (request.Category != null)
+                tournament.Category = request.Category;
+            tournament.SurfaceType = parsedSurfaceType;
+            if (request.MinParticipants.HasValue)
+                tournament.MinParticipants = request.MinParticipants.Value;
+            if (request.MaxParticipants.HasValue)
+                tournament.MaxParticipants = request.MaxParticipants.Value;
+            if (request.MaxRounds.HasValue)
+                tournament.MaxRounds = request.MaxRounds.Value;
 
             tournament.UpdatedAt = DateTime.UtcNow;
 
@@ -511,6 +557,16 @@ public class TournamentService : ITournamentService
             StartedAt = tournament.StartedAt,
             FinishedAt = tournament.FinishedAt,
             CancelledAt = tournament.CancelledAt,
+            PrizePool = tournament.PrizePool,
+            Venue = tournament.Venue,
+            Country = tournament.Country,
+            Category = tournament.Category,
+            SurfaceType = tournament.SurfaceType?.ToString(),
+            MinParticipants = tournament.MinParticipants,
+            MaxParticipants = tournament.MaxParticipants,
+            MaxRounds = tournament.MaxRounds,
+            CancelledBy = tournament.CancelledBy,
+            CancellationReason = tournament.CancellationReason,
             Stats = stats,
             NextTransitions = nextTransitions
         };
@@ -537,7 +593,17 @@ public class TournamentService : ITournamentService
             PublishedAt = tournament.PublishedAt,
             StartedAt = tournament.StartedAt,
             FinishedAt = tournament.FinishedAt,
-            CancelledAt = tournament.CancelledAt
+            CancelledAt = tournament.CancelledAt,
+            PrizePool = tournament.PrizePool,
+            Venue = tournament.Venue,
+            Country = tournament.Country,
+            Category = tournament.Category,
+            SurfaceType = tournament.SurfaceType?.ToString(),
+            MinParticipants = tournament.MinParticipants,
+            MaxParticipants = tournament.MaxParticipants,
+            MaxRounds = tournament.MaxRounds,
+            CancelledBy = tournament.CancelledBy,
+            CancellationReason = tournament.CancellationReason
         };
     }
 }
@@ -575,13 +641,14 @@ public class RoundService : IRoundService
                 RoundNumber = request.RoundNumber,
                 ScheduledStartDate = request.ScheduledStartDate,
                 ScheduledEndDate = request.ScheduledEndDate,
-                Description = request.Description
+                Description = request.Description,
+                AdvanceCount = request.AdvanceCount
             };
 
             await _roundRepo.AddAsync(round);
             await _unitOfWork.SaveChangesAsync();
 
-            return new ServiceResult<RoundResponse>(201, ApiResult<RoundResponse>.Ok(MapToResponse(round)));
+            return new ServiceResult<RoundResponse>(201, ApiResult<RoundResponse>.Ok(await MapToResponseAsync(round)));
         }
         catch (Exception ex)
         {
@@ -599,7 +666,7 @@ public class RoundService : IRoundService
                 return ServiceResult<RoundResponse>.Fail(404, "Không tìm thấy vòng đấu");
             }
 
-            return ServiceResult<RoundResponse>.Ok(MapToResponse(round));
+            return ServiceResult<RoundResponse>.Ok(await MapToResponseAsync(round));
         }
         catch (Exception ex)
         {
@@ -612,8 +679,14 @@ public class RoundService : IRoundService
         try
         {
             var rounds = await _roundRepo.GetByTournamentAsync(tournamentId);
-            return ServiceResult<IEnumerable<RoundResponse>>.Ok(
-                rounds.Select(MapToResponse));
+            // Sequential awaits: DbContext is not thread-safe for concurrent async operations,
+            // so a parallel Task.WhenAll over MapToResponseAsync (which queries _db) is not safe here.
+            var responses = new List<RoundResponse>();
+            foreach (var r in rounds)
+            {
+                responses.Add(await MapToResponseAsync(r));
+            }
+            return ServiceResult<IEnumerable<RoundResponse>>.Ok(responses);
         }
         catch (Exception ex)
         {
@@ -646,11 +719,13 @@ public class RoundService : IRoundService
                 round.ActualEndDate = request.ActualEndDate.Value;
             if (request.Description != null)
                 round.Description = request.Description;
+            if (request.AdvanceCount.HasValue)
+                round.AdvanceCount = request.AdvanceCount.Value;
 
             await _roundRepo.UpdateAsync(round);
             await _unitOfWork.SaveChangesAsync();
 
-            return ServiceResult<RoundResponse>.Ok(MapToResponse(round));
+            return ServiceResult<RoundResponse>.Ok(await MapToResponseAsync(round));
         }
         catch (Exception ex)
         {
@@ -687,7 +762,7 @@ public class RoundService : IRoundService
         }
     }
 
-    private RoundResponse MapToResponse(Round round)
+    private async Task<RoundResponse> MapToResponseAsync(Round round)
     {
         return new RoundResponse
         {
@@ -700,7 +775,49 @@ public class RoundService : IRoundService
             ActualStartDate = round.ActualStartDate,
             ActualEndDate = round.ActualEndDate,
             Description = round.Description,
-            RaceCount = round.Races?.Count ?? 0
+            RaceCount = round.Races?.Count ?? 0,
+            AdvanceCount = round.AdvanceCount,
+            PlannedParticipants = await ComputePlannedParticipantsAsync(round),
+            ActualParticipants = await ComputeActualParticipantsAsync(round.Id)
         };
+    }
+
+    /// <summary>
+    /// Round 1: Tournament.MaxParticipants (null passes through). Round N&gt;1: the AdvanceCount of the
+    /// single Round with RoundNumber == N-1 in the same Tournament. Zero or more-than-one such
+    /// predecessor returns null rather than guessing — Round sequence uniqueness is not enforced
+    /// until Phase5, so duplicates are a real possibility today.
+    /// </summary>
+    private async Task<int?> ComputePlannedParticipantsAsync(Round round)
+    {
+        if (round.RoundNumber == 1)
+        {
+            return await _db.Tournaments
+                .Where(t => t.Id == round.TournamentId)
+                .Select(t => t.MaxParticipants)
+                .FirstOrDefaultAsync();
+        }
+
+        var predecessorAdvanceCounts = await _db.Rounds
+            .Where(r => r.TournamentId == round.TournamentId && r.RoundNumber == round.RoundNumber - 1)
+            .Select(r => r.AdvanceCount)
+            .ToListAsync();
+
+        return predecessorAdvanceCounts.Count == 1 ? predecessorAdvanceCounts[0] : null;
+    }
+
+    /// <summary>
+    /// COUNT(DISTINCT RaceEntry.HorseId) across RaceEntries whose Race.RoundId == roundId. No
+    /// RegistrationStatus filter — matches the existing participant-counting behavior elsewhere
+    /// (RaceEntryRepository.GetByRaceAsync, used by the MaxParticipants capacity gate, applies none
+    /// either). DISTINCT is required because the one-Horse-per-Round DB constraint doesn't exist yet.
+    /// </summary>
+    private Task<int> ComputeActualParticipantsAsync(Guid roundId)
+    {
+        return _db.RaceEntries
+            .Where(e => e.Race!.RoundId == roundId)
+            .Select(e => e.HorseId)
+            .Distinct()
+            .CountAsync();
     }
 }
