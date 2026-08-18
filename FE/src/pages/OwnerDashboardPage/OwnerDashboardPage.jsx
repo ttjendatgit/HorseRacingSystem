@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerProfile, getOwnerTournaments, getOwnerEntries, getOwnerPerformance } from "../../services/ownerApi";
+import { isJockeyRole } from "../../services/authRoleUtils";
 import "./OwnerDashboardPage.css";
 
 function OwnerDashboardPage() {
+  // Task B Final Correction §5: Create Horse / Register Tournament quick actions are Owner-only.
+  const canManageHorses = !isJockeyRole();
   const navigate = useNavigate();
   const [owner, setOwner] = useState(null);
   const [tournaments, setTournaments] = useState([]);
@@ -44,16 +47,18 @@ function OwnerDashboardPage() {
             <h1>Chào mừng trở lại, {ownerName}</h1>
             <p className="od-topbar-sub">{upcomingEntries.length} cuộc đua sắp diễn ra · {pendingCount} chờ xác nhận</p>
           </div>
-          <div className="od-topbar-actions">
-            <button className="od-btn od-btn--primary" onClick={() => navigate("/owner/horses/new")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-              Thêm ngựa
-            </button>
-            <button className="od-btn od-btn--outline" onClick={() => navigate("/owner/register-tournament")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-              Đăng ký giải
-            </button>
-          </div>
+          {canManageHorses && (
+            <div className="od-topbar-actions">
+              <button className="od-btn od-btn--primary" onClick={() => navigate("/owner/horses/new")}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                Thêm ngựa
+              </button>
+              <button className="od-btn od-btn--outline" onClick={() => navigate("/owner/register-tournament")}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                Đăng ký giải
+              </button>
+            </div>
+          )}
         </header>
 
         {profileError && <div className="od-error">{profileError}</div>}

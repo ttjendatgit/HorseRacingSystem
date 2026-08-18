@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerTournaments } from "../../services/ownerApi";
+import { canRegisterTournament } from "../../utils/tournamentRegistration";
+import { isJockeyRole } from "../../services/authRoleUtils";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentListPage.css";
 
@@ -13,13 +15,13 @@ const formatDate = (value) => {
     : new Intl.DateTimeFormat("vi-VN", { month: "short", day: "numeric", year: "numeric" }).format(date);
 };
 
-const getTournamentStatus = (tournament) => {
-  if (!(tournament?.isActive ?? tournament?.IsActive)) return "Đã đóng";
-  const start = new Date(tournament?.startDate ?? tournament?.StartDate);
-  const end = new Date(tournament?.endDate ?? tournament?.EndDate);
-  const now = new Date();
-  return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && now >= start && now <= end
-    ? "Đang diễn ra" : "Mở";
+// Task B Final §3: badge label derived from the same canRegisterTournament rule used by the
+// registration button/page — Ongoing keeps its own informational label, everything else that
+// isn't currently registerable reads "Đã đóng" (never RaceStatus- or IsActive-derived).
+const getTournamentStatusLabel = (tournament) => {
+  const rawStatus = tournament?.statusName ?? tournament?.StatusName;
+  if (rawStatus === "Ongoing") return "Đang diễn ra";
+  return canRegisterTournament(tournament) ? "Mở" : "Đã đóng";
 };
 
 const mapTournament = (tournament) => ({
@@ -29,7 +31,8 @@ const mapTournament = (tournament) => ({
   startDate: tournament?.startDate ?? tournament?.StartDate,
   endDate: tournament?.endDate ?? tournament?.EndDate,
   dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
-  status: getTournamentStatus(tournament),
+  status: getTournamentStatusLabel(tournament),
+  canRegister: canRegisterTournament(tournament),
   raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
   roundCount: tournament?.roundCount ?? tournament?.RoundCount ?? 0,
   prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
@@ -38,6 +41,9 @@ const mapTournament = (tournament) => ({
 });
 
 function OwnerTournamentListPage() {
+  // Task B Final Correction §5: Register-to-Tournament is Owner-only — hidden for Jockey (UX
+  // only; backend [Authorize(Roles="HorseOwner")] on POST /api/tournament-registrations is authoritative).
+  const canRegisterAsOwner = !isJockeyRole();
   const navigate = useNavigate();
   const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,7 +169,9 @@ function OwnerTournamentListPage() {
                     </div>
                     <div className="otl-card__actions">
                       <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(t)}>Chi tiết</button>
-                      <button className="otl-btn otl-btn--primary" onClick={() => navigate("/owner/register-tournament")}>Đăng ký</button>
+                      {t.canRegister && canRegisterAsOwner && (
+                        <button className="otl-btn otl-btn--primary" onClick={() => navigate(`/owner/register-tournament?tournamentId=${t.id}`)}>Đăng ký</button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -214,7 +222,9 @@ function OwnerTournamentListPage() {
             </div>
             <div className="otl-modal__actions">
               <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(null)}>Đóng</button>
-              <button className="otl-btn otl-btn--primary" onClick={() => { setActiveTournament(null); navigate("/owner/register-tournament"); }}>Đăng ký ngay</button>
+              {activeTournament.canRegister && canRegisterAsOwner && (
+                <button className="otl-btn otl-btn--primary" onClick={() => { const id = activeTournament.id; setActiveTournament(null); navigate(`/owner/register-tournament?tournamentId=${id}`); }}>Đăng ký ngay</button>
+              )}
             </div>
           </div>
         </div>

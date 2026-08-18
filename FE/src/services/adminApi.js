@@ -150,6 +150,16 @@ export const rejectRaceEntry = (entryId, reason) =>
 export const getPendingTournamentRegistrations = async () =>
   unwrap(await request("/api/tournament-registrations/pending"));
 
+export const getTournamentRegistrationSummary = async (tournamentId) =>
+  unwrap(await request(`/api/tournament-registrations/tournament/${tournamentId}/summary`));
+
+// Task B Correction 2 §5: Horses with an Approved TournamentHorseRegistration for this
+// Tournament — the correct source for the Race-assignment "Chọn ngựa đã được phê duyệt"
+// dropdown. Pending/Rejected/Withdrawn registrations, and Horses with no registration at all
+// for this Tournament, never appear here.
+export const getTournamentApprovedHorses = async (tournamentId) =>
+  unwrap(await request(`/api/tournament-registrations/tournament/${tournamentId}/approved-horses`));
+
 export const approveTournamentRegistration = (id) =>
   request(`/api/tournament-registrations/${id}/approve`, { method: "POST" });
 

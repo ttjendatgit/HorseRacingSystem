@@ -14,6 +14,7 @@ import {
   getAdminTournaments,
   getOwnerHorse,
   getOwnerHorses,
+  getTournamentApprovedHorses,
   getTournamentRaces,
   getTournamentRounds,
   approveRaceResult,
@@ -1053,29 +1054,22 @@ function ScheduleManagement({ type }) {
   }, []);
   useEffect(() => {
     if (type !== "race") return;
+    if (!selected) { setApprovedHorses([]); return; }
 
+    // Task B Correction 2 §5: this dropdown ("Chọn ngựa đã được phê duyệt") must reflect
+    // Tournament-registration approval (TournamentHorseRegistration.Status == Approved for the
+    // SELECTED Tournament), not the global Horse.ApprovalStatus pool across every Owner. A Horse
+    // with no registration, or a Pending/Rejected/Withdrawn one, must never be assignable here.
     const loadAssignmentOptions = async () => {
       try {
-        const users = await getAdminUsers();
-        const owners = (Array.isArray(users) ? users : []).filter(
-          (user) => canOwnHorses(user.role ?? user.Role),
-        );
-        const horseGroups = await Promise.all(
-          owners.map((owner) => getOwnerHorses(owner.id ?? owner.Id)),
-        );
-        const horses = horseGroups
-          .flat()
-          .filter(
-            (horse) =>
-              (horse.approvalStatus ?? horse.ApprovalStatus) === "Approved",
-          );
+        const horses = await getTournamentApprovedHorses(selected);
         const jockeys = (await getAvailableJockeys()).filter(
           (jockey) =>
             jockey.approvalStatus === 2 ||
             jockey.approvalStatusName === "Approved",
         );
 
-        setApprovedHorses(horses);
+        setApprovedHorses(Array.isArray(horses) ? horses : []);
         setApprovedJockeys(jockeys);
       } catch (err) {
         setMessage(err.message);
@@ -1083,7 +1077,7 @@ function ScheduleManagement({ type }) {
     };
 
     loadAssignmentOptions();
-  }, [type]);
+  }, [type, selected]);
   useEffect(() => {
     if (!selected) return;
     const fetcher = type === "round" ? getTournamentRounds : getTournamentRaces;

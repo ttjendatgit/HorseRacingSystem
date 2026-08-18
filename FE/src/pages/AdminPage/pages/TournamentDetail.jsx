@@ -2,7 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { request } from "../../../services/apiClient";
 import RaceForm from "../../../components/RaceForm";
-import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
+import {
+  getTournamentRegistrationSummary,
+  getPendingTournamentRegistrations,
+  approveTournamentRegistration,
+  rejectTournamentRegistration,
+} from "../../../services/adminApi";
+import { apiToVNDate, apiToVNDisplay, apiToUtcDate } from "../../../utils/vnDateTime";
 
 // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
 // RegistrationClosed are transitional compatibility values (see BE Enums.cs).
@@ -53,19 +59,64 @@ function OddsEditor({ raceId, horseId, odds, setMessage }) {
 
 export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces }) {
   const tId = t.id??t.Id;
-  const isDraft = (t.statusName??t.StatusName) === "Draft";
+  const status = t.statusName??t.StatusName;
+  const isDraft = status === "Draft";
   const navigate = useNavigate();
   const [races, setRaces] = useState([]);
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [editRaceData, setEditRaceData] = useState(null);
   const [expandedRaceId, setExpandedRaceId] = useState(null);
   const [raceDetailData, setRaceDetailData] = useState({});
+  const [regSummary, setRegSummary] = useState({ approvedCount: 0, pendingCount: 0 });
+  const [pendingRegs, setPendingRegs] = useState([]);
 
   const viewTournament = async () => {
     try{const d=await getTournamentRaces(tId);setRaces(Array.isArray(d)?d:[]);}catch{setRaces([]);}
   };
 
+  // Task B Correction 2 §3: minimum Admin Tournament-registration review — reuses the existing
+  // Tournament registration APIs (summary + all-pending, filtered to this Tournament), never the
+  // RaceEntry approval endpoints.
+  const refreshRegistrations = async () => {
+    try {
+      const [summary, allPending] = await Promise.all([
+        getTournamentRegistrationSummary(tId),
+        getPendingTournamentRegistrations(),
+      ]);
+      setRegSummary(summary || { approvedCount: 0, pendingCount: 0 });
+      const list = Array.isArray(allPending) ? allPending : [];
+      setPendingRegs(list.filter((r) => String(r.tournamentId ?? r.TournamentId) === String(tId)));
+    } catch { /* non-critical */ }
+  };
+
   useEffect(() => { viewTournament(); }, [tId]);
+  useEffect(() => { refreshRegistrations(); }, [tId]);
+
+  const handleApproveRegistration = async (id) => {
+    try {
+      await approveTournamentRegistration(id);
+      setMessage("Đã duyệt đăng ký ngựa vào giải.");
+      refreshRegistrations();
+    } catch (err) { setMessage(err.message); }
+  };
+
+  const handleRejectRegistration = async (id) => {
+    const reason = window.prompt("Lý do từ chối (không bắt buộc):");
+    if (reason === null) return;
+    try {
+      await rejectTournamentRegistration(id, reason);
+      setMessage("Đã từ chối đăng ký.");
+      refreshRegistrations();
+    } catch (err) { setMessage(err.message); }
+  };
+
+  // Task B §8: Tournament-derived registration state — Published + before RegistrationDeadline
+  // (VN time via apiToUtcDate, never RaceStatus-derived).
+  const regDeadlineRaw = t.registrationDeadline ?? t.RegistrationDeadline;
+  const registrationState = status === "Published"
+    ? (regDeadlineRaw && apiToUtcDate(regDeadlineRaw) > new Date() ? "Mở đăng ký" : "Đã đóng đăng ký")
+    : null;
+  const maxParticipants = t.maxParticipants ?? t.MaxParticipants ?? "?";
 
   return (
     <><div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại</button></div>
@@ -73,12 +124,40 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div><h2 style={{margin:"0 0 4px",fontSize:24,color:"var(--hr-paper)",fontFamily:"var(--font-display)"}}>{t.name??t.Name}</h2>
           <p style={{margin:0,fontSize:13,color:"var(--hr-muted)"}}>{(t.venue??t.Venue)?"📍 "+(t.venue??t.Venue)+" · ":""}📅 {fmtDateTime2(t.startDate??t.StartDate)} → {fmtDateTime2(t.endDate??t.EndDate)}</p>
-          <p style={{margin:"2px 0 0",fontSize:13,color:"var(--hr-muted)"}}>⏳ Hạn đăng ký ngựa: {fmtDateTime2(t.registrationDeadline??t.RegistrationDeadline) || "Chưa thiết lập"}</p></div>
+          <p style={{margin:"2px 0 0",fontSize:13,color:"var(--hr-muted)"}}>⏳ Hạn đăng ký: {fmtDateTime2(regDeadlineRaw) || "Chưa thiết lập"}{registrationState ? ` · ${registrationState}` : ""}</p></div>
         <div style={{display:"flex",gap:8}}>
           {isDraft && <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>navigate(`/admin/rounds?tournamentId=${tId}`)}>+ Tạo vòng đấu</button>}
           <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>setShowRaceForm(true)}>+ Tạo cuộc đua</button>
         </div>
       </div>
+    </div>
+    <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+        <h3 style={{margin:0,fontSize:16,color:"var(--hr-paper)"}}>ĐĂNG KÝ NGỰA</h3>
+        <div style={{fontSize:13,color:"var(--hr-muted)"}}>Đã duyệt: <strong style={{color:"var(--hr-paper)"}}>{regSummary.approvedCount}/{maxParticipants}</strong> · Chờ duyệt: <strong style={{color:"var(--hr-gold-soft)"}}>{regSummary.pendingCount}</strong></div>
+      </div>
+      {pendingRegs.length === 0 ? (
+        <p style={{color:"var(--hr-muted)",fontSize:13,margin:0}}>Không có đăng ký nào đang chờ duyệt.</p>
+      ) : (
+        <div style={{display:"grid",gap:8}}>
+          {pendingRegs.map((r) => {
+            const id = r.id ?? r.Id;
+            return (
+              <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,padding:"10px 14px",borderRadius:10,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)"}}>
+                <div>
+                  <strong style={{fontSize:14,color:"var(--hr-paper)"}}>{r.horseName ?? r.HorseName}</strong>
+                  <p style={{margin:"2px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Chủ ngựa: {r.ownerName ?? r.OwnerName ?? "Chưa xác định"} · {r.tournamentName ?? r.TournamentName} · Gửi lúc {fmtDateTime2(r.createdAt ?? r.CreatedAt)}</p>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:999,background:"rgba(185,138,69,0.14)",color:"var(--hr-warning)",fontWeight:700}}>Chờ duyệt</span>
+                  <button style={{padding:"6px 12px",fontSize:12,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"rgba(201,105,90,0.16)",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}} onClick={()=>handleRejectRegistration(id)}>Từ chối</button>
+                  <button style={{padding:"6px 12px",fontSize:12,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={()=>handleApproveRegistration(id)}>Phê duyệt</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
     {showRaceForm && !editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate} tournamentRegistrationDeadline={t.registrationDeadline??t.RegistrationDeadline}
       onClose={()=>setShowRaceForm(false)} onSuccess={()=>{setShowRaceForm(false);setMessage("Cuộc đua đã tạo!");viewTournament();}}/>}

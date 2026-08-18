@@ -217,7 +217,11 @@ public class HorsesController : ControllerBase
         };
     }
 
+    // Task B Final Correction: Horse Create/Update/Delete is Owner-only business territory —
+    // Jockey must not create/manage Horses (full Jockey invitation/license flow is a separate,
+    // later feature). Admin's existing access here is preserved unchanged, not newly granted.
     [HttpPost]
+    [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> CreateHorse(HorseCreateRequest request)
     {
         var ownerId = GetUserId();
@@ -226,6 +230,7 @@ public class HorsesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> UpdateHorse(Guid id, HorseUpdateRequest request)
     {
         var ownerId = GetUserId();
@@ -234,6 +239,7 @@ public class HorsesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> DeleteHorse(Guid id)
     {
         var ownerId = GetUserId();
@@ -257,7 +263,10 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    // Legacy Race-level self-registration (item 4 audit: still reachable, still RaceStatus.RegistrationOpen-gated
+    // for lifecycle compatibility) — Owner-only for the same reason as Create/Update/Delete above.
     [HttpPost("{horseId:guid}/races/{raceId:guid}/registrations")]
+    [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> RegisterHorse(Guid horseId, Guid raceId, RaceRegistrationRequest request)
     {
         var ownerId = GetUserId();

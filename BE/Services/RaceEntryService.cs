@@ -45,6 +45,16 @@ public class RaceEntryService : IRaceEntryService
             return ServiceResult<object>.Fail(400, "Cuộc đua chưa mở đăng ký");
         if (race.Tournament?.RegistrationDeadline is DateTime deadline && DateTime.UtcNow > deadline.ToUniversalTime())
             return ServiceResult<object>.Fail(400, "Đã quá hạn đăng ký của giải đấu");
+
+        // Task B Final: global RaceEntry invariant — Horse must hold an Approved
+        // TournamentHorseRegistration for THIS Race's Tournament, same gate as
+        // RaceManagementService.AssignHorseToRaceAsync/BulkAssignHorsesToRaceAsync. No
+        // registration / Pending / Rejected / Withdrawn / registration for a different
+        // Tournament are all rejected identically here.
+        var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+            x.TournamentId == race.TournamentId && x.HorseId == horseId);
+        if (registration == null || registration.Status != RegistrationStatus.Approved)
+            return ServiceResult<object>.Fail(400, "Ngựa chưa được duyệt đăng ký tham gia giải đấu này.");
         if (race.Entries.Count(e => e.Status != RegistrationStatus.Rejected && e.ScratchedAt == null) >= race.MaxParticipants)
             return ServiceResult<object>.Fail(409, $"Cuộc đua đã đủ số lượng tham gia tối đa ({race.MaxParticipants})");
         if (await _entries.ExistsAsync(raceId, horseId))

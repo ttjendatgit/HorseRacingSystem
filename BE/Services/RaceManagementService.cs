@@ -363,6 +363,16 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, "Ngựa chưa được admin phê duyệt");
             }
 
+            // Task B §6: RaceEntry gate — Horse must hold an Approved TournamentHorseRegistration
+            // for THIS Race's Tournament (no registration / Pending / Rejected / Withdrawn /
+            // registration for a different Tournament are all rejected the same way here).
+            var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+                x.TournamentId == race.TournamentId && x.HorseId == request.HorseId);
+            if (registration == null || registration.Status != RegistrationStatus.Approved)
+            {
+                return ServiceResult<bool>.Fail(400, "Ngựa chưa được duyệt đăng ký tham gia giải đấu này.");
+            }
+
             var alreadyInActiveRace = await _entryRepo.IsHorseInActiveRaceAsync(request.HorseId);
             if (alreadyInActiveRace)
             {
@@ -492,6 +502,16 @@ public class RaceManagementService : IRaceManagementService
                 if (horse.ApprovalStatus != ApprovalStatus.Approved)
                 {
                     errors.Add($"Ngựa \"{horse.Name}\" chưa được phê duyệt");
+                    continue;
+                }
+
+                // Task B §6: same RaceEntry gate as AssignHorseToRaceAsync — Approved
+                // TournamentHorseRegistration for this Race's Tournament, required.
+                var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+                    x.TournamentId == race.TournamentId && x.HorseId == horseId);
+                if (registration == null || registration.Status != RegistrationStatus.Approved)
+                {
+                    errors.Add($"Ngựa \"{horse.Name}\" chưa được duyệt đăng ký tham gia giải đấu này");
                     continue;
                 }
 
