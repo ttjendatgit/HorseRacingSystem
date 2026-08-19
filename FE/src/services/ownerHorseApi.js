@@ -39,11 +39,11 @@ export const inviteJockeyToHorse = async (horseId, payload) =>
     }),
   );
 
-export const removeJockeyFromHorse = async (horseId, raceId, reason) =>
+export const removeJockeyFromHorse = async (horseId, raceId, invitationId, reason) =>
   unwrapResponseData(
     await request(`/api/horses/${horseId}/races/${raceId}/jockeys`, {
       method: "DELETE",
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ invitationId, reason }),
     }),
   );
 

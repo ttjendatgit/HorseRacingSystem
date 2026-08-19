@@ -160,7 +160,7 @@ function JockeyInvitationDetailPage() {
                 <article className="jockey-detail-panel">
                   <div className="section-heading">
                     <h2>Thông Tin Cuộc Đua</h2>
-                    <p>Chi tiết phân công cuộc đua chính thức.</p>
+                    <p>Chi tiết cuộc đua trong lời mời này.</p>
                   </div>
                   <DetailRow label="Cuộc đua" value={invitation.raceName} />
                   <DetailRow label="Giải đấu" value={invitation.tournamentName} />
@@ -204,7 +204,8 @@ function JockeyInvitationDetailPage() {
                 <div>
                   <h2>Phản hồi lời mời</h2>
                   <p className="muted">
-                    Chấp nhận xác nhận bạn là kỵ sĩ cho cuộc đua này.
+                    Chấp nhận nghĩa là bạn đồng ý lời mời và sẵn sàng tham gia cuộc đua này.
+                    Chủ ngựa sẽ chọn kỵ sĩ chính thức sau.
                   </p>
                 </div>
                 {normalizeInvitationStatus(invitation.status) === "Pending" ? (

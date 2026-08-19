@@ -201,7 +201,8 @@ public class HorsesController : ControllerBase
                     Tournament = e.Race.Tournament != null ? new
                     {
                         e.Race.Tournament.Id,
-                        e.Race.Tournament.Name
+                        e.Race.Tournament.Name,
+                        e.Race.Tournament.Status
                     } : null
                 } : null
             }),

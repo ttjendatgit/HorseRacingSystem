@@ -285,19 +285,55 @@ public class HorseService : IHorseService
         }
         var invitationRaceId = request.RaceId;
 
-        var existingInvitation = await _invitations.GetByHorseAndJockeyAsync(horseId, request.JockeyId);
-        // Assuming GetByHorseAndJockeyAsync gets the active one. With new schema, there could be multiple.
-        // Wait, instead of GetByHorseAndJockeyAsync, we should just query by RaceId.
-        var existingInvitationInRace = horse.JockeyInvitations.FirstOrDefault(i => i.RaceId == invitationRaceId);
-        if (existingInvitationInRace != null &&
-            existingInvitationInRace.Status != JockeyInvitationStatus.Declined &&
-            existingInvitationInRace.Status != JockeyInvitationStatus.Withdrawn)
+        // J2: invitation acceptance is not final assignment, so a jockey may hold
+        // multiple Pending/Accepted invitations across different owners/horses/races
+        // even when their schedules overlap. Exclusivity/schedule-conflict enforcement
+        // belongs to Owner Final Confirm (J3), not invite creation.
+        var targetRace = await _db.Races.Include(r => r.Tournament).FirstOrDefaultAsync(r => r.Id == invitationRaceId);
+        if (targetRace == null)
         {
-            var jockeyName = existingInvitationInRace.Jockey?.User?.FullName ?? "kỵ sĩ";
-            var status = existingInvitationInRace.Status.ToString().ToLowerInvariant();
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy cuộc đua để mời kỵ sĩ");
+        }
+
+        // J2 lifecycle guard: StartDate/EndDate/ScheduledAt are planned dates, not authoritative
+        // status — only the actual Tournament/Race Status decides whether inviting is still valid.
+        // Round 1 setup happens while the Tournament is Published; later rounds while Ongoing.
+        var tournamentStatus = targetRace.Tournament?.Status;
+        if (tournamentStatus != TournamentStatus.Published && tournamentStatus != TournamentStatus.Ongoing)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status400BadRequest,
+                "Chỉ có thể mời kỵ sĩ khi giải đấu đang ở trạng thái Đã công bố hoặc Đang diễn ra");
+        }
+
+        // RegistrationOpen/RegistrationClosed are legacy pre-start-compatible statuses.
+        if (targetRace.Status != RaceStatus.Scheduled &&
+            targetRace.Status != RaceStatus.RegistrationOpen &&
+            targetRace.Status != RaceStatus.RegistrationClosed)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status400BadRequest,
+                "Không thể mời kỵ sĩ vì cuộc đua đã bắt đầu, đã kết thúc hoặc đã bị hủy");
+        }
+
+        var raceEntry = await _raceEntries.GetByRaceHorseAsync(invitationRaceId, horseId);
+        if (raceEntry == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Ngựa chưa được đăng ký cho cuộc đua này");
+        }
+
+        // J2: multiple different jockeys may be invited for the same Horse+Race, so this
+        // duplicate check is scoped to the same jockey, not the whole race.
+        var existingInvitationForJockey = horse.JockeyInvitations.FirstOrDefault(i =>
+            i.RaceId == invitationRaceId && i.JockeyId == request.JockeyId);
+        if (existingInvitationForJockey != null &&
+            existingInvitationForJockey.Status != JockeyInvitationStatus.Declined &&
+            existingInvitationForJockey.Status != JockeyInvitationStatus.Withdrawn)
+        {
+            var status = existingInvitationForJockey.Status.ToString().ToLowerInvariant();
             return ServiceResult<object>.Fail(
                 StatusCodes.Status409Conflict,
-                $"Ngựa này đã có kỵ sĩ {jockeyName} với trạng thái {status} cho giải đua này");
+                $"Kỵ sĩ này đã có lời mời với trạng thái {status} cho giải đua này");
         }
 
         // Also we should create a new invitation rather than reusing an old declined one for a different race
@@ -319,48 +355,6 @@ public class HorseService : IHorseService
         {
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kỵ sĩ");
         }
-
-        // --- Schedule Overlap Validation ---
-        var targetRace = await _db.Races.FindAsync(invitationRaceId);
-        if (targetRace == null)
-        {
-            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy cuộc đua để kiểm tra lịch");
-        }
-
-        var targetStart = targetRace.ScheduledAt;
-        var targetEnd = targetRace.ScheduledEndAt ?? targetRace.ScheduledAt.AddHours(1);
-
-        // Accepted invitations are normally converted into RaceEntry records.
-        // Checking invitations alone misses jockeys with an official race entry.
-        var hasOfficialRaceConflict = await _raceEntries.HasJockeyScheduleConflictAsync(
-            request.JockeyId,
-            targetStart,
-            targetEnd);
-
-        if (hasOfficialRaceConflict)
-        {
-            return ServiceResult<object>.Fail(
-                StatusCodes.Status409Conflict,
-                "Kỵ sĩ này đã có cuộc đua trùng thời gian. Vui lòng chọn kỵ sĩ khác.");
-        }
-
-        // Check if jockey is already accepted/pending in another race that overlaps
-        var overlappingInv = await _db.JockeyInvitations
-            .Include(i => i.Race)
-            .Where(i => i.JockeyId == request.JockeyId &&
-                        i.RaceId != invitationRaceId &&
-                        (i.Status == JockeyInvitationStatus.Pending || i.Status == JockeyInvitationStatus.Accepted) &&
-                        i.Race != null &&
-                        i.Race.Status != RaceStatus.Cancelled &&
-                        i.Race.Status != RaceStatus.Finished)
-            .FirstOrDefaultAsync(i => i.Race != null && i.Race.ScheduledAt < targetEnd && (i.Race.ScheduledEndAt ?? i.Race.ScheduledAt.AddHours(1)) > targetStart);
-
-        if (overlappingInv != null)
-        {
-            var raceName = overlappingInv.Race?.Name ?? "Một giải đua khác";
-            return ServiceResult<object>.Fail(StatusCodes.Status409Conflict, $"Kỵ sĩ này đang có lịch đua hoặc lời mời ở giải '{raceName}' diễn ra cùng thời điểm. Vui lòng chọn kỵ sĩ khác.");
-        }
-        // ------------------------------------
 
         var invitation = existingDeclined ?? new JockeyInvitation
         {
@@ -416,6 +410,13 @@ public class HorseService : IHorseService
                 "Vui lòng nhập lý do hủy kỵ sĩ");
         }
 
+        if (request.InvitationId == Guid.Empty)
+        {
+            return ServiceResult<string>.Fail(
+                StatusCodes.Status400BadRequest,
+                "Vui lòng chọn lời mời cần hủy");
+        }
+
         var owner = await GetOwnerProfileAsync(userId);
         if (owner == null)
         {
@@ -428,19 +429,29 @@ public class HorseService : IHorseService
             return ServiceResult<string>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy ngựa");
         }
 
-        var invitation = horse.JockeyInvitations
-            .FirstOrDefault(i => i.RaceId == raceId && (i.Status == JockeyInvitationStatus.Pending || i.Status == JockeyInvitationStatus.Accepted));
+        // J2 follow-up: multiple Pending/Accepted invitations can now exist for the same
+        // Horse+Race (different jockeys), so the invitation must be pinned by Id — never
+        // picked arbitrarily — to avoid cancelling the wrong jockey's invitation.
+        var invitation = horse.JockeyInvitations.FirstOrDefault(i =>
+            i.Id == request.InvitationId &&
+            i.RaceId == raceId &&
+            (i.Status == JockeyInvitationStatus.Pending || i.Status == JockeyInvitationStatus.Accepted));
 
-        if (invitation != null)
+        if (invitation == null)
         {
-            invitation.Status = JockeyInvitationStatus.Declined;
-            invitation.ResponseNote = request.Reason.Trim();
-            invitation.RespondedAt = DateTime.UtcNow;
+            return ServiceResult<string>.Fail(
+                StatusCodes.Status404NotFound,
+                "Không tìm thấy lời mời cần hủy cho ngựa và cuộc đua này");
         }
 
-        // Remove jockey from the specific race entry
+        invitation.Status = JockeyInvitationStatus.Declined;
+        invitation.ResponseNote = request.Reason.Trim();
+        invitation.RespondedAt = DateTime.UtcNow;
+
+        // Only clear the RaceEntry's official jockey if it was actually this invitation's
+        // jockey — never touch a different jockey's official assignment as a side effect.
         var entry = await _db.RaceEntries.FirstOrDefaultAsync(e => e.HorseId == horseId && e.RaceId == raceId);
-        if (entry != null)
+        if (entry != null && entry.JockeyId == invitation.JockeyId)
         {
             entry.JockeyId = null;
             entry.JockeyConfirmed = false;

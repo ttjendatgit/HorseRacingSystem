@@ -14,6 +14,7 @@ public class JockeyService : IJockeyService
     private readonly IJockeyRepository _jockeys;
     private readonly IJockeyInvitationRepository _invitations;
     private readonly IRaceEntryRepository _raceEntries;
+    private readonly IRaceRepository _races;
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notifications;
 
@@ -22,6 +23,7 @@ public class JockeyService : IJockeyService
         IJockeyRepository jockeys,
         IJockeyInvitationRepository invitations,
         IRaceEntryRepository raceEntries,
+        IRaceRepository races,
         IUnitOfWork unitOfWork,
         INotificationService notifications)
     {
@@ -29,6 +31,7 @@ public class JockeyService : IJockeyService
         _jockeys = jockeys;
         _invitations = invitations;
         _raceEntries = raceEntries;
+        _races = races;
         _unitOfWork = unitOfWork;
         _notifications = notifications;
     }
@@ -100,9 +103,10 @@ public class JockeyService : IJockeyService
 
         var invitations = await _invitations.GetByJockeyAsync(jockey.Id);
 
-        // Repair invitations created by older clients without RaceId and keep
-        // accepted invitations reflected on the race participant row.
-        var changedEntries = new List<RaceEntry>();
+        // Repair invitations created by older clients without RaceId.
+        // NOTE (J2): this no longer touches RaceEntry.JockeyId/JockeyConfirmed —
+        // an accepted invitation is not an official assignment, so listing
+        // invitations must not mutate race entries as a side effect.
         var repairedInvitation = false;
         foreach (var invitation in invitations.Where(item => !item.RaceId.HasValue))
         {
@@ -123,18 +127,8 @@ public class JockeyService : IJockeyService
             invitation.RaceId = entry.RaceId;
             invitation.Race = entry.Race;
             repairedInvitation = true;
-            if (invitation.Status == JockeyInvitationStatus.Accepted && entry.JockeyId != jockey.Id)
-            {
-                entry.JockeyId = jockey.Id;
-                entry.JockeyConfirmed = true;
-                changedEntries.Add(entry);
-            }
         }
 
-        if (changedEntries.Count > 0)
-        {
-            await _raceEntries.UpdateRangeAsync(changedEntries);
-        }
         if (repairedInvitation)
         {
             await _unitOfWork.SaveChangesAsync();
@@ -206,32 +200,45 @@ public class JockeyService : IJockeyService
             }
         }
 
-        if (request.Accept && invitation.RaceId.HasValue)
+        if (request.Accept)
         {
+            if (!invitation.RaceId.HasValue)
+            {
+                return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy đăng ký tham gia cho ngựa này");
+            }
+
+            // J2: accepting an invitation only means the jockey is willing to ride —
+            // it is NOT the official assignment. RaceEntry.JockeyId/JockeyConfirmed
+            // stay untouched here; that is set later by Owner Final Confirm (J3).
+            // We still verify a RaceEntry exists for this Horse+Race so a jockey
+            // cannot accept an invitation orphaned from its race context.
             var entry = await _raceEntries.GetByRaceHorseAsync(invitation.RaceId.Value, invitation.HorseId);
             if (entry == null)
             {
                 return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy đăng ký tham gia cho ngựa này");
             }
 
-            if (entry.Race == null)
-            {
-                return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy cuộc đua");
-            }
+            // J2 lifecycle guard: the invitation may have been created while the Tournament/Race
+            // were still open — re-check the CURRENT lifecycle before letting a stale Pending
+            // invitation become Accepted. StartDate/EndDate/ScheduledAt are planned dates only;
+            // the actual Status is authoritative (a delayed Scheduled race is still acceptable).
+            // Reject is intentionally NOT gated here — declining/cleaning up a stale invitation
+            // never mutates RaceEntry in J2 and stays safe regardless of lifecycle state.
+            var currentRace = await _races.GetByIdAsync(invitation.RaceId.Value);
+            var currentTournamentStatus = currentRace?.Tournament?.Status;
+            var raceClosed = currentRace == null ||
+                currentRace.Status == RaceStatus.InProgress ||
+                currentRace.Status == RaceStatus.Finished ||
+                currentRace.Status == RaceStatus.Cancelled;
+            var tournamentClosed = currentTournamentStatus == TournamentStatus.Finished ||
+                currentTournamentStatus == TournamentStatus.Cancelled;
 
-            var hasScheduleConflict = await _raceEntries.HasJockeyScheduleConflictAsync(
-                jockey.Id, entry.Race.ScheduledAt,
-                entry.Race.ScheduledEndAt ?? entry.Race.ScheduledAt.AddMinutes(30), entry.Id);
-            if (hasScheduleConflict)
+            if (raceClosed || tournamentClosed)
             {
                 return ServiceResult<object>.Fail(
                     StatusCodes.Status409Conflict,
-                    "Kỵ sĩ này đã có cuộc đua trùng thời gian");
+                    "Không thể chấp nhận lời mời vì cuộc đua hoặc giải đấu không còn ở trạng thái cho phép");
             }
-
-            entry.JockeyId = jockey.Id;
-            entry.JockeyConfirmed = true;
-            await _raceEntries.UpdateAsync(entry);
         }
 
         invitation.Status = request.Accept ? JockeyInvitationStatus.Accepted : JockeyInvitationStatus.Declined;
@@ -243,7 +250,7 @@ public class JockeyService : IJockeyService
         {
             var responseText = request.Accept ? "đã chấp nhận" : "đã từ chối";
             var nextStep = request.Accept
-                ? "Kỵ sĩ đã được phân công cho ngựa."
+                ? "Kỵ sĩ đã đồng ý lời mời. Bạn cần chọn kỵ sĩ chính thức sau."
                 : "Bạn có thể chọn một kỵ sĩ khác cho ngựa.";
 
             await _notifications.CreateNotificationAsync(new CreateNotificationDto
