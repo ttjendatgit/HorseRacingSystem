@@ -698,7 +698,7 @@ public class RaceLifecycleTests
                 _userRepo, new UserRegistrationRepository(db), _horseRepo, _jockeyRepo,
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
-                RaceResultRepo, EntryRepo, _reportRepo, UnitOfWork);
+                RaceResultRepo, EntryRepo, _reportRepo, new ViolationRecordRepository(db), UnitOfWork);
 
             TournamentRepo = _tournamentRepo;
             RoundRepoPublic = _roundRepo;

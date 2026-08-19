@@ -9,6 +9,19 @@ import "./OwnerHorseListPage.css";
 const approvalStatusMap = { 1: "Chờ duyệt", 2: "Đã duyệt", 3: "Từ chối" };
 const statusClass = { 1: "pending", 2: "approved", 3: "rejected" };
 
+// J2 lifecycle guard follow-up: backend is authoritative (HorseService.InviteJockeyAsync);
+// this only filters the Owner's race picker for UX so it doesn't offer a Race/Tournament the
+// backend would reject anyway. Never derive this from ScheduledAt — only actual Status counts.
+const INVITABLE_TOURNAMENT_STATUSES = new Set([1, 2]); // Published, Ongoing
+const INVITABLE_RACE_STATUSES = new Set([1, 7, 8]); // Scheduled, RegistrationOpen, RegistrationClosed
+
+function isRaceInvitable(race) {
+  const tournament = race?.tournament ?? race?.Tournament;
+  const tournamentStatus = Number(tournament?.status ?? tournament?.Status);
+  const raceStatus = Number(race?.status ?? race?.Status);
+  return INVITABLE_TOURNAMENT_STATUSES.has(tournamentStatus) && INVITABLE_RACE_STATUSES.has(raceStatus);
+}
+
 function OwnerHorseListPage() {
   // Task B Final Correction §5: Owner-only actions (Create/Edit/Delete) hidden for Jockey — UX
   // only, backend [Authorize(Roles="HorseOwner,Admin")] on those endpoints is authoritative.
@@ -30,7 +43,7 @@ function OwnerHorseListPage() {
 
   const [cancelHorse, setCancelHorse] = useState(null);
   const [selectedCancelTournament, setSelectedCancelTournament] = useState("");
-  const [selectedCancelRace, setSelectedCancelRace] = useState("");
+  const [selectedCancelInvitationId, setSelectedCancelInvitationId] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
 
@@ -46,17 +59,23 @@ function OwnerHorseListPage() {
   const openCancel = (horse) => {
     setCancelHorse(horse);
     setSelectedCancelTournament("");
-    setSelectedCancelRace("");
+    setSelectedCancelInvitationId("");
     setCancelReason("");
     setCancelError("");
   };
 
   const submitCancel = async () => {
-    if (!selectedCancelRace) { setCancelError("Vui lòng chọn giải đua."); return; }
+    if (!selectedCancelInvitationId) { setCancelError("Vui lòng chọn kỵ sĩ cần hủy."); return; }
     if (!cancelReason.trim()) { setCancelError("Vui lòng nhập lý do hủy kỵ sĩ."); return; }
+    // J2 follow-up: cancel is keyed by the exact invitation, not just the race, since a race
+    // may now have more than one Pending/Accepted invitation from different jockeys.
+    const invitations = cancelHorse.jockeyInvitations ?? cancelHorse.JockeyInvitations ?? [];
+    const invitation = invitations.find(inv => (inv.id ?? inv.Id) === selectedCancelInvitationId);
+    if (!invitation) { setCancelError("Không tìm thấy lời mời cần hủy."); return; }
+    const raceId = invitation.raceId ?? invitation.RaceId;
     setLoading(true);
     try {
-      await removeJockeyFromHorse(cancelHorse.id ?? cancelHorse.Id, selectedCancelRace, cancelReason.trim());
+      await removeJockeyFromHorse(cancelHorse.id ?? cancelHorse.Id, raceId, selectedCancelInvitationId, cancelReason.trim());
       setCancelHorse(null);
       await loadHorses();
     } catch (e) { setCancelError(e.message || "Không thể thực hiện."); }
@@ -109,7 +128,7 @@ function OwnerHorseListPage() {
               const approvalStatusName = String(j.approvalStatusName ?? j.ApprovalStatusName ?? "").toLowerCase();
               if (approvalStatus !== "2" && approvalStatusName !== "approved") return false;
               const jUserId = String(j.userId ?? j.UserId ?? "").toLowerCase();
-              // Exclude self, but allow selecting jockeys assigned to other horses (backend validates schedule overlap)
+              // Exclude self; a jockey may already have other invitations elsewhere — that's allowed in J2
               if (jUserId === currentUserId) return false;
               return true;
             })
@@ -255,7 +274,7 @@ function OwnerHorseListPage() {
                     )}
                     {/* New JockeyInvitations are backend-rejected for an archived Horse (HorseService.InviteJockeyAsync). */}
                     {!isArchived && (
-                      <button className="oh-btn-icon" onClick={() => openAssign(h)} title="Chỉ định kỵ sĩ">
+                      <button className="oh-btn-icon" onClick={() => openAssign(h)} title="Mời kỵ sĩ">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                       </button>
                     )}
@@ -284,8 +303,8 @@ function OwnerHorseListPage() {
       {assignHorse && (
         <div className="oh-modal" onClick={() => setAssignHorse(null)}>
           <div className="oh-modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Chỉ định kỵ sĩ</h3>
-            <p className="oh-muted" style={{textAlign:"left",padding:0,margin:"0 0 12px"}}>Chọn giải đấu và cuộc đua cho {assignHorse.name ?? assignHorse.Name}</p>
+            <h3>Mời kỵ sĩ</h3>
+            <p className="oh-muted" style={{textAlign:"left",padding:0,margin:"0 0 12px"}}>Chọn giải đấu và cuộc đua cho {assignHorse.name ?? assignHorse.Name}. Bạn có thể mời nhiều kỵ sĩ cho cùng một cuộc đua.</p>
             <select value={selectedTournament} onChange={e => { setSelectedTournament(e.target.value); setSelectedRace(""); }} className="oh-select" style={{marginBottom:"12px"}}>
               <option value="">-- Chọn giải đấu --</option>
               {(() => {
@@ -293,8 +312,10 @@ function OwnerHorseListPage() {
                 (assignHorse.raceEntries ?? assignHorse.RaceEntries ?? []).forEach(entry => {
                   const race = entry.race ?? entry.Race;
                   if (!race) return;
-                  const activeInvs = (assignHorse.jockeyInvitations ?? assignHorse.JockeyInvitations ?? []).filter(inv => inv.raceId === race.id && ((inv.status ?? inv.Status) === 1 || (inv.status ?? inv.Status) === 2 || String(inv.status ?? inv.Status).toLowerCase() === "pending" || String(inv.status ?? inv.Status).toLowerCase() === "accepted"));
-                  if (activeInvs.length > 0) return; // already has jockey
+                  // J2: a race may already have other jockeys Pending/Accepted — the owner can
+                  // still invite additional eligible jockeys for the same Horse+Race.
+                  // Lifecycle guard follow-up: hide races the backend would reject anyway.
+                  if (!isRaceInvitable(race)) return;
                   const t = race.tournament ?? race.Tournament;
                   if (t && !tourns.find(x => x.id === (t.id ?? t.Id))) {
                     tourns.push({ id: t.id ?? t.Id, name: t.name ?? t.Name });
@@ -308,10 +329,7 @@ function OwnerHorseListPage() {
               {selectedTournament && (assignHorse.raceEntries ?? assignHorse.RaceEntries ?? [])
                 .map(entry => entry.race ?? entry.Race)
                 .filter(race => race && (race.tournament?.id ?? race.tournament?.Id ?? race.Tournament?.Id) === selectedTournament)
-                .filter(race => {
-                  const activeInvs = (assignHorse.jockeyInvitations ?? assignHorse.JockeyInvitations ?? []).filter(inv => inv.raceId === race.id && ((inv.status ?? inv.Status) === 1 || (inv.status ?? inv.Status) === 2 || String(inv.status ?? inv.Status).toLowerCase() === "pending" || String(inv.status ?? inv.Status).toLowerCase() === "accepted"));
-                  return activeInvs.length === 0;
-                })
+                .filter(isRaceInvitable)
                 .map(race => (
                   <option key={race.id ?? race.Id} value={race.id ?? race.Id}>{race.name ?? race.Name}</option>
                 ))}
@@ -346,7 +364,7 @@ function OwnerHorseListPage() {
           <div className="oh-modal-card" onClick={e => e.stopPropagation()}>
             <h3>Hủy kỵ sĩ</h3>
             <p className="oh-muted" style={{textAlign:"left",padding:0,margin:"0 0 12px"}}>Chọn giải đấu và cuộc đua để hủy kỵ sĩ của {cancelHorse.name ?? cancelHorse.Name}</p>
-            <select value={selectedCancelTournament} onChange={e => { setSelectedCancelTournament(e.target.value); setSelectedCancelRace(""); }} className="oh-select" style={{marginBottom:"12px"}}>
+            <select value={selectedCancelTournament} onChange={e => { setSelectedCancelTournament(e.target.value); setSelectedCancelInvitationId(""); }} className="oh-select" style={{marginBottom:"12px"}}>
               <option value="">-- Chọn giải đấu --</option>
               {(() => {
                 const tourns = [];
@@ -363,11 +381,14 @@ function OwnerHorseListPage() {
                 return tourns.map(t => <option key={t.id} value={t.id}>{t.name}</option>);
               })()}
             </select>
-            <select value={selectedCancelRace} onChange={e => setSelectedCancelRace(e.target.value)} className="oh-select" disabled={!selectedCancelTournament} style={{marginBottom:"12px"}}>
-              <option value="">-- Chọn cuộc đua --</option>
+            {/* J2 follow-up: keyed by the specific invitation (not race) so a race with multiple
+                Pending/Accepted jockeys cancels exactly the one the owner selected. */}
+            <select value={selectedCancelInvitationId} onChange={e => setSelectedCancelInvitationId(e.target.value)} className="oh-select" disabled={!selectedCancelTournament} style={{marginBottom:"12px"}}>
+              <option value="">-- Chọn kỵ sĩ cần hủy --</option>
               {selectedCancelTournament && (cancelHorse.jockeyInvitations ?? cancelHorse.JockeyInvitations ?? [])
                 .filter(inv => (inv.status ?? inv.Status) === 2 || (inv.status ?? inv.Status) === 1 || String(inv.status ?? inv.Status).toLowerCase() === "accepted" || String(inv.status ?? inv.Status).toLowerCase() === "pending")
                 .map(inv => {
+                  const invitationId = inv.id ?? inv.Id;
                   const raceId = inv.raceId ?? inv.RaceId;
                   const entry = (cancelHorse.raceEntries ?? cancelHorse.RaceEntries ?? []).find(e => (e.raceId ?? e.RaceId) === raceId);
                   if (!entry) return null;
@@ -375,7 +396,7 @@ function OwnerHorseListPage() {
                   if (tId !== selectedCancelTournament) return null;
                   const raceName = entry.race?.name ?? entry.Race?.Name ?? "Giải đua";
                   const jockeyName = inv.jockey?.user?.fullName ?? inv.Jockey?.User?.FullName ?? "kỵ sĩ";
-                  return <option key={raceId} value={raceId}>{raceName} (Kỵ sĩ: {jockeyName})</option>;
+                  return <option key={invitationId} value={invitationId}>{raceName} (Kỵ sĩ: {jockeyName})</option>;
               })}
             </select>
             <textarea

@@ -928,7 +928,7 @@ function TournamentManagement() {
         {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8, marginTop: 4 }} />}
         <button className="primary-button" disabled={uploading}>Lưu giải đấu</button>
       </form>}
-      <section className="admin-card-grid">{items.map((item) => {
+      <section className="admin-card-grid admin-tournament-grid">{items.map((item) => {
         const id = item.id ?? item.Id;
         const lifecycleStatus = (item.statusName ?? item.StatusName ?? item.status ?? item.Status ?? "").toString().toLowerCase();
         const lifecycleClass = lifecycleStatus === "published" || lifecycleStatus === "ongoing" || lifecycleStatus === "1" || lifecycleStatus === "2" ? "status--active" : "status--inactive";
@@ -955,6 +955,7 @@ function TournamentManagement() {
           onBack={() => setSelectedT(null)}
           setMessage={setMessage}
           getTournamentRaces={getTournamentRaces}
+          getTournamentRounds={getTournamentRounds}
         />
       )}
     </>
@@ -974,14 +975,14 @@ function ScheduleManagement({ type }) {
   const [raceEntries, setRaceEntries] = useState([]);
   const [raceReferees, setRaceReferees] = useState([]);
   const [raceViolations, setRaceViolations] = useState([]);
+  const [resolvingViolation, setResolvingViolation] = useState(null);
+  const [penaltyText, setPenaltyText] = useState("");
   const [raceResult, setRaceResult] = useState(null);
   const [raceReport, setRaceReport] = useState(null);
   const [assignedHorseIds, setAssignedHorseIds] = useState(new Set());
   const [busyHorseIdsAll, setBusyHorseIdsAll] = useState(new Set());
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
-  const [resolvingViolation, setResolvingViolation] = useState(null);
-  const [penaltyText, setPenaltyText] = useState("");
 
   const refreshBusyHorses = async () => {
     try {
@@ -1020,7 +1021,8 @@ function ScheduleManagement({ type }) {
   }, [assignment.raceId]);
 
   const VIOLATION_LABELS = { 1: "Hành vi nguy hiểm", 2: "Xuất phát sai", 3: "Can thiệp", 4: "Phúc lợi động vật", 5: "Vi phạm thiết bị", 6: "Khác" };
-  
+  // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
+  // RegistrationClosed are transitional compatibility values (see BE Enums.cs).
   const raceStatusLabel = {
     scheduled: "Sắp diễn ra",
     registrationopen: "Chuẩn bị",
@@ -1030,11 +1032,14 @@ function ScheduleManagement({ type }) {
     cancelled: "Đã hủy",
   };
 
+  // Result status (RaceResultStatus) — separate concern from race progress.
   const resultStatusLabel = {
     provisional: "Tạm thời (chờ duyệt)",
     official: "Chính thức",
   };
 
+  // Race creation lives exclusively in RaceForm.jsx (the single canonical Race payload builder) —
+  // this page only builds Round create/update payloads (same form for both, per Phase5B).
   const defaultRoundForm = { name: "", roundNumber: 1, scheduledStartDate: inputDate(7), scheduledEndDate: inputDate(8), description: "", advanceCount: "" };
   const [form, setForm] = useState(defaultRoundForm);
   const [editingRoundId, setEditingRoundId] = useState("");
@@ -1042,17 +1047,24 @@ function ScheduleManagement({ type }) {
   useEffect(() => {
     getAdminTournaments().then((data) => {
       const list = Array.isArray(data) ? data : [];
+      setTournaments(list);
+      // Deep-link from Tournament Detail's "+ Tạo vòng đấu" (?tournamentId=...) preselects the
+      // Tournament so the Admin doesn't have to find it again in the dropdown — falls back to the
+      // first Tournament when the id is absent or no longer matches.
       const preselected = preselectTournamentId && list.some((item) => (item.id ?? item.Id) === preselectTournamentId)
         ? preselectTournamentId
         : (list[0]?.id ?? list[0]?.Id ?? "");
       setSelected(preselected);
     }).catch((err) => setMessage(err.message));
   }, []);
-
   useEffect(() => {
     if (type !== "race") return;
     if (!selected) { setApprovedHorses([]); return; }
 
+    // Task B Correction 2 §5: this dropdown ("Chọn ngựa đã được phê duyệt") must reflect
+    // Tournament-registration approval (TournamentHorseRegistration.Status == Approved for the
+    // SELECTED Tournament), not the global Horse.ApprovalStatus pool across every Owner. A Horse
+    // with no registration, or a Pending/Rejected/Withdrawn one, must never be assignable here.
     const loadAssignmentOptions = async () => {
       try {
         const horses = await getTournamentApprovedHorses(selected);
@@ -1061,9 +1073,9 @@ function ScheduleManagement({ type }) {
         setMessage(err.message);
       }
     };
+
     loadAssignmentOptions();
   }, [type, selected]);
-
   useEffect(() => {
     if (!selected) return;
     const fetcher = type === "round" ? getTournamentRounds : getTournamentRaces;
@@ -1081,6 +1093,8 @@ function ScheduleManagement({ type }) {
 
   const startEditRound = (round) => {
     setEditingRoundId(round.id ?? round.Id);
+    // Nullish coalescing only — AdvanceCount = 0 is a valid, meaningful value (Final Round)
+    // and must round-trip through the form unchanged, never collapsing to "".
     const advanceCount = round.advanceCount ?? round.AdvanceCount;
     setForm({
       name: round.name ?? round.Name ?? "",
@@ -1099,6 +1113,10 @@ function ScheduleManagement({ type }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    // Phase5B fix: friendly client-side containment check before hitting the API — the backend
+    // stays authoritative (same rules re-checked there), this just avoids a round-trip for the
+    // obvious case of a Round scheduled outside its Tournament's window. Vietnam-timezone policy
+    // (Asia/Ho_Chi_Minh) — see FE/src/utils/vnDateTime.js.
     const roundStartUtc = vnInputToApiUtc(form.scheduledStartDate);
     const roundEndUtc = vnInputToApiUtc(form.scheduledEndDate);
     const roundStart = apiToUtcDate(roundStartUtc);
@@ -1106,13 +1124,26 @@ function ScheduleManagement({ type }) {
     if (selectedTournament) {
       const tStart = apiToUtcDate(selectedTournament.startDate ?? selectedTournament.StartDate);
       const tEnd = apiToUtcDate(selectedTournament.endDate ?? selectedTournament.EndDate);
-      if (roundStart < tStart) { setMessage("Thời gian bắt đầu Vòng đấu không được trước thời gian bắt đầu Giải đấu."); return; }
-      if (roundEnd > tEnd) { setMessage("Thời gian kết thúc Vòng đấu không được sau thời gian kết thúc Giải đấu."); return; }
+      if (roundStart < tStart) {
+        setMessage("Thời gian bắt đầu Vòng đấu không được trước thời gian bắt đầu Giải đấu.");
+        return;
+      }
+      if (roundEnd > tEnd) {
+        setMessage("Thời gian kết thúc Vòng đấu không được sau thời gian kết thúc Giải đấu.");
+        return;
+      }
     }
-    if (roundStart >= roundEnd) { setMessage("Thời gian bắt đầu Vòng đấu phải trước thời gian kết thúc."); return; }
-    
+    if (roundStart >= roundEnd) {
+      setMessage("Thời gian bắt đầu Vòng đấu phải trước thời gian kết thúc.");
+      return;
+    }
     try {
-      const payload = { ...form, scheduledStartDate: roundStartUtc, scheduledEndDate: roundEndUtc, advanceCount: form.advanceCount === "" ? null : Number(form.advanceCount) };
+      const payload = {
+        ...form,
+        scheduledStartDate: roundStartUtc,
+        scheduledEndDate: roundEndUtc,
+        advanceCount: form.advanceCount === "" ? null : Number(form.advanceCount),
+      };
       if (editingRoundId) {
         await updateRound(editingRoundId, payload);
         setMessage("Vòng đấu đã cập nhật thành công.");
@@ -1158,9 +1189,8 @@ function ScheduleManagement({ type }) {
       setMessage("Đã xử lý vi phạm thành công.");
       setResolvingViolation(null);
       setPenaltyText("");
-
       const violRes = await request(`/api/referees/race/${expandedRaceId}/violations`);
-      setRaceViolations(Array.isArray(violRes?.data ?? violRes) ? (violRes?.data ?? violRes) : []);
+      setRaceViolations(Array.isArray(violRes) ? violRes : violRes?.data ?? []);
     } catch (err) {
       setMessage("Lỗi xử lý vi phạm: " + err.message);
     }
@@ -1168,17 +1198,20 @@ function ScheduleManagement({ type }) {
 
   const handleRaceAction = async (raceId, action) => {
     const labels = { start: "bắt đầu", end: "kết thúc", cancel: "hủy", approve: "duyệt kết quả", reject: "từ chối kết quả" };
-    
     if (action === "approve") {
-      const provisionalWinnerId = raceResult?.winningHorseId ?? raceResult?.WinningHorseId;
-      const isWinnerViolated = raceViolations.some(v => (v.horseId ?? v.HorseId) === provisionalWinnerId);
-      let confirmMsg = "Duyệt kết quả này thành chính thức (Official)? Dự đoán sẽ được thanh toán ngay sau khi duyệt.";
-      if (isWinnerViolated) {
-        confirmMsg = "⚠️ CẢNH BÁO: Ngựa thắng cuộc đang bị Trọng tài ghi nhận VI PHẠM. Bạn có chắc chắn muốn duyệt kết quả và trả thưởng cho con ngựa này không?";
-      }
-
+      // Warn if the provisional winner has an unresolved violation, so Admin
+      // doesn't pay out a prediction for a horse that may end up disqualified.
+      // Matched by HorseId (authoritative), not HorseName.
+      const winnerHorseId = raceResult?.winningHorseId ?? raceResult?.WinningHorseId;
+      const isWinnerViolated = winnerHorseId != null && raceViolations.some(v => {
+        const violationHorseId = v.horseId ?? v.HorseId;
+        const penalty = v.penalty ?? v.Penalty;
+        return violationHorseId === winnerHorseId && !(penalty && penalty.trim());
+      });
+      const confirmMsg = isWinnerViolated
+        ? "⚠️ CẢNH BÁO: Ngựa thắng cuộc đang có VI PHẠM chưa xử lý. Bạn có chắc chắn muốn duyệt kết quả và trả thưởng cho con ngựa này không?"
+        : "Duyệt kết quả này thành chính thức (Official)? Dự đoán sẽ được thanh toán ngay sau khi duyệt.";
       if (!window.confirm(confirmMsg)) return;
-
       try {
         await approveRaceResult(raceId);
         setMessage("Kết quả đã chính thức (Official). Dự đoán đã được thanh toán.");
@@ -1187,7 +1220,6 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
-
     if (action === "reject") {
       const reason = window.prompt("Lý do từ chối kết quả:");
       if (!reason) return;
@@ -1199,11 +1231,9 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
-    
     if (action === "end") {
       if (!window.confirm("Kết thúc cuộc đua? Thao tác này chỉ đánh dấu cuộc đua đã diễn ra xong — trọng tài sẽ nộp kết quả sau đó.")) return;
     } else if (!window.confirm(`${labels[action].charAt(0).toUpperCase() + labels[action].slice(1)} cuộc đua này?`)) return;
-    
     try {
       if (action === "start") await startRace(raceId);
       else if (action === "end") await endRace(raceId);
@@ -1216,11 +1246,18 @@ function ScheduleManagement({ type }) {
 
   const title = type === "round" ? "Quản lý vòng đấu" : "Quản lý cuộc đua & lên lịch";
   const selectedTournament = tournaments.find((t) => (t.id ?? t.Id) === selected);
+  // Structural Round edit ("Sửa") is only exposed while the parent Tournament is Draft — Phase5
+  // locks Round/Race structural mutation to Draft-only, so the action must never be offered once
+  // the Tournament is Published/Ongoing/Finished/Cancelled, even though the backend already rejects it.
   const isDraftTournament = (selectedTournament?.statusName ?? selectedTournament?.StatusName) === "Draft";
-  
   return (
     <>
-      <PageTitle eyebrow="Quản lý giải đấu" title={title} description={type === "round" ? "Xây dựng giai đoạn giải đấu và xác định khung thời gian." : "Sắp xếp cuộc đua, đặt lịch và chuẩn bị phân công ngựa."} action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null} />
+      <PageTitle
+        eyebrow="Quản lý giải đấu"
+        title={title}
+        description={type === "round" ? "Xây dựng giai đoạn giải đấu và xác định khung thời gian." : "Sắp xếp cuộc đua, đặt lịch và chuẩn bị phân công ngựa."}
+        action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null}
+      />
       <Notice message={message} />
       {showRaceForm && (
         <RaceForm
@@ -1239,7 +1276,8 @@ function ScheduleManagement({ type }) {
         />
       )}
       <div className="admin-select-row"><label>Giải đấu<select className="admin-select" value={selected} onChange={(e) => { setSelected(e.target.value); cancelEditRound(); }}>{tournaments.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}</select></label></div>
-      
+      {/* Round creation stays dedicated here — Race creation/edit lives exclusively in the
+          RaceForm modal above (single canonical Race payload builder, Phase5B consolidation). */}
       {type === "round" && selectedTournament && (
         <div style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--hr-border-soft)", background: "var(--hr-surface-2)", marginBottom: 12, fontSize: 13 }}>
           <div><span style={{ color: "var(--hr-muted)" }}>Giải đấu: </span><strong style={{ color: "var(--hr-paper)" }}>{selectedTournament.name ?? selectedTournament.Name}</strong></div>
@@ -1247,25 +1285,46 @@ function ScheduleManagement({ type }) {
           <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--hr-muted)" }}>Vòng đấu phải nằm hoàn toàn trong thời gian của Giải đấu.</p>
         </div>
       )}
-      
       {type === "round" && (
         <form className="admin-form" onSubmit={submit}>
           {editingRoundId && <p style={{ color: "var(--hr-gold-soft)", fontSize: 13, marginBottom: 8 }}>✎ Đang sửa vòng đấu.</p>}
-          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>Tên vòng đấu *<input placeholder="Ví dụ: Vòng loại, Bán kết, Chung kết." required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>Số thứ tự vòng *<input type="number" min="1" required value={form.roundNumber} onChange={(e) => setForm({ ...form, roundNumber: Number(e.target.value) })} /></label>
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Tên vòng đấu *
+            <input placeholder="Ví dụ: Vòng loại, Bán kết, Chung kết." required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </label>
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Ví dụ: Vòng loại, Bán kết, Chung kết.</p>
+
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Số thứ tự vòng *
+            <input type="number" min="1" required value={form.roundNumber} onChange={(e) => setForm({ ...form, roundNumber: Number(e.target.value) })} />
+          </label>
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Thứ tự vòng trong giải đấu, bắt đầu từ 1.</p>
+
           <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
             Thời gian bắt đầu *
-            <input type="datetime-local" required value={form.scheduledStartDate} onChange={(e) => setForm({ ...form, scheduledStartDate: e.target.value })} min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)} max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
+            <input type="datetime-local" required value={form.scheduledStartDate} onChange={(e) => setForm({ ...form, scheduledStartDate: e.target.value })}
+              min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)}
+              max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
           </label>
           <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
             Thời gian kết thúc *
-            <input type="datetime-local" required value={form.scheduledEndDate} onChange={(e) => setForm({ ...form, scheduledEndDate: e.target.value })} min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)} max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
+            <input type="datetime-local" required value={form.scheduledEndDate} onChange={(e) => setForm({ ...form, scheduledEndDate: e.target.value })}
+              min={selectedTournament ? apiToVNInput(selectedTournament.startDate ?? selectedTournament.StartDate) : inputDate(0)}
+              max={selectedTournament ? apiToVNInput(selectedTournament.endDate ?? selectedTournament.EndDate) : undefined} />
           </label>
-          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>Số ngựa đi tiếp *<input type="number" min="0" placeholder="Số ngựa đi tiếp" value={form.advanceCount} onChange={(e) => setForm({ ...form, advanceCount: e.target.value })} /></label>
-          <div style={{ display: "flex", gap: 8 }}><button className="primary-button" disabled={!selected}>{editingRoundId ? "Lưu vòng đấu" : "Tạo vòng đấu"}</button>{editingRoundId && <button type="button" className="ghost-button" onClick={cancelEditRound}>Hủy</button>}</div>
+
+          <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+            Số ngựa đi tiếp *
+            <input type="number" min="0" placeholder="Số ngựa đi tiếp" value={form.advanceCount} onChange={(e) => setForm({ ...form, advanceCount: e.target.value })} />
+          </label>
+          <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Nhập 0 nếu đây là Vòng chung kết. (AdvanceCount)</p>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="primary-button" disabled={!selected}>{editingRoundId ? "Lưu vòng đấu" : "Tạo vòng đấu"}</button>
+            {editingRoundId && <button type="button" className="ghost-button" onClick={cancelEditRound}>Hủy</button>}
+          </div>
         </form>
       )}
-
       {type === "race" && <form className="admin-form" onSubmit={assignHorse}>
         <select className="admin-select" required value={assignment.raceId} onChange={(e) => setAssignment({ ...assignment, raceId: e.target.value })}>
           <option value="">Chọn cuộc đua để phân công ngựa</option>
@@ -1294,18 +1353,26 @@ function ScheduleManagement({ type }) {
 
         if (type === "round") {
           const roundNumber = item.roundNumber ?? item.RoundNumber;
+          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value (Final Round
+          // hint below) and must never be treated as "not set".
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>
-              {advanceCount === 0 && <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>}
+              {advanceCount === 0 && (
+                <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>
+              )}
               <h3>{item.name ?? item.Name}</h3>
               <div style={{ fontSize: 13, color: "var(--hr-text)", marginTop: 4, display: "grid", gap: 2 }}>
                 <span>Bắt đầu: {formatDateTime(item.scheduledStartDate ?? item.ScheduledStartDate)}</span>
                 <span>Kết thúc: {formatDateTime(item.scheduledEndDate ?? item.ScheduledEndDate)}</span>
                 <span>Số ngựa đi tiếp: {advanceCount ?? "Chưa thiết lập"}</span>
               </div>
-              {isDraftTournament && <div className="admin-actions" style={{ marginTop: 8 }}><button onClick={() => startEditRound(item)}>Sửa</button></div>}
+              {isDraftTournament && (
+                <div className="admin-actions" style={{ marginTop: 8 }}>
+                  <button onClick={() => startEditRound(item)}>Sửa</button>
+                </div>
+              )}
             </article>
           );
         }
@@ -1323,8 +1390,10 @@ function ScheduleManagement({ type }) {
               request(`/api/referees/race/${itemId}/report`).catch(() => null),
             ]);
             setRaceEntries(Array.isArray(entriesRes) ? entriesRes : entriesRes?.data ?? []);
-            setRaceReferees(Array.isArray(refsRes?.data ?? refsRes) ? (refsRes?.data ?? refsRes) : []);
-            setRaceViolations(Array.isArray(violRes?.data ?? violRes) ? (violRes?.data ?? violRes) : []);
+            const refs = Array.isArray(refsRes) ? refsRes : refsRes?.data ?? [];
+            setRaceReferees(Array.isArray(refs) ? refs : []);
+            const viols = Array.isArray(violRes) ? violRes : violRes?.data ?? [];
+            setRaceViolations(Array.isArray(viols) ? viols : []);
             setRaceResult(resultRes?.data ?? resultRes ?? null);
             setRaceReport(reportRes?.data ?? reportRes ?? null);
           } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
@@ -1346,95 +1415,129 @@ function ScheduleManagement({ type }) {
               <div className="admin-actions admin-race-actions">
                 {itemStatus !== "inprogress" && itemStatus !== "finished" && itemStatus !== "cancelled" && (
                   <>
-                    <button onClick={() => handleRaceAction(itemId, "start")} disabled={!canStart} title={canStart ? "" : "Chờ trọng tài chấp nhận lời mời"}>Bắt đầu</button>
-                    {!canStart && <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>{refAssigns.length === 0 ? "Chưa có trọng tài" : `Chờ trọng tài (${confirmedReferees}/${refAssigns.length})`}</span>}
+                    <button onClick={() => handleRaceAction(itemId, "start")} disabled={!canStart} title={canStart ? "" : "Chờ trọng tài chấp nhận lời mời"}>
+                      Bắt đầu
+                    </button>
+                    {!canStart && (
+                      <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>
+                        {refAssigns.length === 0
+                          ? "Chưa có trọng tài - hãy thêm trọng tài trước khi bắt đầu"
+                          : `Chờ trọng tài xác nhận (${confirmedReferees}/${refAssigns.length})`}
+                      </span>
+                    )}
                   </>
                 )}
                 {itemStatus === "inprogress" && (
-                  <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "end")}>Kết thúc cuộc đua</button>
+                  <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "end")}>
+                    Kết thúc cuộc đua
+                  </button>
                 )}
-                {itemStatus === "finished" && !itemResultStatus && <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>Chờ nộp kết quả</span>}
+                {itemStatus === "finished" && !itemResultStatus && (
+                  <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>Đã kết thúc — chờ trọng tài nộp kết quả.</span>
+                )}
                 {itemStatus === "finished" && itemResultStatus === "provisional" && (
                   <>
-                    <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "approve")}>Duyệt KQ</button>
-                    <button style={{ background: "rgba(201,105,90,0.16)", color: "var(--hr-danger)", border: "1px solid rgba(201,105,90,0.35)" }} onClick={() => handleRaceAction(itemId, "reject")}>Từ chối</button>
+                    <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "approve")}>
+                      Duyệt KQ
+                    </button>
+                    <button style={{ background: "rgba(201,105,90,0.16)", color: "var(--hr-danger)", border: "1px solid rgba(201,105,90,0.35)" }} onClick={() => handleRaceAction(itemId, "reject")}>
+                      Từ chối
+                    </button>
                   </>
                 )}
-                {itemStatus === "finished" && itemResultStatus === "official" && <span style={{ fontSize: 12, color: "var(--hr-success)", fontWeight: 600, alignSelf: "center" }}>✓ Chính thức</span>}
-                {(itemStatus === "scheduled" || itemStatus === "inprogress") && <button className="admin-danger" onClick={() => handleRaceAction(itemId, "cancel")}>Hủy</button>}
+                {itemStatus === "finished" && itemResultStatus === "official" && (
+                  <span style={{ fontSize: 12, color: "var(--hr-success)", fontWeight: 600, alignSelf: "center" }}>✓ Chính thức</span>
+                )}
+                {/* Backend cancellation gate (RaceManagementService.CancelRaceAsync) only
+                    allows Scheduled or InProgress — RegistrationOpen/RegistrationClosed/
+                    Finished/Cancelled must not show this action. */}
+                {(itemStatus === "scheduled" || itemStatus === "inprogress") && (
+                  <button className="admin-danger" onClick={() => handleRaceAction(itemId, "cancel")}>
+                    Hủy
+                  </button>
+                )}
               </div>
             );
           })()}
           {type === "race" && expandedRaceId === itemId && (
             <div style={{marginTop:12,padding:12,borderTop:"1px solid var(--hr-border-soft)"}} onClick={e => e.stopPropagation()}>
               <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Ngựa tham gia</h4>
-              {raceEntries.length === 0 ? <p style={{color:"var(--hr-muted)",fontSize:13}}>Chưa có ngựa nào.</p> : (
+              {raceEntries.length === 0 ? (
+                <p style={{color:"var(--hr-muted)",fontSize:13}}>Chưa có ngựa nào được phân công.</p>
+              ) : (
                 <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
-                  <thead><tr><th style={{textAlign:"left"}}>Ngựa</th><th style={{textAlign:"left"}}>Kỵ sĩ</th><th style={{textAlign:"left"}}>Tỉ lệ</th></tr></thead>
-                  <tbody>{raceEntries.map(e => <tr key={e.entryId ?? e.EntryId}><td>{e.horseName ?? e.HorseName}</td><td>{e.jockeyName ?? e.JockeyName ?? "Chưa có"}</td><td>{(e.odds ?? e.Odds ?? 1).toFixed(2)}x</td></tr>)}</tbody>
+                  <thead><tr>
+                    <th style={th}>Ngựa</th><th style={th}>Kỵ sĩ</th><th style={th}>Tỉ lệ cược</th>
+                  </tr></thead>
+                  <tbody>{raceEntries.map(e => (
+                    <tr key={e.entryId ?? e.EntryId}>
+                      <td style={td}>{e.horseName ?? e.HorseName}</td>
+                      <td style={td}>{e.jockeyName ?? e.JockeyName ?? "Chưa có"}</td>
+                      <td style={td}>{(e.odds ?? e.Odds ?? 1).toFixed(2)}x</td>
+                    </tr>
+                  ))}</tbody>
                 </table>
               )}
-
-              {raceViolations.length > 0 && (
-                <div style={{marginTop:16}}>
-                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-danger)"}}>Vi phạm ({raceViolations.length})</h4>
-                  {raceViolations.map(v => {
-                    const vId = v.id ?? v.Id;
-                    const penaltyValue = v.penalty ?? v.Penalty;
-                    const isResolved = Boolean(penaltyValue && penaltyValue.trim() !== "");
+              {raceReferees.length > 0 && (
+                <div style={{marginTop:12}}>
+                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Trọng tài</h4>
+                  {raceReferees.map(r => {
+                    const st = r.status ?? r.Status;
                     return (
-                      <div key={vId} style={{padding:"10px 12px",marginBottom:8,borderRadius:8,background:"rgba(201,105,90,0.1)",border:"1px solid rgba(201,105,90,0.3)",fontSize:13}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                          <div>
-                            <strong style={{color:"var(--hr-danger)"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
-                            <span style={{color:"var(--hr-muted)",marginLeft:8}}>— Ngựa: {v.horseName ?? v.HorseName} — TT: {v.refereeName ?? v.RefereeName}</span>
-                          </div>
-                          <div>
-                            {isResolved ? (
-                              <span style={{color: "var(--hr-success)", fontWeight: "bold", fontSize:11}}>✓ Đã xử lý</span>
-                            ) : resolvingViolation === vId ? (
-                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                <input 
-                                  type="text" 
-                                  placeholder="Nhập hình phạt..." 
-                                  value={penaltyText} 
-                                  onChange={(e) => setPenaltyText(e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{ padding: "4px 8px", fontSize: 11, borderRadius: 4, border: "1px solid var(--hr-border)" }}
-                                />
-                                <button 
-                                  style={{padding: "4px 8px", fontSize: 11, background: "var(--hr-success)", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600}}
-                                  onClick={(e) => { e.stopPropagation(); submitResolveViolation(vId); }}
-                                >
-                                  Lưu
-                                </button>
-                                <button 
-                                  style={{padding: "4px 8px", fontSize: 11, background: "var(--hr-muted)", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer"}}
-                                  onClick={(e) => { e.stopPropagation(); setResolvingViolation(null); }}
-                                >
-                                  Hủy
-                                </button>
-                              </div>
-                            ) : (
-                              <button 
-                                style={{padding: "4px 10px", fontSize: 11, background: "var(--hr-danger)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight:600}} 
-                                onClick={(e) => { e.stopPropagation(); setResolvingViolation(vId); setPenaltyText(""); }}
-                              >
-                                Xử lý phạt
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <p style={{margin:"6px 0 0",color:"var(--hr-text)"}}>Mô tả: {v.description ?? v.Description}</p>
-                        {isResolved && (v.penalty || v.Penalty) && (
-                          <p style={{margin:"4px 0 0",color:"var(--hr-warning)", fontWeight:600}}>Hình phạt: {v.penalty ?? v.Penalty}</p>
-                        )}
-                      </div>
-                    )
+                      <span key={r.id ?? r.Id} style={{
+                        display:"inline-block",margin:"0 8px 4px 0",padding:"4px 12px",
+                        borderRadius:8,fontSize:12,fontWeight:600,
+                        background:st==="Confirmed"?"rgba(112,139,104,.16)":st==="Assigned"?"rgba(185,138,69,.16)":"rgba(238,229,212,.06)",
+                        color:st==="Confirmed"?"var(--hr-success)":st==="Assigned"?"var(--hr-warning)":"var(--hr-muted)"
+                      }}>
+                        {r.refereeName ?? r.RefereeName} — {r.role==="Chief Referee"?"Trọng tài trưởng":"Trợ lý"}
+                      </span>
+                    );
                   })}
                 </div>
               )}
-
+              {raceViolations.length > 0 && (
+                <div style={{marginTop:12}}>
+                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-danger)"}}>Vi phạm ({raceViolations.length})</h4>
+                  {raceViolations.map(v => {
+                    const vId = v.id ?? v.Id;
+                    const penalty = v.penalty ?? v.Penalty;
+                    const isResolved = Boolean(penalty && penalty.trim());
+                    return (
+                      <div key={vId} style={{padding:"8px 12px",marginBottom:6,borderRadius:8,background:"rgba(201,105,90,0.12)",border:"1px solid rgba(201,105,90,0.3)",fontSize:12}}>
+                        <strong style={{color:"var(--hr-danger)"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
+                        <span style={{color:"var(--hr-muted)",marginLeft:8}}>— {v.horseName ?? v.HorseName} — {v.refereeName ?? v.RefereeName}</span>
+                        <p style={{margin:"4px 0 0",color:"var(--hr-text)"}}>{v.description ?? v.Description}</p>
+                        {isResolved ? (
+                          <div style={{marginTop:6}}>
+                            <span style={{fontSize:11,fontWeight:700,color:"var(--hr-success)"}}>✓ Đã xử lý</span>
+                            <p style={{margin:"2px 0 0",color:"var(--hr-text)"}}>Hình phạt: {penalty}</p>
+                          </div>
+                        ) : resolvingViolation === vId ? (
+                          <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={penaltyText}
+                              onChange={e => setPenaltyText(e.target.value)}
+                              placeholder="Nhập hình phạt..."
+                              style={{flex:1,minWidth:160,padding:"4px 8px",borderRadius:6,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:12}}
+                            />
+                            <button style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={() => submitResolveViolation(vId)}>Lưu</button>
+                            <button style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--hr-border-soft)",background:"transparent",color:"var(--hr-text)",cursor:"pointer"}} onClick={() => { setResolvingViolation(null); setPenaltyText(""); }}>Hủy</button>
+                          </div>
+                        ) : (
+                          <button
+                            style={{marginTop:6,padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"transparent",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}}
+                            onClick={e => { e.stopPropagation(); setResolvingViolation(vId); setPenaltyText(""); }}
+                          >
+                            Xử lý phạt
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {itemStatus === "finished" && raceResult && (() => {
                 const resultStatusVal = (raceResult.resultStatus ?? raceResult.ResultStatus ?? "").toLowerCase();
                 const isOfficial = resultStatusVal === "official";
@@ -1442,20 +1545,29 @@ function ScheduleManagement({ type }) {
                 const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
                 return (
                   <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`}}>
-                    <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>{isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}</h4>
+                    <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>
+                      {isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}
+                    </h4>
                     <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
                       {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
                       {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
+                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
+                      {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <span style={{display:"block",fontSize:12,color:"var(--hr-danger)",marginTop:4}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</span> : null}
                     </p>
                   </div>
                 );
               })()}
-              
               {raceReport && (
                 <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.25)"}}>
                   <h4 style={{fontSize:14,margin:"0 0 6px",color:"#c4b5fd"}}>📋 Báo cáo trọng tài</h4>
                   <p style={{margin:0,fontSize:13,color:"var(--hr-text)"}}>{raceReport.details ?? raceReport.Details ?? "—"}</p>
-                  {(raceReport.incidents ?? raceReport.Incidents) && <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>}
+                  {(raceReport.incidents ?? raceReport.Incidents) && (
+                    <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>
+                  )}
+                  <span style={{display:"block",marginTop:6,fontSize:11,color:"var(--hr-muted)"}}>
+                    {raceReport.refereeName ?? raceReport.RefereeName ?? "Trọng tài"}
+                    {raceReport.completedAt ?? raceReport.CompletedAt ? ` · ${new Date(raceReport.completedAt ?? raceReport.CompletedAt).toLocaleString("vi-VN")}` : ""}
+                  </span>
                 </div>
               )}
             </div>

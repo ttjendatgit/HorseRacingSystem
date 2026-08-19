@@ -58,7 +58,7 @@ export function SpectatorProfilePage() {
   const [depositHistory, setDepositHistory] = useState([]);
   const [depositHistoryLoading, setDepositHistoryLoading] = useState(false);
   const [showDepositHistory, setShowDepositHistory] = useState(false);
-  const depositSince = useRef(null);
+  const depositTxId = useRef(null);
   const pollRef = useRef(null);
 
   /* wallet */
@@ -74,8 +74,15 @@ export function SpectatorProfilePage() {
       const d = res?.data ?? res;
       setDepositTx(d);
       setDepositStatus("qr");
-      depositSince.current = new Date();
+      depositTxId.current = d?.transactionId ?? d?.TransactionId ?? null;
       loadDepositHistory();
+
+      if (!depositTxId.current) {
+        // Can't poll/check without an exact transaction to ask about — surface this instead
+        // of sending a request that would be missing its required identifier.
+        showMsg("error", "Không thể theo dõi giao dịch (thiếu mã giao dịch). Vui lòng dùng nút \"Kiểm tra ngay\" sau khi chuyển khoản hoặc liên hệ hỗ trợ.");
+        return;
+      }
 
       // Bắt đầu polling sau 5 giây, tối đa 60 lần (5 phút)
       let retries = 0;
@@ -93,7 +100,7 @@ export function SpectatorProfilePage() {
             return;
           }
           try {
-            const checkRes = await checkDeposit(depositSince.current);
+            const checkRes = await checkDeposit(depositTxId.current);
             const cd = checkRes?.data ?? checkRes;
             if (cd?.completed) {
               clearInterval(pollRef.current);
@@ -540,8 +547,13 @@ export function SpectatorProfilePage() {
                         <span style={{ fontSize: 13, color: "#856404" }}>Đang kiểm tra thanh toán...</span>
                       </div>
                       <button style={{ ...btnPrimary, marginTop: 4, fontSize: 12, padding: "6px 16px" }} onClick={async () => {
+                        const txId = depositTxId.current ?? depositTx?.transactionId ?? depositTx?.TransactionId;
+                        if (!txId) {
+                          showMsg("error", "Không tìm thấy mã giao dịch để kiểm tra.");
+                          return;
+                        }
                         try {
-                          const checkRes = await checkDeposit(depositSince.current);
+                          const checkRes = await checkDeposit(txId);
                           const cd = checkRes?.data ?? checkRes;
                           if (cd?.completed) {
                             clearInterval(pollRef.current);

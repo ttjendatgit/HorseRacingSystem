@@ -218,11 +218,17 @@ public class J1JockeyEligibilityTests
         Assert.False(entry.JockeyConfirmed);
     }
     [Fact]
-    public async Task ApprovedJockey_ExistingInvitationFlowStillWorks()
+    public async Task JockeyAccept_DoesNotAssignOfficialRaceEntry()
     {
+        // J2: accepting an invitation means "willing to ride", not final assignment.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "approved-flow");
         var (jockeyUserId, jockeyId) = await CreateJockeyAsync(f, "approved-flow", ApprovalStatus.Approved);
+
+        // Prove Accept leaves OwnerConfirmed untouched in either direction, not just at its default.
+        var entryBefore = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+        entryBefore.OwnerConfirmed = true;
+        await f.Db.SaveChangesAsync();
 
         var invite = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
         {
@@ -242,8 +248,389 @@ public class J1JockeyEligibilityTests
         var storedInvitation = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
         Assert.Equal(JockeyInvitationStatus.Accepted, storedInvitation.Status);
         var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
-        Assert.Equal(jockeyId, entry.JockeyId);
-        Assert.True(entry.JockeyConfirmed);
+        Assert.Null(entry.JockeyId);
+        Assert.False(entry.JockeyConfirmed);
+        Assert.True(entry.OwnerConfirmed);
+    }
+
+    [Fact]
+    public async Task JockeyReject_OnlyChangesInvitationStatus()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "reject-flow");
+        var (jockeyUserId, jockeyId) = await CreateJockeyAsync(f, "reject-flow", ApprovalStatus.Approved);
+
+        var entryBefore = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+        entryBefore.OwnerConfirmed = true;
+        await f.Db.SaveChangesAsync();
+
+        var invite = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+        Assert.True(invite.Result.Success, invite.Result.Message);
+        var invitation = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId);
+
+        var reject = await BuildJockeyService(f).RespondInvitationAsync(jockeyUserId, invitation.Id, new JockeyInvitationRespondRequest
+        {
+            Accept = false
+        });
+
+        Assert.True(reject.Result.Success, reject.Result.Message);
+        var storedInvitation = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
+        Assert.Equal(JockeyInvitationStatus.Declined, storedInvitation.Status);
+        var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+        Assert.Null(entry.JockeyId);
+        Assert.False(entry.JockeyConfirmed);
+        Assert.True(entry.OwnerConfirmed);
+    }
+
+    [Fact]
+    public async Task OwnerInviteJockey_MultipleDifferentJockeysForSameHorseRace_BothCoexistAndBothCanAccept()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "multi-jockey");
+        var (jockeyAUserId, jockeyAId) = await CreateJockeyAsync(f, "multi-jockey-a", ApprovalStatus.Approved);
+        var (jockeyBUserId, jockeyBId) = await CreateJockeyAsync(f, "multi-jockey-b", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+        var jockeyService = BuildJockeyService(f);
+
+        var inviteA = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyAId,
+            RaceId = raceId
+        });
+        Assert.True(inviteA.Result.Success, inviteA.Result.Message);
+
+        var inviteB = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyBId,
+            RaceId = raceId
+        });
+        Assert.True(inviteB.Result.Success, inviteB.Result.Message);
+
+        var invitationA = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyAId && i.RaceId == raceId);
+        var invitationB = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyBId && i.RaceId == raceId);
+        Assert.NotEqual(invitationA.Id, invitationB.Id);
+
+        // Jockey A accepts first — this must not block Jockey B from also accepting for the same Horse+Race.
+        var acceptA = await jockeyService.RespondInvitationAsync(jockeyAUserId, invitationA.Id, new JockeyInvitationRespondRequest { Accept = true });
+        Assert.True(acceptA.Result.Success, acceptA.Result.Message);
+
+        var acceptB = await jockeyService.RespondInvitationAsync(jockeyBUserId, invitationB.Id, new JockeyInvitationRespondRequest { Accept = true });
+        Assert.True(acceptB.Result.Success, acceptB.Result.Message);
+
+        var storedA = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationA.Id);
+        var storedB = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationB.Id);
+        Assert.Equal(JockeyInvitationStatus.Accepted, storedA.Status);
+        Assert.Equal(JockeyInvitationStatus.Accepted, storedB.Status);
+
+        var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+        Assert.Null(entry.JockeyId);
+        Assert.False(entry.JockeyConfirmed);
+    }
+
+    [Fact]
+    public async Task OwnerInviteJockey_DuplicateActiveInvitationSameJockeySameRace_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "duplicate-invite");
+        var (_, jockeyId) = await CreateJockeyAsync(f, "duplicate-invite", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+
+        var first = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+        Assert.True(first.Result.Success, first.Result.Message);
+
+        var duplicate = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+
+        Assert.False(duplicate.Result.Success);
+        Assert.Equal(409, duplicate.StatusCode);
+        Assert.Equal(1, await f.Db.JockeyInvitations.CountAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId));
+    }
+
+    [Fact]
+    public async Task SameJockey_CanAcceptOverlappingInvitationsFromDifferentOwners()
+    {
+        // J2: acceptance is not final assignment, so exclusivity/schedule-conflict checks
+        // must not block a jockey from holding multiple accepted invitations at once.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerAUserId, _, horseAId, raceAId) = await CreateAssignedHorseForInvitationAsync(f, "cross-owner-a");
+        var (ownerBUserId, _, horseBId, raceBId) = await CreateAssignedHorseForInvitationAsync(f, "cross-owner-b");
+        var (jockeyUserId, jockeyId) = await CreateJockeyAsync(f, "cross-owner-shared", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+        var jockeyService = BuildJockeyService(f);
+
+        var inviteFromOwnerA = await horseService.InviteJockeyAsync(ownerAUserId, horseAId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceAId
+        });
+        Assert.True(inviteFromOwnerA.Result.Success, inviteFromOwnerA.Result.Message);
+        var invitationA = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseAId && i.JockeyId == jockeyId && i.RaceId == raceAId);
+
+        var acceptA = await jockeyService.RespondInvitationAsync(jockeyUserId, invitationA.Id, new JockeyInvitationRespondRequest { Accept = true });
+        Assert.True(acceptA.Result.Success, acceptA.Result.Message);
+
+        // Owner B's race is scheduled at (effectively) the same time as Owner A's — J1's
+        // CreateRaceAsync derives ScheduledAt purely from roundNumber, so two round-1 races
+        // created moments apart overlap. Owner B must still be able to invite this jockey.
+        var inviteFromOwnerB = await horseService.InviteJockeyAsync(ownerBUserId, horseBId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceBId
+        });
+        Assert.True(inviteFromOwnerB.Result.Success, inviteFromOwnerB.Result.Message);
+        var invitationB = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseBId && i.JockeyId == jockeyId && i.RaceId == raceBId);
+
+        var acceptB = await jockeyService.RespondInvitationAsync(jockeyUserId, invitationB.Id, new JockeyInvitationRespondRequest { Accept = true });
+        Assert.True(acceptB.Result.Success, acceptB.Result.Message);
+
+        var storedA = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationA.Id);
+        var storedB = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationB.Id);
+        Assert.Equal(JockeyInvitationStatus.Accepted, storedA.Status);
+        Assert.Equal(JockeyInvitationStatus.Accepted, storedB.Status);
+
+        var entryA = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceAId && e.HorseId == horseAId);
+        var entryB = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceBId && e.HorseId == horseBId);
+        Assert.Null(entryA.JockeyId);
+        Assert.Null(entryB.JockeyId);
+    }
+
+    [Fact]
+    public async Task RemoveJockey_CancelsOnlyTheTargetedInvitation()
+    {
+        // J2 follow-up: multiple active invitations per Horse+Race means cancel must be
+        // pinned by InvitationId — never picked arbitrarily with FirstOrDefault.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "cancel-target");
+        var (jockeyAUserId, jockeyAId) = await CreateJockeyAsync(f, "cancel-target-a", ApprovalStatus.Approved);
+        var (_, jockeyBId) = await CreateJockeyAsync(f, "cancel-target-b", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+        var jockeyService = BuildJockeyService(f);
+
+        var inviteA = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyAId, RaceId = raceId });
+        Assert.True(inviteA.Result.Success, inviteA.Result.Message);
+        var inviteB = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyBId, RaceId = raceId });
+        Assert.True(inviteB.Result.Success, inviteB.Result.Message);
+
+        var invitationA = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyAId && i.RaceId == raceId);
+        var invitationB = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyBId && i.RaceId == raceId);
+
+        var acceptA = await jockeyService.RespondInvitationAsync(jockeyAUserId, invitationA.Id, new JockeyInvitationRespondRequest { Accept = true });
+        Assert.True(acceptA.Result.Success, acceptA.Result.Message);
+        // Jockey B is left Pending — never responded to.
+
+        var cancelB = await horseService.RemoveJockeyAsync(ownerUserId, horseId, raceId, new JockeyRemovalRequest
+        {
+            InvitationId = invitationB.Id,
+            Reason = "Không phù hợp lịch"
+        });
+        Assert.True(cancelB.Result.Success, cancelB.Result.Message);
+
+        var storedA = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationA.Id);
+        var storedB = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitationB.Id);
+        Assert.Equal(JockeyInvitationStatus.Accepted, storedA.Status);
+        Assert.Equal(JockeyInvitationStatus.Declined, storedB.Status);
+        Assert.Equal("Không phù hợp lịch", storedB.ResponseNote);
+    }
+
+    [Fact]
+    public async Task RemoveJockey_OtherOwnerCannotCancelInvitation()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "cancel-other-owner");
+        var (_, jockeyId) = await CreateJockeyAsync(f, "cancel-other-owner", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+
+        var invite = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyId, RaceId = raceId });
+        Assert.True(invite.Result.Success, invite.Result.Message);
+        var invitation = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId);
+
+        var (otherOwnerUserId, _, _) = await CreateApprovedOwnerHorseAsync(f, "cancel-other-owner-intruder");
+
+        var cancel = await horseService.RemoveJockeyAsync(otherOwnerUserId, horseId, raceId, new JockeyRemovalRequest
+        {
+            InvitationId = invitation.Id,
+            Reason = "Not my horse"
+        });
+
+        Assert.False(cancel.Result.Success);
+        Assert.Equal(404, cancel.StatusCode);
+        var stored = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
+        Assert.Equal(JockeyInvitationStatus.Pending, stored.Status);
+    }
+
+    [Fact]
+    public async Task RemoveJockey_UnknownInvitationIdRejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "cancel-unknown-invite");
+        var (_, jockeyId) = await CreateJockeyAsync(f, "cancel-unknown-invite", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+
+        var invite = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyId, RaceId = raceId });
+        Assert.True(invite.Result.Success, invite.Result.Message);
+        var invitation = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId);
+
+        var cancel = await horseService.RemoveJockeyAsync(ownerUserId, horseId, raceId, new JockeyRemovalRequest
+        {
+            InvitationId = Guid.NewGuid(),
+            Reason = "Does not exist"
+        });
+
+        Assert.False(cancel.Result.Success);
+        Assert.Equal(404, cancel.StatusCode);
+        var stored = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
+        Assert.Equal(JockeyInvitationStatus.Pending, stored.Status);
+    }
+
+    [Theory]
+    [InlineData(TournamentStatus.Published, RaceStatus.Scheduled)]
+    [InlineData(TournamentStatus.Ongoing, RaceStatus.Scheduled)]
+    [InlineData(TournamentStatus.Published, RaceStatus.RegistrationOpen)]
+    [InlineData(TournamentStatus.Published, RaceStatus.RegistrationClosed)]
+    public async Task OwnerInviteJockey_AllowedLifecycleCombination_Succeeds(TournamentStatus tournamentStatus, RaceStatus raceStatus)
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(
+            f, $"lifecycle-ok-{tournamentStatus}-{raceStatus}", tournamentStatus, raceStatus);
+        var (_, jockeyId) = await CreateJockeyAsync(f, $"lifecycle-ok-{tournamentStatus}-{raceStatus}", ApprovalStatus.Approved);
+
+        var result = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+
+        Assert.True(result.Result.Success, result.Result.Message);
+    }
+
+    [Theory]
+    [InlineData(TournamentStatus.Draft)]
+    [InlineData(TournamentStatus.Finished)]
+    [InlineData(TournamentStatus.Cancelled)]
+    public async Task OwnerInviteJockey_ClosedTournamentStatus_Rejected(TournamentStatus tournamentStatus)
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(
+            f, $"lifecycle-tournament-{tournamentStatus}", tournamentStatus, RaceStatus.Scheduled);
+        var (_, jockeyId) = await CreateJockeyAsync(f, $"lifecycle-tournament-{tournamentStatus}", ApprovalStatus.Approved);
+
+        var result = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Empty(await f.Db.JockeyInvitations.Where(i => i.HorseId == horseId && i.JockeyId == jockeyId).ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(RaceStatus.InProgress)]
+    [InlineData(RaceStatus.Finished)]
+    [InlineData(RaceStatus.Cancelled)]
+    public async Task OwnerInviteJockey_ClosedRaceStatus_Rejected(RaceStatus raceStatus)
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(
+            f, $"lifecycle-race-{raceStatus}", TournamentStatus.Published, raceStatus);
+        var (_, jockeyId) = await CreateJockeyAsync(f, $"lifecycle-race-{raceStatus}", ApprovalStatus.Approved);
+
+        var result = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Empty(await f.Db.JockeyInvitations.Where(i => i.HorseId == horseId && i.JockeyId == jockeyId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task OwnerInviteJockey_ScheduledAtInPastButStatusStillScheduled_Allowed()
+    {
+        // ScheduledAt is a planned time, not authoritative — a delayed Race that is still
+        // Status=Scheduled must remain invitable even after its planned start time has passed.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(
+            f, "lifecycle-past-scheduled", TournamentStatus.Published, RaceStatus.Scheduled,
+            scheduledAt: DateTime.UtcNow.AddMinutes(-30));
+        var (_, jockeyId) = await CreateJockeyAsync(f, "lifecycle-past-scheduled", ApprovalStatus.Approved);
+
+        var result = await BuildHorseService(f).InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest
+        {
+            JockeyId = jockeyId,
+            RaceId = raceId
+        });
+
+        Assert.True(result.Result.Success, result.Result.Message);
+    }
+
+    [Fact]
+    public async Task JockeyAccept_RejectedWhenRaceStartsAfterInvitationWasCreated()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "lifecycle-race-started");
+        var (jockeyUserId, jockeyId) = await CreateJockeyAsync(f, "lifecycle-race-started", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+        var jockeyService = BuildJockeyService(f);
+
+        var invite = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyId, RaceId = raceId });
+        Assert.True(invite.Result.Success, invite.Result.Message);
+        var invitation = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId);
+
+        // The Race actually starts after the invitation was sent — a stale Pending invitation.
+        var race = await f.Db.Races.SingleAsync(r => r.Id == raceId);
+        race.Status = RaceStatus.InProgress;
+        await f.Db.SaveChangesAsync();
+
+        var accept = await jockeyService.RespondInvitationAsync(jockeyUserId, invitation.Id, new JockeyInvitationRespondRequest { Accept = true });
+
+        Assert.False(accept.Result.Success);
+        Assert.Equal(409, accept.StatusCode);
+        var storedInvitation = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
+        Assert.Equal(JockeyInvitationStatus.Pending, storedInvitation.Status);
+        var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+        Assert.Null(entry.JockeyId);
+    }
+
+    [Fact]
+    public async Task JockeyAccept_RejectedWhenTournamentFinishesAfterInvitationWasCreated()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId, raceId) = await CreateAssignedHorseForInvitationAsync(f, "lifecycle-tournament-finished");
+        var (jockeyUserId, jockeyId) = await CreateJockeyAsync(f, "lifecycle-tournament-finished", ApprovalStatus.Approved);
+        var horseService = BuildHorseService(f);
+        var jockeyService = BuildJockeyService(f);
+
+        var invite = await horseService.InviteJockeyAsync(ownerUserId, horseId, new JockeyInvitationCreateRequest { JockeyId = jockeyId, RaceId = raceId });
+        Assert.True(invite.Result.Success, invite.Result.Message);
+        var invitation = await f.Db.JockeyInvitations.SingleAsync(i => i.HorseId == horseId && i.JockeyId == jockeyId && i.RaceId == raceId);
+
+        // The Tournament wraps up after the invitation was sent — a stale Pending invitation.
+        var tournamentId = (await f.Db.Races.SingleAsync(r => r.Id == raceId)).TournamentId;
+        var tournament = await f.Db.Tournaments.SingleAsync(t => t.Id == tournamentId);
+        tournament.Status = TournamentStatus.Finished;
+        await f.Db.SaveChangesAsync();
+
+        var accept = await jockeyService.RespondInvitationAsync(jockeyUserId, invitation.Id, new JockeyInvitationRespondRequest { Accept = true });
+
+        Assert.False(accept.Result.Success);
+        Assert.Equal(409, accept.StatusCode);
+        var storedInvitation = await f.Db.JockeyInvitations.SingleAsync(i => i.Id == invitation.Id);
+        Assert.Equal(JockeyInvitationStatus.Pending, storedInvitation.Status);
     }
 
     private static HorseService BuildHorseService(RaceLifecycleTests.LifecycleFixture f)
@@ -264,6 +651,7 @@ public class J1JockeyEligibilityTests
             new JockeyRepository(f.Db),
             new JockeyInvitationRepository(f.Db),
             new RaceEntryRepository(f.Db),
+            new RaceRepository(f.Db),
             f.UnitOfWork,
             new NoopNotificationService());
 
@@ -332,16 +720,19 @@ public class J1JockeyEligibilityTests
     private static async Task<(Guid tournamentId, Guid raceId)> CreateRaceAsync(
         RaceLifecycleTests.LifecycleFixture f,
         string tag,
-        int roundNumber)
+        int roundNumber,
+        TournamentStatus tournamentStatus = TournamentStatus.Published,
+        RaceStatus raceStatus = RaceStatus.Scheduled,
+        DateTime? scheduledAt = null)
     {
-        var start = DateTime.UtcNow.AddDays(10 + roundNumber);
+        var start = scheduledAt ?? DateTime.UtcNow.AddDays(10 + roundNumber);
         var tournament = new Tournament
         {
             Id = Guid.NewGuid(),
             Name = $"Tournament {tag}",
             StartDate = start.Date,
             EndDate = start.Date.AddDays(3),
-            Status = TournamentStatus.Draft,
+            Status = tournamentStatus,
             IsActive = true,
             MaxRounds = Math.Max(1, roundNumber),
             MaxParticipants = 8,
@@ -365,7 +756,7 @@ public class J1JockeyEligibilityTests
             RoundId = round.Id,
             ScheduledAt = start.AddMinutes(10),
             ScheduledEndAt = start.AddMinutes(70),
-            Status = RaceStatus.Scheduled,
+            Status = raceStatus,
             MaxParticipants = 8,
             Distance = 1200
         };
@@ -396,13 +787,34 @@ public class J1JockeyEligibilityTests
 
     private static async Task<(Guid ownerUserId, Guid ownerId, Guid horseId, Guid raceId)> CreateAssignedHorseForInvitationAsync(
         RaceLifecycleTests.LifecycleFixture f,
-        string tag)
+        string tag,
+        TournamentStatus tournamentStatus = TournamentStatus.Published,
+        RaceStatus raceStatus = RaceStatus.Scheduled,
+        DateTime? scheduledAt = null)
     {
         var (ownerUserId, ownerId, horseId) = await CreateApprovedOwnerHorseAsync(f, tag);
+        // Always assign while Published/Scheduled first — AssignHorseToRaceAsync has its own
+        // validation independent of the invite-time lifecycle guard under test here. The
+        // caller's desired lifecycle state is applied afterward, once the RaceEntry exists,
+        // to simulate "RaceEntry already existed, then the Tournament/Race moved on".
         var (tournamentId, raceId) = await CreateRaceAsync(f, tag, roundNumber: 1);
         await RegisterTournamentAsync(f, tournamentId, ownerId, horseId, RegistrationStatus.Approved);
         var assign = await f.RaceManagement.AssignHorseToRaceAsync(raceId, new AssignHorseToRaceRequest { HorseId = horseId });
         Assert.True(assign.Result.Success, assign.Result.Message);
+
+        if (tournamentStatus != TournamentStatus.Published || raceStatus != RaceStatus.Scheduled || scheduledAt.HasValue)
+        {
+            var tournament = await f.Db.Tournaments.SingleAsync(t => t.Id == tournamentId);
+            tournament.Status = tournamentStatus;
+            var race = await f.Db.Races.SingleAsync(r => r.Id == raceId);
+            race.Status = raceStatus;
+            if (scheduledAt.HasValue)
+            {
+                race.ScheduledAt = scheduledAt.Value;
+            }
+            await f.Db.SaveChangesAsync();
+        }
+
         return (ownerUserId, ownerId, horseId, raceId);
     }
 

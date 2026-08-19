@@ -59,6 +59,7 @@ public class ViolationResponse
     public Guid RaceId { get; set; }
     public string? RaceName { get; set; }
     public Guid RaceEntryId { get; set; }
+    public Guid? HorseId { get; set; }
     public string? HorseName { get; set; }
     public Guid RefereeId { get; set; }
     public string? RefereeName { get; set; }

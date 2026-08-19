@@ -61,6 +61,7 @@ public class HorsesController : ControllerBase
             RaceStatus = e.Race?.Status.ToString() ?? string.Empty,
             Status = e.Status.ToString(),
             OwnerConfirmed = e.OwnerConfirmed,
+            JockeyId = e.JockeyId,
             JockeyConfirmed = e.JockeyConfirmed,
             JockeyName = e.Jockey?.User?.FullName ?? string.Empty,
             GateNumber = e.GateNumber,
@@ -200,7 +201,8 @@ public class HorsesController : ControllerBase
                     Tournament = e.Race.Tournament != null ? new
                     {
                         e.Race.Tournament.Id,
-                        e.Race.Tournament.Name
+                        e.Race.Tournament.Name,
+                        e.Race.Tournament.Status
                     } : null
                 } : null
             }),

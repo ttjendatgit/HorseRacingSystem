@@ -48,8 +48,8 @@ export function createDeposit(amount) {
   });
 }
 
-export function checkDeposit(since) {
-  return request(`/api/sepay/check?since=${since.toISOString()}`);
+export function checkDeposit(transactionId) {
+  return request(`/api/sepay/check?transactionId=${transactionId}`);
 }
 
 export function getDepositHistory() {

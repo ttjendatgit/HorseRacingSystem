@@ -1,7 +1,6 @@
-﻿namespace HorseRacing.Dtos
+namespace HorseRacing.Dtos;
+
+public class ResolveViolationRequest
 {
-    public class ResolveViolationRequest
-    {
-        public string Penalty { get; set; }
-    }
+    public string? Penalty { get; set; }
 }

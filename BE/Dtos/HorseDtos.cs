@@ -78,6 +78,11 @@ public class JockeyInvitationCreateRequest
 
 public class JockeyRemovalRequest
 {
+    // J2 follow-up: multiple Pending/Accepted invitations can now exist for the same
+    // Horse+Race, so the exact invitation being cancelled must be identified explicitly.
+    [Required]
+    public Guid InvitationId { get; set; }
+
     [Required]
     [MaxLength(500)]
     public string Reason { get; set; } = string.Empty;

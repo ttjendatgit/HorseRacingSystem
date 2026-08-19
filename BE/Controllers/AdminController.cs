@@ -161,6 +161,15 @@ public class AdminController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    [HttpPost("violations/{violationId:guid}/resolve")]
+    public async Task<ActionResult> ResolveViolation(Guid violationId, [FromBody] ResolveViolationRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Penalty))
+            return BadRequest(new { message = "Cần nhập hình phạt." });
+        var result = await _adminService.ResolveViolationAsync(violationId, request.Penalty.Trim());
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
     // Retry settlement for predictions left Pending by a prior payout
     // failure. Winner is derived from the Official RaceResult, never from
     // the request body.
@@ -213,18 +222,6 @@ public class AdminController : ControllerBase
         var result = await _raceEntryService.RejectAsync(entryId, request?.Reason);
         return StatusCode(result.StatusCode, result.Result);
     }
-
-    //Resolve violations
-    [HttpPost("violations/{violationId:guid}/resolve")]
-    public async Task<ActionResult> ResolveViolation(Guid violationId, [FromBody] ResolveViolationRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request?.Penalty))
-            return BadRequest(new { message = "Vui lòng cung cấp hình phạt." });
-
-        var result = await _adminService.ResolveViolationAsync(violationId, request.Penalty);
-        return StatusCode(result.StatusCode, result.Result);
-    }
 }
 
 public class EntryRejectRequest { public string? Reason { get; set; } }
-public class ResolveViolationRequest { public string? Penalty { get; set; } }
