@@ -1,16 +1,15 @@
 import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
+import { apiToVNDate } from "../../../utils/vnDateTime";
 
+// RaceStatus — event lifecycle only. Retained numeric values (see BE Enums.cs).
 const STATUS_NUM = {
   1: "scheduled",
   2: "inprogress",
   3: "finished",
   4: "cancelled",
-  5: "awaitingresult",
-  6: "resultpendingapproval",
   7: "registrationopen",
   8: "registrationclosed",
-  9: "resultapproved",
 };
 
 // Backend serializes enums as numbers (raw entities) or strings (DTOs)
@@ -20,38 +19,29 @@ const normalizeStatus = (s) => {
   return String(s).toLowerCase();
 };
 
-const RESULT_STATUSES = new Set([
-  "finished",
-  "awaitingresult",
-  "resultpendingapproval",
-  "resultapproved",
-]);
+// Only a Finished race can possibly have a result worth fetching — a race
+// that hasn't finished never has a RaceResult under the locked lifecycle.
+const RESULT_STATUSES = new Set(["finished"]);
 
 const STATUS_LABEL = {
   finished: "Đã kết thúc",
-  awaitingresult: "Chờ kết quả",
-  resultpendingapproval: "Chờ duyệt",
-  resultapproved: "Đã duyệt KQ",
   inprogress: "Đang đua",
   scheduled: "Sắp diễn ra",
+  registrationopen: "Mở đăng ký",
+  registrationclosed: "Đóng đăng ký",
   cancelled: "Đã hủy",
 };
 
 const STATUS_COLOR = {
   finished: { color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
-  awaitingresult: { color: "#c4b5fd", bg: "rgba(139,92,246,0.16)" },
-  resultpendingapproval: { color: "var(--hr-warning)", bg: "rgba(185,138,69,0.16)" },
-  resultapproved: { color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
 };
 
-const fmtDate = (v) =>
-  v
-    ? new Date(v).toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
-    : "-";
+// RaceResultStatus — separate concern. Only "Official" may be shown as a
+// settled winner; "Provisional" must always read as pending/unconfirmed
+// (see the render below, gated on det.resultStatus).
+
+// Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js.
+const fmtDate = (v) => (v ? apiToVNDate(v) : "-");
 
 export default function RaceResultsPage() {
   const [groups, setGroups] = useState([]);
@@ -88,6 +78,9 @@ export default function RaceResultsPage() {
                 ? (entriesRes?.data ?? entriesRes)
                 : [];
               const resultData = resultRes?.data ?? resultRes;
+              const resultStatus = (
+                resultData?.resultStatus ?? resultData?.ResultStatus ?? ""
+              ).toLowerCase();
               const winnerHorseId =
                 resultData?.winningHorseId ?? resultData?.WinningHorseId;
               const winnerEntry = entries.find(
@@ -97,6 +90,7 @@ export default function RaceResultsPage() {
                 race,
                 det: {
                   entries,
+                  resultStatus,
                   winnerHorseName:
                     winnerEntry?.horseName ??
                     winnerEntry?.HorseName ??
@@ -112,7 +106,7 @@ export default function RaceResultsPage() {
                 },
               };
             } catch {
-              return { race, det: { entries: [], winnerHorseName: null } };
+              return { race, det: { entries: [], resultStatus: "", winnerHorseName: null } };
             }
           }),
         );
@@ -229,7 +223,10 @@ export default function RaceResultsPage() {
               {group.races.map(({ race, det }) => {
                 const id = race.id ?? race.Id;
                 const status = normalizeStatus(race.status ?? race.Status);
-                const hasWinner = Boolean(det.winnerHorseName);
+                const isOfficial = det.resultStatus === "official";
+                const hasWinner = Boolean(det.winnerHorseName) && isOfficial;
+                const hasProvisionalWinner =
+                  Boolean(det.winnerHorseName) && det.resultStatus === "provisional";
                 const stColor =
                   STATUS_COLOR[status] ?? { color: "var(--hr-muted)", bg: "rgba(238,229,212,0.06)" };
                 return (
@@ -257,9 +254,9 @@ export default function RaceResultsPage() {
                         <div style={{ fontWeight: 700, fontSize: 15, color: "var(--hr-paper)" }}>
                           {race.name ?? race.Name}
                         </div>
-                        {(race.roundNames ?? race.RoundNames) && (
+                        {(race.roundNumber ?? race.RoundNumber) && (
                           <div style={{ fontSize: 12, color: "var(--hr-gold-soft)", marginTop: 2 }}>
-                            {race.roundNames ?? race.RoundNames}
+                            Vòng {race.roundNumber ?? race.RoundNumber}{(race.roundName ?? race.RoundName) ? ` — ${race.roundName ?? race.RoundName}` : ""}
                           </div>
                         )}
                       </div>
@@ -319,6 +316,10 @@ export default function RaceResultsPage() {
                             ) : null}
                           </div>
                         </>
+                      ) : hasProvisionalWinner ? (
+                        <div style={{ fontSize: 13, color: "var(--hr-warning)" }}>
+                          ⏳ Kết quả tạm thời — <strong>{det.winnerHorseName}</strong> đang chờ admin duyệt thành chính thức.
+                        </div>
                       ) : (
                         <div style={{ fontSize: 13, color: "var(--hr-muted)" }}>
                           Chưa có kết quả — chờ trọng tài nộp và admin duyệt.

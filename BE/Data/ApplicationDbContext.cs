@@ -170,6 +170,10 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(rr => rr.WinningHorseId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<RaceResult>()
+            .Property(rr => rr.Status)
+            .HasConversion<string>();
+
         // BE2 Model Configurations
         modelBuilder.Entity<Round>()
             .HasMany(r => r.Races)
@@ -451,6 +455,43 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<RaceEntry>()
             .HasIndex(e => new { e.RaceId, e.HorseId })
             .IsUnique();
+
+        // Phase5: Round.RoundNumber must be unique within its Tournament (spec §21.3).
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => new { r.TournamentId, r.RoundNumber })
+            .IsUnique();
+
+        // Task B Correction 2 §2 (locked spec §21.1/§21.2) — model-level configuration, backed by
+        // the unapplied migration 20260818065203_EnforceActiveTournamentRegistrationUniqueness
+        // (not yet applied — the dev DB has at least one known Owner-scoped duplicate that must
+        // be cleaned up first via the preflight SQL in the accompanying report). Status has no
+        // HasConversion here, so it persists as the raw int RegistrationStatus value: Pending=1,
+        // Approved=2, Rejected=3, Withdrawn=4 — the filters below intentionally use those
+        // integers, not string literals, matching actual storage.
+        //
+        // Task B Final: the plain single-column HorseId/OwnerId indexes below are explicitly
+        // declared (not left to EF's by-convention FK index) so adding the composite indexes
+        // does NOT make EF drop them — queries that include Rejected/Withdrawn rows (the
+        // partial indexes below cannot serve those) still need a full index on each column.
+        modelBuilder.Entity<TournamentHorseRegistration>()
+            .HasIndex(x => x.HorseId)
+            .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId");
+
+        modelBuilder.Entity<TournamentHorseRegistration>()
+            .HasIndex(x => x.OwnerId)
+            .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId");
+
+        modelBuilder.Entity<TournamentHorseRegistration>()
+            .HasIndex(x => new { x.OwnerId, x.TournamentId })
+            .IsUnique()
+            .HasFilter("\"Status\" IN (1, 2)")
+            .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId_TournamentId_Active");
+
+        modelBuilder.Entity<TournamentHorseRegistration>()
+            .HasIndex(x => new { x.HorseId, x.TournamentId })
+            .IsUnique()
+            .HasFilter("\"Status\" IN (1, 2)")
+            .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId_TournamentId_Active");
 
         // ── Transaction indexes ──
         modelBuilder.Entity<Transaction>()

@@ -42,19 +42,21 @@ const MONTH_FULL = [
   "Tháng 6",
 ];
 
+// Race progress (RaceStatus) — event lifecycle only.
 const RACE_STATUS_LABEL = {
   Scheduled: "Đã lên lịch",
   RegistrationOpen: "Mở đăng ký",
   RegistrationClosed: "Đóng đăng ký",
   InProgress: "Đang đua",
-  AwaitingResult: "Chờ kết quả",
-  ResultPendingApproval: "Chờ duyệt",
-  ResultApproved: "Đã duyệt",
   Finished: "Đã kết thúc",
   Cancelled: "Đã hủy",
 };
 
-const CAN_SUBMIT_RESULT = ["InProgress", "AwaitingResult", "ResultPendingApproval"];
+// Result status (RaceResultStatus) — separate concern from race progress.
+const RESULT_STATUS_LABEL = {
+  Provisional: "Tạm thời (chờ duyệt)",
+  Official: "Chính thức",
+};
 
 export default function RefereeRaceReportPage() {
   const [assignments, setAssignments] = useState([]);
@@ -224,13 +226,21 @@ export default function RefereeRaceReportPage() {
     )?.RaceName ||
     "Cuộc đua đã chọn";
 
+  const currentAssignment = assignments.find(
+    (a) => (a.raceId || a.RaceId) === selectedRaceId
+  );
   const currentRaceStatus =
-    assignments.find((a) => (a.raceId || a.RaceId) === selectedRaceId)
-      ?.raceStatus ||
-    assignments.find((a) => (a.raceId || a.RaceId) === selectedRaceId)
-      ?.RaceStatus ||
-    "";
-  const canSubmitResult = CAN_SUBMIT_RESULT.includes(currentRaceStatus);
+    currentAssignment?.raceStatus || currentAssignment?.RaceStatus || "";
+  const currentResultStatus =
+    currentAssignment?.resultStatus || currentAssignment?.ResultStatus || "";
+  const currentRejectedReason =
+    currentAssignment?.rejectedReason || currentAssignment?.RejectedReason || "";
+  // Submission only happens after the race has Finished (per the locked
+  // lifecycle, the event concludes before any result is submitted), and only
+  // while no result exists yet or the existing one is still Provisional —
+  // an Official result cannot be resubmitted through this form.
+  const canSubmitResult =
+    currentRaceStatus === "Finished" && currentResultStatus !== "Official";
 
   return (
     <div className="rr-wrap">
@@ -366,9 +376,15 @@ export default function RefereeRaceReportPage() {
                 Chọn ngựa thắng cuộc. Kết quả sẽ được gửi lên admin duyệt.
               </p>
               {currentRaceStatus && (
-                <p className="rr-muted" style={{ marginBottom: 12, fontWeight: 600, color: canSubmitResult ? "#166534" : "#b45309" }}>
+                <p className="rr-muted" style={{ marginBottom: 4, fontWeight: 600, color: canSubmitResult ? "#166534" : "#b45309" }}>
                   Trạng thái cuộc đua: {RACE_STATUS_LABEL[currentRaceStatus] ?? currentRaceStatus}
+                  {currentResultStatus && ` · Kết quả: ${RESULT_STATUS_LABEL[currentResultStatus] ?? currentResultStatus}`}
                   {!canSubmitResult && " — chưa thể nộp kết quả lúc này"}
+                </p>
+              )}
+              {currentRejectedReason && currentResultStatus !== "Official" && (
+                <p className="rr-muted" style={{ marginBottom: 12, color: "#b45309" }}>
+                  ⚠️ Kết quả trước đã bị từ chối: {currentRejectedReason} — vui lòng nộp lại.
                 </p>
               )}
               <div className="rr-field">
@@ -378,6 +394,7 @@ export default function RefereeRaceReportPage() {
                   onChange={(e) => setResultWinningHorseId(e.target.value)}
                   className="rr-select"
                   style={{ width: "100%", padding: 10, borderRadius: 8, fontSize: 14 }}
+                  disabled={!canSubmitResult}
                 >
                   <option value="">-- Chọn ngựa thắng --</option>
                   {resultEntries.map((entry) => (
@@ -390,7 +407,7 @@ export default function RefereeRaceReportPage() {
               <button
                 type="submit"
                 className="rr-submit-btn"
-                disabled={resultSubmitting || !resultWinningHorseId}
+                disabled={resultSubmitting || !resultWinningHorseId || !canSubmitResult}
                 style={{ background: resultWinningHorseId ? "#e6a54a" : undefined }}
               >
                 {resultSubmitting ? "Đang gửi..." : "📨 Gửi kết quả"}

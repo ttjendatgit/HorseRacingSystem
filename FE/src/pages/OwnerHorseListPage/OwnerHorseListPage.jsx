@@ -3,12 +3,16 @@ import { Link } from "react-router-dom";
 import { deleteHorse, getMyHorses, inviteJockeyToHorse, removeJockeyFromHorse } from "../../services/ownerHorseApi";
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
+import { isJockeyRole } from "../../services/authRoleUtils";
 import "./OwnerHorseListPage.css";
 
 const approvalStatusMap = { 1: "Chờ duyệt", 2: "Đã duyệt", 3: "Từ chối" };
 const statusClass = { 1: "pending", 2: "approved", 3: "rejected" };
 
 function OwnerHorseListPage() {
+  // Task B Final Correction §5: Owner-only actions (Create/Edit/Delete) hidden for Jockey — UX
+  // only, backend [Authorize(Roles="HorseOwner,Admin")] on those endpoints is authoritative.
+  const canManageHorses = !isJockeyRole();
   const [horses, setHorses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -144,10 +148,12 @@ function OwnerHorseListPage() {
           <h1>Ngựa của tôi</h1>
           <p className="oh-sub">{stats.total} con ngựa · {stats.approved} đã duyệt</p>
         </div>
-        <Link to="/owner/horses/new" className="oh-btn oh-btn--primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-          Thêm ngựa
-        </Link>
+        {canManageHorses && (
+          <Link to="/owner/horses/new" className="oh-btn oh-btn--primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+            Thêm ngựa
+          </Link>
+        )}
       </div>
 
       {/* Stats */}
@@ -233,12 +239,16 @@ function OwnerHorseListPage() {
                     <button className="oh-btn-icon" onClick={() => openAssign(h)} title="Chỉ định kỵ sĩ">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                     </button>
-                    <button className="oh-btn-icon" onClick={() => handleDelete(h)} title="Xóa">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
-                    <Link to={`/owner/horses/${id}/edit`} className="oh-btn-icon" title="Chỉnh sửa">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </Link>
+                    {canManageHorses && (
+                      <button className="oh-btn-icon" onClick={() => handleDelete(h)} title="Xóa">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      </button>
+                    )}
+                    {canManageHorses && (
+                      <Link to={`/owner/horses/${id}/edit`} className="oh-btn-icon" title="Chỉnh sửa">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

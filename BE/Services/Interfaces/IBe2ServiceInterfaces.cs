@@ -16,7 +16,7 @@ public interface ITournamentService
     Task<ServiceResult<bool>> DeleteTournamentAsync(Guid id);
 
     // State machine methods
-    Task<ServiceResult<TournamentResponse>> ChangeStatusAsync(Guid id, ChangeTournamentStatusRequest request);
+    Task<ServiceResult<TournamentResponse>> ChangeStatusAsync(Guid id, ChangeTournamentStatusRequest request, Guid actorId);
     Task<ServiceResult<TournamentStatsDto>> GetStatsAsync(Guid id);
     Task<ServiceResult<List<TournamentTimelineDto>>> GetTimelineAsync(Guid id);
 }
@@ -141,6 +141,7 @@ public interface IAdminService
     Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId);
     Task<ServiceResult<bool>> RejectRaceResultAsync(Guid raceId, string reason);
     Task<ServiceResult<object>> GetPredictionsAsync();
+    Task<ServiceResult<object>> SettlePredictionsAsync(Guid raceId);
 }
 
 public interface ILiveResultService

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Transactions;
 using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -23,8 +22,6 @@ public class RaceManagementService : IRaceManagementService
     private readonly IRoundRepository _roundRepo;
     private readonly IPredictionRepository _predictionRepo;
     private readonly IRefereeAssignmentRepository _assignmentRepo;
-    private readonly IRaceResultRepository _raceResultRepo;
-    private readonly IPredictionService _predictionService;
     private readonly IWalletService _walletService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<RaceManagementService> _logger;
@@ -40,8 +37,6 @@ public class RaceManagementService : IRaceManagementService
         IRoundRepository roundRepo,
         IPredictionRepository predictionRepo,
         IRefereeAssignmentRepository assignmentRepo,
-        IRaceResultRepository raceResultRepo,
-        IPredictionService predictionService,
         IWalletService walletService,
         IUnitOfWork unitOfWork,
         ILogger<RaceManagementService> logger,
@@ -56,8 +51,6 @@ public class RaceManagementService : IRaceManagementService
         _roundRepo = roundRepo;
         _predictionRepo = predictionRepo;
         _assignmentRepo = assignmentRepo;
-        _raceResultRepo = raceResultRepo;
-        _predictionService = predictionService;
         _walletService = walletService;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -75,12 +68,72 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<RaceDetailResponse>.Error("Không tìm thấy giải đấu", 404);
             }
 
+            if (tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<RaceDetailResponse>.Error(
+                    "Không thể thêm Cuộc đua vì giải đấu không còn ở trạng thái Bản nháp.", 400);
+            }
+
+            if (!request.RoundId.HasValue || request.RoundId.Value == Guid.Empty)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Vòng đấu (Round) là bắt buộc để tạo cuộc đua.", 400);
+            }
+
+            var round = await _roundRepo.GetByIdAsync(request.RoundId.Value);
+            if (round == null)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Không tìm thấy vòng đấu.", 404);
+            }
+
+            if (round.TournamentId != request.TournamentId)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Vòng đấu không thuộc giải đấu đã chọn.", 400);
+            }
+
+            if (request.MaxParticipants <= 0)
+            {
+                return ServiceResult<RaceDetailResponse>.Error("Số lượng tối đa (MaxParticipants) phải lớn hơn 0.", 400);
+            }
+
+            var scheduleErrors = ValidateRaceScheduleWithinRound(round, request.ScheduledAt, request.ScheduledEndAt);
+            if (scheduleErrors.Count > 0)
+            {
+                return ServiceResult<RaceDetailResponse>.Error(string.Join("; ", scheduleErrors), 400);
+            }
+
+            Track? track = null;
+            if (request.TrackId.HasValue)
+            {
+                track = await _db.Tracks.FirstOrDefaultAsync(t => t.Id == request.TrackId.Value);
+                if (track == null)
+                {
+                    return ServiceResult<RaceDetailResponse>.Error("Không tìm thấy đường đua (Track).", 404);
+                }
+
+                if (track.Capacity.HasValue && request.MaxParticipants > track.Capacity.Value)
+                {
+                    return ServiceResult<RaceDetailResponse>.Error(
+                        $"Số lượng tối đa ({request.MaxParticipants}) vượt quá sức chứa đường đua \"{track.Name}\" ({track.Capacity.Value}).", 400);
+                }
+
+                if (request.ScheduledEndAt.HasValue)
+                {
+                    var overlap = await TrackScheduleHelper.HasOverlapAsync(
+                        _db, request.TournamentId, request.TrackId.Value, request.ScheduledAt, request.ScheduledEndAt.Value, excludeRaceId: null);
+                    if (overlap)
+                    {
+                        return ServiceResult<RaceDetailResponse>.Error(
+                            $"Đường đua \"{track.Name}\" đã có Cuộc đua khác trùng khung giờ này.", 400);
+                    }
+                }
+            }
+
             var race = new Race
             {
                 Id = Guid.NewGuid(),
                 Name = request.Name,
-                TournamentId = request.TournamentId,
-                RoundId = request.RoundId,
+                TournamentId = round.TournamentId,
+                RoundId = round.Id,
                 ScheduledAt = request.ScheduledAt,
                 ScheduledEndAt = request.ScheduledEndAt,
                 TrackId = request.TrackId,
@@ -90,6 +143,7 @@ public class RaceManagementService : IRaceManagementService
                 MaxParticipants = request.MaxParticipants,
                 Distance = request.Distance,
                 RoundNames = request.RoundNames,
+                QualificationSlots = request.QualificationSlots,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -133,6 +187,63 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<RaceDetailResponse>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
+            if (race.Tournament != null && race.Tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<RaceDetailResponse>.Fail(400,
+                    "Không thể chỉnh sửa Cuộc đua vì giải đấu không còn ở trạng thái Bản nháp.");
+            }
+
+            // Phase5: compute candidate state before mutating the tracked entity, mirroring the
+            // Phase4B UpdateTournamentAsync convention — validation runs against the CANDIDATE,
+            // never leaving a partial/invalid update in the ChangeTracker if it's rejected.
+            var candidateMaxParticipants = request.MaxParticipants ?? race.MaxParticipants;
+            var candidateScheduledAt = request.ScheduledAt ?? race.ScheduledAt;
+            var candidateScheduledEndAt = request.ScheduledEndAt ?? race.ScheduledEndAt;
+            var candidateTrackId = request.TrackId ?? race.TrackId;
+
+            if (candidateMaxParticipants <= 0)
+            {
+                return ServiceResult<RaceDetailResponse>.Fail(400, "Số lượng tối đa (MaxParticipants) phải lớn hơn 0.");
+            }
+
+            // Race.RoundId is immutable after creation (locked Phase5 rule), so the candidate
+            // schedule is always validated against the Race's existing, real, persisted Round.
+            if (race.Round != null)
+            {
+                var scheduleErrors = ValidateRaceScheduleWithinRound(race.Round, candidateScheduledAt, candidateScheduledEndAt);
+                if (scheduleErrors.Count > 0)
+                {
+                    return ServiceResult<RaceDetailResponse>.Fail(400, string.Join("; ", scheduleErrors));
+                }
+            }
+
+            Track? candidateTrack = null;
+            if (candidateTrackId.HasValue)
+            {
+                candidateTrack = await _db.Tracks.FirstOrDefaultAsync(t => t.Id == candidateTrackId.Value);
+                if (candidateTrack == null)
+                {
+                    return ServiceResult<RaceDetailResponse>.Fail(404, "Không tìm thấy đường đua (Track).");
+                }
+
+                if (candidateTrack.Capacity.HasValue && candidateMaxParticipants > candidateTrack.Capacity.Value)
+                {
+                    return ServiceResult<RaceDetailResponse>.Fail(400,
+                        $"Số lượng tối đa ({candidateMaxParticipants}) vượt quá sức chứa đường đua \"{candidateTrack.Name}\" ({candidateTrack.Capacity.Value}).");
+                }
+
+                if (candidateScheduledEndAt.HasValue)
+                {
+                    var overlap = await TrackScheduleHelper.HasOverlapAsync(
+                        _db, race.TournamentId, candidateTrackId.Value, candidateScheduledAt, candidateScheduledEndAt.Value, excludeRaceId: race.Id);
+                    if (overlap)
+                    {
+                        return ServiceResult<RaceDetailResponse>.Fail(400,
+                            $"Đường đua \"{candidateTrack.Name}\" đã có Cuộc đua khác trùng khung giờ này.");
+                    }
+                }
+            }
+
             if (!string.IsNullOrEmpty(request.Name))
                 race.Name = request.Name;
             if (request.ScheduledAt.HasValue)
@@ -151,6 +262,8 @@ public class RaceManagementService : IRaceManagementService
                 race.ScheduledEndAt = request.ScheduledEndAt.Value;
             if (request.TrackId.HasValue)
                 race.TrackId = request.TrackId;
+            if (request.QualificationSlots.HasValue)
+                race.QualificationSlots = request.QualificationSlots.Value;
 
             race.UpdatedAt = DateTime.UtcNow;
             await _raceRepo.UpdateAsync(race);
@@ -202,6 +315,9 @@ public class RaceManagementService : IRaceManagementService
             if (race == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
 
+            if (race.Tournament != null && race.Tournament.Status != TournamentStatus.Draft)
+                return ServiceResult<bool>.Fail(400, "Không thể xóa Cuộc đua vì giải đấu không còn ở trạng thái Bản nháp.");
+
             if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.Cancelled)
                 return ServiceResult<bool>.Fail(400, $"Không thể xóa cuộc đua với trạng thái '{race.Status}'. Chỉ có thể xóa cuộc đua đã lên lịch hoặc đã hủy.");
 
@@ -245,6 +361,16 @@ public class RaceManagementService : IRaceManagementService
             if (horse.ApprovalStatus != ApprovalStatus.Approved)
             {
                 return ServiceResult<bool>.Fail(400, "Ngựa chưa được admin phê duyệt");
+            }
+
+            // Task B §6: RaceEntry gate — Horse must hold an Approved TournamentHorseRegistration
+            // for THIS Race's Tournament (no registration / Pending / Rejected / Withdrawn /
+            // registration for a different Tournament are all rejected the same way here).
+            var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+                x.TournamentId == race.TournamentId && x.HorseId == request.HorseId);
+            if (registration == null || registration.Status != RegistrationStatus.Approved)
+            {
+                return ServiceResult<bool>.Fail(400, "Ngựa chưa được duyệt đăng ký tham gia giải đấu này.");
             }
 
             var alreadyInActiveRace = await _entryRepo.IsHorseInActiveRaceAsync(request.HorseId);
@@ -376,6 +502,16 @@ public class RaceManagementService : IRaceManagementService
                 if (horse.ApprovalStatus != ApprovalStatus.Approved)
                 {
                     errors.Add($"Ngựa \"{horse.Name}\" chưa được phê duyệt");
+                    continue;
+                }
+
+                // Task B §6: same RaceEntry gate as AssignHorseToRaceAsync — Approved
+                // TournamentHorseRegistration for this Race's Tournament, required.
+                var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+                    x.TournamentId == race.TournamentId && x.HorseId == horseId);
+                if (registration == null || registration.Status != RegistrationStatus.Approved)
+                {
+                    errors.Add($"Ngựa \"{horse.Name}\" chưa được duyệt đăng ký tham gia giải đấu này");
                     continue;
                 }
 
@@ -580,6 +716,14 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
+    /// <summary>
+    /// Transitions InProgress -> Finished. Phase2B: this is an event-progress-only
+    /// action — it marks that the physical race has concluded. It no longer
+    /// requires, reads, or creates a RaceResult, and no longer settles
+    /// predictions (settlement now happens when a result becomes Official —
+    /// see AdminService.ApproveRaceResultAsync). Method name kept as
+    /// EndRaceAsync / endpoint kept as POST .../end for API compatibility.
+    /// </summary>
     public async Task<ServiceResult<bool>> EndRaceAsync(Guid raceId)
     {
         try
@@ -590,43 +734,18 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
-            if (race.Status != RaceStatus.ResultApproved)
+            if (race.Status != RaceStatus.InProgress)
             {
-                return ServiceResult<bool>.Fail(400, $"Không thể kết thúc cuộc đua với trạng thái '{race.Status}'. Chỉ được kết thúc sau khi duyệt kết quả của trọng tài.");
+                return ServiceResult<bool>.Fail(400, $"Không thể kết thúc cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải đang diễn ra.");
             }
 
-            var entries = await _entryRepo.GetByRaceAsync(raceId);
-            if (entries.Count == 0)
-            {
-                return ServiceResult<bool>.Fail(400, "Không thể kết thúc cuộc đua khi chưa có ngựa tham gia.");
-            }
+            race.Status = RaceStatus.Finished;
+            if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
+            race.UpdatedAt = DateTime.UtcNow;
 
-            var raceResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
-            if (raceResult == null || raceResult.ApprovalStatus != ApprovalStatus.Approved)
-            {
-                return ServiceResult<bool>.Fail(400, "Kết quả cuộc đua chưa được duyệt.");
-            }
-
-            // Wrap in transaction: if settlement fails, race + result roll back
-            using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
-            try
-            {
-                race.Status = RaceStatus.Finished;
-                if (race.ActualEndTime is null) race.ActualEndTime = DateTime.UtcNow;
-                race.UpdatedAt = DateTime.UtcNow;
-
-                await _raceRepo.UpdateAsync(race);
-                await _unitOfWork.SaveChangesAsync();
-
-                await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
-
-                scope.Complete();
-                return ServiceResult<bool>.Ok(true);
-            }
-            catch (Exception ex)
-            {
-                return ServiceResult<bool>.Fail(500, "Lỗi thanh toán dự đoán. Vui lòng thử lại.");
-            }
+            await _raceRepo.UpdateAsync(race);
+            await _unitOfWork.SaveChangesAsync();
+            return ServiceResult<bool>.Ok(true);
         }
         catch (Exception ex)
         {
@@ -644,7 +763,14 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
-            if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.InProgress && race.Status != RaceStatus.AwaitingResult && race.Status != RaceStatus.ResultPendingApproval)
+            // Finished is terminal under the locked V1.1 lifecycle regardless of
+            // result status (Provisional or Official) — the event already
+            // happened. Only pre-Finished races can be cancelled. This preserves
+            // the pre-Phase2B intent (Scheduled/InProgress were always
+            // cancellable) while dropping AwaitingResult/ResultPendingApproval,
+            // which no longer exist as distinct RaceStatus values — both are
+            // now Finished, which is non-cancellable.
+            if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.InProgress)
             {
                 return ServiceResult<bool>.Fail(400, $"Không thể hủy cuộc đua với trạng thái '{race.Status}'.");
             }
@@ -707,30 +833,33 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
-    private RaceDetailResponse MapToDetailResponse(Race race)
+    /// <summary>
+    /// Phase5B Fix3: reject a Race scheduled outside its Round's window at Create/Update time,
+    /// instead of only at Publish. Mirrors ValidateRoundScheduleWithinTournament's convention
+    /// (inclusive Round boundaries, strict internal Race duration). ScheduledEndAt is optional on
+    /// a Race — start containment is always checked, but end containment / self-consistency only
+    /// runs once ScheduledEndAt is actually supplied.
+    /// </summary>
+    private static List<string> ValidateRaceScheduleWithinRound(Round round, DateTime scheduledAt, DateTime? scheduledEndAt)
     {
-        return new RaceDetailResponse
+        var errors = new List<string>();
+
+        if (round.ScheduledStartDate > scheduledAt)
+            errors.Add("Thời gian bắt đầu Cuộc đua không được trước thời gian bắt đầu Vòng đấu.");
+
+        if (scheduledEndAt.HasValue)
         {
-            Id = race.Id,
-            Name = race.Name,
-            TournamentId = race.TournamentId,
-            RoundId = race.RoundId,
-            ScheduledAt = race.ScheduledAt,
-            ActualStartTime = race.ActualStartTime,
-            ActualEndTime = race.ActualEndTime,
-            Status = race.Status.ToString(),
-            Location = race.Location,
-            Description = race.Description,
-            MaxParticipants = race.MaxParticipants,
-            Distance = race.Distance,
-            EntriesCount = race.Entries?.Count ?? 0,
-            ActiveRefereesCount = race.RefereeAssignments?.Count(a => a.Status != RefereeAssignmentStatus.Cancelled) ?? 0,
-            RoundNames = race.RoundNames,
-            ScheduledEndAt = race.ScheduledEndAt,
-            TrackId = race.TrackId,
-            TrackName = race.Track?.Name
-        };
+            if (scheduledAt >= scheduledEndAt.Value)
+                errors.Add("Thời gian bắt đầu phải trước thời gian kết thúc.");
+
+            if (scheduledEndAt.Value > round.ScheduledEndDate)
+                errors.Add("Thời gian kết thúc Cuộc đua không được sau thời gian kết thúc Vòng đấu.");
+        }
+
+        return errors;
     }
+
+    private RaceDetailResponse MapToDetailResponse(Race race) => RaceDetailResponseMapper.ToDetailResponse(race);
 
     private async Task RecalculateOddsAsync(Guid raceId)
     {

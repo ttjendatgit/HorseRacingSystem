@@ -9,6 +9,16 @@ public class RaceSummaryDto
     public Guid TournamentId { get; set; }
     public DateTime ScheduledAt { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    // Phase3B additions
+    public Guid RoundId { get; set; }
+    public int? RoundNumber { get; set; }
+    public string? RoundName { get; set; }
+    public Guid? TrackId { get; set; }
+    public string? TrackName { get; set; }
+    public int? QualificationSlots { get; set; }
+    /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
+    public string? ResultStatus { get; set; }
 }
 
 // Additional Race DTOs for BE2
@@ -25,6 +35,7 @@ public class CreateRaceRequest
     public int MaxParticipants { get; set; } = 12;
     public int Distance { get; set; } = 2000;
     public string? RoundNames { get; set; }
+    public int? QualificationSlots { get; set; }
 }
 
 public class UpdateRaceRequest
@@ -38,6 +49,7 @@ public class UpdateRaceRequest
     public int? MaxParticipants { get; set; }
     public int? Distance { get; set; }
     public string? RoundNames { get; set; }
+    public int? QualificationSlots { get; set; }
 }
 
 public class RaceDetailResponse
@@ -45,7 +57,10 @@ public class RaceDetailResponse
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public Guid TournamentId { get; set; }
-    public Guid? RoundId { get; set; }
+    /// <summary>Non-nullable: Race.RoundId is required/DB NOT NULL since Phase1.</summary>
+    public Guid RoundId { get; set; }
+    public int? RoundNumber { get; set; }
+    public string? RoundName { get; set; }
     public DateTime ScheduledAt { get; set; }
     public DateTime? ScheduledEndAt { get; set; }
     public Guid? TrackId { get; set; }
@@ -53,13 +68,42 @@ public class RaceDetailResponse
     public DateTime? ActualStartTime { get; set; }
     public DateTime? ActualEndTime { get; set; }
     public string Status { get; set; } = string.Empty;
+    /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
+    public string? ResultStatus { get; set; }
+    /// <summary>Set only when the most recent submission was rejected and awaits resubmission.</summary>
+    public string? RejectedReason { get; set; }
     public string? Location { get; set; }
     public string? Description { get; set; }
     public int MaxParticipants { get; set; }
+    public int? QualificationSlots { get; set; }
     public int Distance { get; set; }
     public int EntriesCount { get; set; }
     public int ActiveRefereesCount { get; set; }
     public string? RoundNames { get; set; }
+}
+
+/// <summary>
+/// Phase2B: replaces the raw RaceResult entity previously returned by
+/// GET /api/races/{id}/result. Exposes ResultStatus explicitly so callers
+/// never have to infer Official-ness from Race.Status.
+/// </summary>
+public class RaceResultResponse
+{
+    public Guid RaceId { get; set; }
+    public Guid WinningHorseId { get; set; }
+    public int TotalParticipants { get; set; }
+    public decimal? WinnerFinishTime { get; set; }
+    public DateTime RecordedAt { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    /// <summary>"Provisional" or "Official" — the single source of truth for officiating state.</summary>
+    public string ResultStatus { get; set; } = string.Empty;
+    /// <summary>Convenience flag, always equivalent to ResultStatus == "Official".</summary>
+    public bool IsOfficial { get; set; }
+    public string? RejectedReason { get; set; }
+    public bool IsDisputed { get; set; }
+    public decimal? WinnerPurse { get; set; }
+    public string? RankingsJson { get; set; }
+    public string? Notes { get; set; }
 }
 
 public class JockeyAssignedRaceResponse

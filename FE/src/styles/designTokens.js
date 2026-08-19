@@ -142,21 +142,6 @@ export const statusColors = {
     text: "#f59e0b",
     label: "Đang diễn ra",
   },
-  awaitingresult: {
-    bg: "rgba(139,92,246,0.12)",
-    text: "#7c3aed",
-    label: "Chờ kết quả",
-  },
-  resultpendingapproval: {
-    bg: "rgba(245,158,11,0.12)",
-    text: "#b45309",
-    label: "Chờ duyệt",
-  },
-  resultapproved: {
-    bg: "rgba(16,185,129,0.12)",
-    text: "#047857",
-    label: "Đã duyệt kết quả",
-  },
   registrationopen: {
     bg: "rgba(16,185,129,0.1)",
     text: "#059669",

@@ -20,7 +20,7 @@ public class Race
 
     public Tournament? Tournament { get; set; }
 
-    public Guid? RoundId { get; set; }
+    public Guid RoundId { get; set; }
 
     public Round? Round { get; set; }
 
@@ -48,6 +48,8 @@ public class Race
     public string? RoundNames { get; set; }
 
     public int MaxParticipants { get; set; } = 12;
+
+    public int? QualificationSlots { get; set; }
 
     public int Distance { get; set; } = 2000; // meters
 

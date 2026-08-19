@@ -1,4 +1,5 @@
 using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Services.Interfaces;
@@ -19,6 +20,16 @@ public class TournamentsController : ControllerBase
     {
         _tournamentService = tournamentService;
         _roundService = roundService;
+    }
+
+    /// <summary>
+    /// Resolves the authenticated actor's user ID from the NameIdentifier claim. Never fabricates
+    /// Guid.Empty on failure — returns false so the caller can fail the request safely.
+    /// </summary>
+    private bool TryGetActorId(out Guid actorId)
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(value, out actorId);
     }
 
     // Tournament CRUD
@@ -71,7 +82,10 @@ public class TournamentsController : ControllerBase
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult> ChangeTournamentStatus(Guid id, [FromBody] ChangeTournamentStatusRequest request)
     {
-        var result = await _tournamentService.ChangeStatusAsync(id, request);
+        if (!TryGetActorId(out var actorId))
+            return StatusCode(401, new { success = false, message = "Không thể xác định người dùng thực hiện thao tác." });
+
+        var result = await _tournamentService.ChangeStatusAsync(id, request, actorId);
         return StatusCode(result.StatusCode, result.Result);
     }
 

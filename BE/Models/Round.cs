@@ -23,6 +23,8 @@ public class Round
     [Required]
     public int RoundNumber { get; set; }
 
+    public int? AdvanceCount { get; set; }
+
     public DateTime ScheduledStartDate { get; set; }
     public DateTime ScheduledEndDate { get; set; }
 
