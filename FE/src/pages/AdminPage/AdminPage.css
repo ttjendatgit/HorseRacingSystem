@@ -17,9 +17,9 @@
   gap: 20px;
   transition: width 0.2s ease;
   overflow-x: hidden;
-overflow-y: auto;
-scrollbar-width: thin;
-scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -43,7 +43,11 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   background: rgba(255, 255, 255, 0.25);
 }
 
-.ad-sidebar--exp { width: 200px; align-items: flex-start; padding: 16px 12px; }
+.ad-sidebar--exp {
+  width: 200px;
+  align-items: flex-start;
+  padding: 16px 12px;
+}
 
 .ad-sidebar__logo {
   display: flex;
