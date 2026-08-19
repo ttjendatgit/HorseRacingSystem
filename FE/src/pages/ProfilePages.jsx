@@ -6,12 +6,12 @@ import { saveBankAccount, getBankAccounts, createWithdrawal, getWithdrawalHistor
 import { Field, Detail, StatusBadge, msgBox, grid2, btnPrimary, btnSecondary, fieldStyle, fieldLabel, inputBase } from "./ProfileCommon";
 import "./ProfilePages.css";
 
-// QR động của VietQR (cùng engine Sepay) — template standee: logo ngân hàng + sẵn số tiền và nội dung
+// Sử dụng API của vietqr.io để tạo mã QR
 const vietQrUrl = (tx, amount, reference) => {
   const acc = encodeURIComponent(tx?.accountNumber ?? tx?.AccountNumber ?? "");
   const bank = encodeURIComponent(tx?.bankCode ?? tx?.BankCode ?? "MB");
   const holder = encodeURIComponent(tx?.accountHolder ?? tx?.AccountHolder ?? "");
-  return `https://vietqr.app/img?acc=${acc}&bank=${bank}&holder=${holder}&template=standee&amount=${Number(amount || 0)}&des=${encodeURIComponent(reference || "")}`;
+  return `https://img.vietqr.io/image/${bank}-${acc}-compact2.png?amount=${Number(amount || 0)}&addInfo=${encodeURIComponent(reference || "")}&accountName=${holder}`;
 };
 
 /* ─── page component ─── */
@@ -77,23 +77,24 @@ export function SpectatorProfilePage() {
       depositSince.current = new Date();
       loadDepositHistory();
 
-      // Bắt đầu polling sau 5 giây, tối đa 60 lần (5 phút)
+      // Bắt đầu tự động kiểm tra mỗi 3 giây
       let retries = 0;
-      const MAX_RETRIES = 60;
+      const MAX_RETRIES = 100; // ~5 phút
+      const currentTxId = d?.transactionId;
 
-      setTimeout(() => {
-        setDepositStatus("polling");
-        pollRef.current = setInterval(async () => {
-          retries++;
-          if (retries > MAX_RETRIES) {
-            clearInterval(pollRef.current);
-            pollRef.current = null;
-            setDepositStatus("idle");
-            showMsg("error", "Hết thời gian chờ thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.");
-            return;
-          }
-          try {
-            const checkRes = await checkDeposit(depositSince.current);
+      setDepositStatus("polling");
+      pollRef.current = setInterval(async () => {
+        retries++;
+        if (retries > MAX_RETRIES) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setDepositStatus("idle");
+          showMsg("error", "Hết thời gian chờ thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.");
+          return;
+        }
+        try {
+          if (currentTxId) {
+            const checkRes = await checkDeposit(currentTxId);
             const cd = checkRes?.data ?? checkRes;
             if (cd?.completed) {
               clearInterval(pollRef.current);
@@ -107,9 +108,9 @@ export function SpectatorProfilePage() {
                 setWalletBalance(b?.balance ?? b?.Balance ?? 0);
               } catch { /* ignore */ }
             }
-          } catch (err) { console.error("Deposit check failed:", err); }
-        }, 5000);
-      }, 5000);
+          }
+        } catch (err) { console.error("Deposit check failed:", err); }
+      }, 3000);
     } catch (e) {
       showMsg("error", e?.message ?? "Tạo yêu cầu nạp tiền thất bại.");
     }
@@ -473,7 +474,6 @@ export function SpectatorProfilePage() {
                         src={vietQrUrl(depositTx, depositAmount, depositTx.reference)}
                         alt="QR chuyển khoản"
                         style={{ width: 300, height: "auto", borderRadius: 12, border: "1px solid rgba(143,100,32,0.15)" }}
-                        onError={(e) => { e.currentTarget.src = "/qr-nap-tien.png"; }}
                       />
                       <p style={{ margin: "8px 0 0", fontSize: 12, color: "#856404", background: "#fff3cd", padding: "8px 14px", borderRadius: 8 }}>
                         Số tiền và nội dung chuyển khoản đã điền sẵn trên QR. Nếu ngân hàng không tự điền, hãy nhập đúng nội dung bên phải.
@@ -511,7 +511,6 @@ export function SpectatorProfilePage() {
                         src={vietQrUrl(depositTx, depositAmount, depositTx.reference)}
                         alt="QR chuyển khoản"
                         style={{ width: 300, height: "auto", borderRadius: 12, border: "1px solid rgba(143,100,32,0.15)" }}
-                        onError={(e) => { e.currentTarget.src = "/qr-nap-tien.png"; }}
                       />
                       <p style={{ margin: "8px 0 0", fontSize: 12, color: "#856404", background: "#fff3cd", padding: "8px 14px", borderRadius: 8 }}>
                         Số tiền và nội dung chuyển khoản đã điền sẵn trên QR. Nếu ngân hàng không tự điền, hãy nhập đúng nội dung bên phải.
@@ -541,7 +540,7 @@ export function SpectatorProfilePage() {
                       </div>
                       <button style={{ ...btnPrimary, marginTop: 4, fontSize: 12, padding: "6px 16px" }} onClick={async () => {
                         try {
-                          const checkRes = await checkDeposit(depositSince.current);
+                          const checkRes = await checkDeposit(depositTx?.transactionId);
                           const cd = checkRes?.data ?? checkRes;
                           if (cd?.completed) {
                             clearInterval(pollRef.current);

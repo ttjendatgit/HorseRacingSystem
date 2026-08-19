@@ -11,7 +11,7 @@ public interface ITransactionRepository
     Task<Transaction?> GetByReferenceAsync(string reference);
     Task<Transaction?> GetLatestByUserAsync(Guid userId);
     Task<List<Transaction>> GetHistoryByUserAsync(Guid userId);
-    Task<bool> HasCompletedSinceAsync(Guid userId, DateTime since);
+    Task<Transaction?> GetByIdAsync(Guid id);
     Task<Transaction?> GetPendingByRefAsync(string reference);
     Task<bool> ExistsBySepayIdAsync(long sepayTransactionId);
     Task<bool> TryCompleteByRefAsync(string reference, long sepayTransactionId);

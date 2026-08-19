@@ -47,14 +47,13 @@ public class SepayController : ControllerBase
 
     [Authorize]
     [HttpGet("check")]
-    public async Task<ActionResult> CheckTransaction([FromQuery] DateTime since)
+    public async Task<ActionResult> CheckTransaction([FromQuery] Guid transactionId)
     {
         var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(uid, out var userId)) return Unauthorized();
-        // Ensure UTC and add 5-min buffer to account for clock skew
-        var sinceUtc = since.Kind == DateTimeKind.Local ? since.ToUniversalTime() : since;
-        sinceUtc = sinceUtc.AddMinutes(-5);
-        var result = await _transactionService.CheckTransactionAsync(userId, sinceUtc);
+
+        var result = await _transactionService.CheckTransactionAsync(userId, transactionId);
+        if (result.StatusCode == 404) return NotFound();
         return StatusCode(result.StatusCode, result.Result);
     }
 

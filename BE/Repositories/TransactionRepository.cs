@@ -45,12 +45,9 @@ public class TransactionRepository : ITransactionRepository
             .ToListAsync();
     }
 
-    public Task<bool> HasCompletedSinceAsync(Guid userId, DateTime since)
+    public Task<Transaction?> GetByIdAsync(Guid id)
     {
-        return _db.Transactions
-            .AnyAsync(t => t.UserId == userId
-                && t.Status == "completed"
-                && t.CompletedAt >= since);
+        return _db.Transactions.FirstOrDefaultAsync(t => t.Id == id);
     }
 
     public Task<Transaction?> GetPendingByRefAsync(string reference)
