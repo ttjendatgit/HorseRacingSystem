@@ -255,6 +255,27 @@ function RefereeHealthCheckPage() {
     [assignments]
   );
 
+  // Lọc danh sách ngựa đã được kiểm tra 
+  const availableEntries = useMemo(() => {
+    return entries.filter((entry) => {
+
+      const horseChecks = healthChecks.filter((c) => c.horseId === entry.horseId);
+      
+      if (horseChecks.length === 0) return true;
+
+      const sortedChecks = [...horseChecks].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      const latestCheck = sortedChecks[0];
+
+      if (latestCheck.approvedToRace || latestCheck.status === "Failed") {
+        return false; 
+      }
+
+      return true;
+    });
+  }, [entries, healthChecks]);
+
   const { total, passed, failed, recheck } = useMemo(() => {
     const t = healthChecks.length;
     const p = healthChecks.filter((c) => c.status === "Passed").length;
@@ -375,7 +396,7 @@ function RefereeHealthCheckPage() {
                       required
                     >
                       <option value="">-- Chọn ngựa --</option>
-                      {entries.map((entry) => (
+                      {availableEntries.map((entry) => (
                         <option key={entry.horseId} value={entry.horseId}>
                           {entry.horseName}
                           {entry.jockeyName
@@ -384,6 +405,12 @@ function RefereeHealthCheckPage() {
                         </option>
                       ))}
                     </select>
+
+                    {availableEntries.length === 0 && entries.length > 0 && (
+                      <p className="rh-hint" style={{ color: "#10B981" }}>
+                        Tất cả ngựa đã được kiểm tra xong.
+                      </p>
+                    )}
                     {entries.length === 0 && (
                       <p className="rh-hint">
                         Không có ngựa nào trong cuộc đua này.
@@ -440,7 +467,7 @@ function RefereeHealthCheckPage() {
                     <button
                       type="submit"
                       className="rh-btn rh-btn--primary"
-                      disabled={submitting}
+                      disabled={submitting || availableEntries.length === 0}
                     >
                       {submitting ? "Đang gửi..." : "Gửi kiểm tra"}
                     </button>
