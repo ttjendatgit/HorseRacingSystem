@@ -141,6 +141,7 @@ public interface IAdminService
     Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId);
     Task<ServiceResult<bool>> RejectRaceResultAsync(Guid raceId, string reason);
     Task<ServiceResult<object>> GetPredictionsAsync();
+    Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penalty);
 }
 
 public interface ILiveResultService

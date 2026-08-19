@@ -29,6 +29,7 @@ public class AdminService : IAdminService
     private readonly IRaceEntryRepository _entryRepo;
     private readonly IRaceReportRepository _reportRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IViolationRepository _violationRepo;
 
     public AdminService(
         IUserRepository userRepo,
@@ -45,7 +46,8 @@ public class AdminService : IAdminService
         IRaceResultRepository raceResultRepo,
         IRaceEntryRepository entryRepo,
         IRaceReportRepository reportRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IViolationRepository violationRepo)
     {
         _userRepo = userRepo;
         _registrationRepo = registrationRepo;
@@ -62,6 +64,7 @@ public class AdminService : IAdminService
         _entryRepo = entryRepo;
         _reportRepo = reportRepo;
         _unitOfWork = unitOfWork;
+        _violationRepo = violationRepo;
     }
 
     public async Task<ServiceResult<AdminDashboardResponse>> GetDashboardAsync()
@@ -396,7 +399,6 @@ public class AdminService : IAdminService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy đăng ký");
             }
 
-            // Create new user
             var newUser = new User
             {
                 Id = Guid.NewGuid(),
@@ -411,7 +413,6 @@ public class AdminService : IAdminService
 
             await _userRepo.AddAsync(newUser);
 
-            // Update registration
             registration.Status = RegistrationStatus.Approved;
             registration.ReviewedAt = DateTime.UtcNow;
             registration.ApprovedUserId = newUser.Id;
@@ -534,12 +535,10 @@ public class AdminService : IAdminService
             if (raceResult == null)
                 return ServiceResult<bool>.Fail(404, "Chưa có kết quả cuộc đua. Trọng tài phải nộp kết quả trước.");
 
-            // Check if there is at least one referee report
             var hasReport = await _reportRepo.GetByRaceAsync(raceId) != null;
             if (!hasReport)
                 return ServiceResult<bool>.Fail(400, "Chưa có báo cáo từ trọng tài. Trọng tài phải nộp báo cáo trước khi duyệt kết quả.");
 
-            // Wrap in transaction: if approval fails, race + result roll back
             using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
             try
             {
@@ -548,7 +547,6 @@ public class AdminService : IAdminService
                 raceResult.ApprovedAt = DateTime.UtcNow;
                 await _raceResultRepo.UpdateAsync(raceResult);
 
-                // Ghi kết quả vào entry + cập nhật thành tích ngựa/kỵ sĩ
                 var entries = await _entryRepo.GetByRaceAsync(raceId);
                 foreach (var entry in entries)
                 {
@@ -746,5 +744,33 @@ public class AdminService : IAdminService
                 (raceAssignedJockey != null ? "Đã phân công cuộc đua" : null),
             AssignedJockeyIds = assignedJockeyIds
         };
+    }
+
+    public async Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penalty)
+    {
+        try
+        {
+            var violation = await _violationRepo.GetByIdAsync(violationId);
+            if (violation == null)
+            {
+                return ServiceResult<bool>.Fail(404, "Không tìm thấy vi phạm này.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(violation.Penalty))
+            {
+                return ServiceResult<bool>.Fail(400, "Vi phạm này đã được xử lý trước đó.");
+            }
+
+            violation.Penalty = penalty;
+
+            await _violationRepo.UpdateAsync(violation);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<bool>.Fail(500, $"Lỗi xử lý vi phạm: {ex.Message}");
+        }
     }
 }
