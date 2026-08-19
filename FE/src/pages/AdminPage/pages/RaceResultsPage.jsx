@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
 import { apiToVNDate } from "../../../utils/vnDateTime";
 
@@ -27,8 +27,8 @@ const STATUS_LABEL = {
   finished: "Đã kết thúc",
   inprogress: "Đang đua",
   scheduled: "Sắp diễn ra",
-  registrationopen: "Mở đăng ký",
-  registrationclosed: "Đóng đăng ký",
+  registrationopen: "Chuẩn bị",
+  registrationclosed: "Chuẩn bị",
   cancelled: "Đã hủy",
 };
 

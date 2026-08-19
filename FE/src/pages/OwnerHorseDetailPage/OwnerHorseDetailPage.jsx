@@ -177,7 +177,16 @@ function OwnerHorseDetailPage() {
                   <span className={`horse-detail-status horse-detail-status--${statusLabel.toLowerCase()}`}>
                     {statusLabel}
                   </span>
-                  {!isJockeyRole() && (
+                  {(horse.isArchived ?? horse.IsArchived) ? (
+                    <span
+                      className="horse-detail-status"
+                      style={{ background: "rgba(71,85,105,0.14)", color: "#334155" }}
+                    >
+                      Đã lưu trữ
+                    </span>
+                  ) : null}
+                  {/* Editing an archived Horse is backend-rejected (HorseService.UpdateHorseAsync) — hidden here to match. */}
+                  {!isJockeyRole() && !(horse.isArchived ?? horse.IsArchived) && (
                     <Link className="secondary-button" to={`/owner/horses/${horse.id}/edit`}>
                       Chỉnh sửa hồ sơ
                     </Link>

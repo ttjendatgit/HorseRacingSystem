@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerTournaments } from "../../services/ownerApi";
-import { canRegisterTournament } from "../../utils/tournamentRegistration";
+import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
 import { isJockeyRole } from "../../services/authRoleUtils";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentListPage.css";
 
-const statusFilters = ["Tất cả", "Đang diễn ra", "Mở", "Đã đóng"];
+const statusFilters = ["Tất cả", "Mở đăng ký", "Đã đủ số lượng tham gia", "Đã đóng đăng ký", "Đã kết thúc đăng ký", "Giải đã kết thúc", "Giải đã hủy"];
 
 const formatDate = (value) => {
   const date = new Date(value);
@@ -15,30 +15,26 @@ const formatDate = (value) => {
     : new Intl.DateTimeFormat("vi-VN", { month: "short", day: "numeric", year: "numeric" }).format(date);
 };
 
-// Task B Final §3: badge label derived from the same canRegisterTournament rule used by the
-// registration button/page — Ongoing keeps its own informational label, everything else that
-// isn't currently registerable reads "Đã đóng" (never RaceStatus- or IsActive-derived).
-const getTournamentStatusLabel = (tournament) => {
-  const rawStatus = tournament?.statusName ?? tournament?.StatusName;
-  if (rawStatus === "Ongoing") return "Đang diễn ra";
-  return canRegisterTournament(tournament) ? "Mở" : "Đã đóng";
+const mapTournament = (tournament) => {
+  const registrationState = getTournamentRegistrationState(tournament);
+  return {
+    id: tournament?.id ?? tournament?.Id,
+    name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
+    description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
+    startDate: tournament?.startDate ?? tournament?.StartDate,
+    endDate: tournament?.endDate ?? tournament?.EndDate,
+    dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
+    status: registrationState.label,
+    statusKey: registrationState.key,
+    canRegister: registrationState.canRegister,
+    raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
+    roundCount: tournament?.roundCount ?? tournament?.RoundCount ?? 0,
+    prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
+    venue: tournament?.venue ?? tournament?.Venue ?? "",
+    surfaceType: tournament?.surfaceType ?? tournament?.SurfaceType ?? "",
+    imageUrl: tournament?.imageUrl ?? tournament?.ImageUrl,
+  };
 };
-
-const mapTournament = (tournament) => ({
-  id: tournament?.id ?? tournament?.Id,
-  name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
-  description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
-  startDate: tournament?.startDate ?? tournament?.StartDate,
-  endDate: tournament?.endDate ?? tournament?.EndDate,
-  dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
-  status: getTournamentStatusLabel(tournament),
-  canRegister: canRegisterTournament(tournament),
-  raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
-  roundCount: tournament?.roundCount ?? tournament?.RoundCount ?? 0,
-  prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
-  venue: tournament?.venue ?? tournament?.Venue ?? "",
-  surfaceType: tournament?.surfaceType ?? tournament?.SurfaceType ?? "",
-});
 
 function OwnerTournamentListPage() {
   // Task B Final Correction §5: Register-to-Tournament is Owner-only — hidden for Jockey (UX
@@ -74,12 +70,13 @@ function OwnerTournamentListPage() {
       t.name.toLowerCase().includes(query.toLowerCase())
     ), [query, status, tournaments]);
 
-  const totalOpen = tournaments.filter(t => t.status === "Mở" || t.status === "Đang diễn ra").length;
-  const totalClosed = tournaments.filter(t => t.status === "Đã đóng").length;
+  const totalOpen = tournaments.filter(t => t.canRegister).length;
+  const totalClosed = tournaments.filter(t => !t.canRegister).length;
 
-  const statusClass = (s) => {
-    if (s === "Đang diễn ra") return "live";
-    if (s === "Mở") return "open";
+  const statusClass = (key) => {
+    if (key === "open") return "open";
+    if (key === "registration-ended") return "live";
+    if (key === "full") return "full";
     return "closed";
   };
 
@@ -138,9 +135,9 @@ function OwnerTournamentListPage() {
                     }
                   >
                     <div className="otl-card__banner-top">
-                      <span className={`otl-badge otl-badge--${statusClass(t.status)}`}>{t.status}</span>
+                      <span className={`otl-badge otl-badge--${statusClass(t.statusKey)}`}>{t.status}</span>
                       <div className="otl-card__banner-right">
-                        {t.status !== "Đã đóng" && (
+                        {t.statusKey !== "closed" && (
                           <span className="otl-countdown">{t.raceCount} cuộc đua</span>
                         )}
                       </div>
@@ -149,7 +146,7 @@ function OwnerTournamentListPage() {
                       <h4>Giải đấu</h4>
                       <p>{t.name}</p>
                     </div>
-                    {t.status === "Đang diễn ra" && (
+                    {t.statusKey === "registration-ended" && (
                       <div className="otl-card__progress">
                         <div className="otl-card__progress-fill" style={{ width: "60%" }} />
                       </div>

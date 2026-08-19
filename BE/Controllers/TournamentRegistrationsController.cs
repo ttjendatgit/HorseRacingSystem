@@ -61,6 +61,10 @@ public class TournamentRegistrationsController : ControllerBase
             return NotFound(new { message = "Không tìm thấy ngựa của bạn" });
         if (horse.ApprovalStatus != ApprovalStatus.Approved)
             return BadRequest(new { message = "Ngựa chưa được admin phê duyệt" });
+        // Task C1 §1: an archived Horse (participation-history-preserving soft delete) is never
+        // eligible for a NEW Tournament registration.
+        if (horse.IsArchived)
+            return BadRequest(new { message = "Ngựa đã được lưu trữ (archive) và không thể đăng ký giải đấu mới." });
 
         // Task B Correction 2 §1 / locked spec §5, §21.1: an Owner may have at most ONE active
         // (Pending/Approved) registration per Tournament, regardless of how many Horses they
@@ -88,6 +92,19 @@ public class TournamentRegistrationsController : ControllerBase
         // owned by the same Owner may freely join an overlapping Tournament.
         if (await HasOverlappingActiveTournamentAsync(r.HorseId, r.TournamentId, tournament.StartDate, tournament.EndDate))
             return BadRequest(new { message = "Ngựa đang tham gia một giải đấu có thời gian trùng." });
+
+        // Capacity gate (new requirement): once Approved registrations reach Tournament.MaxParticipants,
+        // no NEW submission may be accepted — checked last, right before the row would be created,
+        // so it never blocks a request that a prior guard would already have rejected for a more
+        // specific reason. Existing Pending registrations created before capacity filled are
+        // untouched by this check (it only ever runs on a fresh submit).
+        if (tournament.MaxParticipants.HasValue)
+        {
+            var approvedCount = await _db.TournamentHorseRegistrations.CountAsync(x =>
+                x.TournamentId == r.TournamentId && x.Status == RegistrationStatus.Approved);
+            if (approvedCount >= tournament.MaxParticipants.Value)
+                return BadRequest(new { message = "Giải đấu đã đủ số lượng ngựa tham gia. Hẹn bạn ở giải đấu tiếp theo." });
+        }
 
         var registration = new TournamentHorseRegistration
         {
@@ -125,6 +142,11 @@ public class TournamentRegistrationsController : ControllerBase
             id = x.Id,
             tournamentId = x.TournamentId,
             tournamentName = x.Tournament?.Name,
+            // Task C1 §3: needed to group "My Participations" into Upcoming/Ongoing/Finished by
+            // Tournament.Status, not just registration.Status.
+            tournamentStatus = x.Tournament?.Status.ToString(),
+            tournamentStartDate = x.Tournament?.StartDate,
+            tournamentEndDate = x.Tournament?.EndDate,
             horseId = x.HorseId,
             horseName = x.Horse?.Name,
             status = x.Status.ToString(),
@@ -132,6 +154,53 @@ public class TournamentRegistrationsController : ControllerBase
             createdAt = x.CreatedAt,
             approvedAt = x.ApprovedAt
         }));
+    }
+
+    // ── Owner: rút đăng ký ──
+    // Task C1 §2: Owner-only, ownership-enforced. Pending -> Withdrawn always allowed (while the
+    // Tournament is still Published). Approved -> Withdrawn only if no RaceEntry has yet been
+    // created for that Horse in that Tournament — once assigned to a Race, withdrawal is refused
+    // with a friendly message rather than silently orphaning a RaceEntry.
+    [HttpPost("{id:guid}/withdraw")]
+    [Authorize(Roles = "HorseOwner")]
+    public async Task<ActionResult> Withdraw(Guid id)
+    {
+        var owner = await _db.Owners.FirstOrDefaultAsync(o => o.UserId == GetUserId());
+        if (owner == null)
+            return NotFound(new { message = "Không tìm thấy hồ sơ chủ ngựa" });
+
+        var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x => x.Id == id);
+        if (registration == null)
+            return NotFound(new { message = "Không tìm thấy đăng ký" });
+
+        // Ownership check collapses to 404 (not 403) — matches the existing convention elsewhere
+        // in this controller of not revealing whether a resource exists to a non-owning caller.
+        if (registration.OwnerId != owner.Id)
+            return NotFound(new { message = "Không tìm thấy đăng ký" });
+
+        if (registration.Status != RegistrationStatus.Pending && registration.Status != RegistrationStatus.Approved)
+            return BadRequest(new { message = $"Không thể rút đăng ký ở trạng thái {registration.Status}." });
+
+        var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == registration.TournamentId);
+        if (tournament == null)
+            return NotFound(new { message = "Không tìm thấy giải đấu" });
+        if (tournament.Status != TournamentStatus.Published)
+            return BadRequest(new { message = "Chỉ có thể rút đăng ký khi giải đấu đang ở trạng thái Đã công bố." });
+
+        if (registration.Status == RegistrationStatus.Approved)
+        {
+            var hasRaceEntry = await _db.RaceEntries.AnyAsync(e =>
+                e.HorseId == registration.HorseId && e.Race != null && e.Race.TournamentId == registration.TournamentId);
+            if (hasRaceEntry)
+                return BadRequest(new { message = "Ngựa đã được phân công vào cuộc đua trong giải này — không thể rút đăng ký." });
+        }
+
+        // Reuses the existing Note field (same convention as Reject) — no new schema field
+        // invented for this; there is no WithdrawnAt-equivalent timestamp column to set either.
+        registration.Status = RegistrationStatus.Withdrawn;
+        registration.Note = "Đã rút bởi chủ ngựa";
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { message = "Đã rút đăng ký." });
     }
 
     // ── Task B §8: Admin minimum display — Approved/Pending counts for one Tournament ──

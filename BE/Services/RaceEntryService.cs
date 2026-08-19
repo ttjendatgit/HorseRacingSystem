@@ -1,4 +1,4 @@
-using HorseRacing.Data;
+﻿using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
@@ -30,14 +30,23 @@ public class RaceEntryService : IRaceEntryService
         _db = db;
     }
 
+    private static bool DirectRaceRegistrationDisabled => true;
+
     public async Task<ServiceResult<object>> RegisterAsync(Guid userId, Guid horseId, Guid raceId, RaceRegistrationRequest request)
     {
+        if (DirectRaceRegistrationDisabled)
+        {
+            return ServiceResult<object>.Fail(400,
+                "Đăng ký trực tiếp vào cuộc đua không còn được hỗ trợ. Vui lòng đăng ký tham gia giải đấu.");
+        }
         var owner = await _owners.GetByUserIdAsync(userId);
         if (owner == null) return ServiceResult<object>.Fail(404, "Không tìm thấy hồ sơ chủ sở hữu");
         var horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         if (horse == null) return ServiceResult<object>.Fail(404, "Không tìm thấy ngựa");
         if (horse.ApprovalStatus != ApprovalStatus.Approved)
             return ServiceResult<object>.Fail(400, "Chỉ ngựa đã được phê duyệt mới có thể đăng ký tham gia");
+        if (horse.IsArchived)
+            return ServiceResult<object>.Fail(400, "Ngựa đã được lưu trữ (archive) và không thể đăng ký cuộc đua mới");
 
         var race = await _races.GetByIdAsync(raceId);
         if (race == null) return ServiceResult<object>.Fail(404, "Không tìm thấy cuộc đua");

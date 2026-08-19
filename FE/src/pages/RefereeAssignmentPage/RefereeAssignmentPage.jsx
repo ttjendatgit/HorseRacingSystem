@@ -311,7 +311,7 @@ export default function RefereeAssignmentPage() {
             <span className="ra-kpi__label">Tổng số</span>
             <strong className="ra-kpi__value">{total}</strong>
             <span className="ra-kpi__trend">
-              {confirmed} da xac nhan &middot; {pending} cho
+              {confirmed} đã xác nhận &middot; {pending} chờ
             </span>
           </div>
           <div className="ra-kpi">
@@ -319,7 +319,7 @@ export default function RefereeAssignmentPage() {
             <strong className="ra-kpi__value">{confirmed}</strong>
             <span className="ra-kpi__trend">
               {total > 0
-                ? Math.round((confirmed / total) * 100) + "% tong so"
+                ? Math.round((confirmed / total) * 100) + "% tổng số"
                 : "Chưa có dữ liệu"}
             </span>
           </div>

@@ -82,6 +82,10 @@ public class TournamentResponse
     public string? SurfaceType { get; set; }
     public int? MinParticipants { get; set; }
     public int? MaxParticipants { get; set; }
+    // Task C1 capacity gate: count of TournamentHorseRegistration rows with Status == Approved
+    // for this Tournament — the Owner registration page needs this to know whether capacity is
+    // full without a second round-trip (Pending/Rejected/Withdrawn never count here).
+    public int ApprovedRegistrationCount { get; set; }
     public int MaxRounds { get; set; }
     /// <summary>Populated by ChangeStatusAsync's Cancelled transition (Phase4B) with the acting user's Id.</summary>
     public Guid? CancelledBy { get; set; }

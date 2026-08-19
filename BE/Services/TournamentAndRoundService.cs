@@ -1008,6 +1008,11 @@ public class TournamentService : ITournamentService
     {
         var stats = await CalculateStatsAsync(tournament);
         var nextTransitions = GetNextTransitions(tournament.Status);
+        // Task C1 capacity gate: distinct from Stats.HorseCount, which counts distinct Horses
+        // across actual RaceEntries — this counts Approved TournamentHorseRegistration rows,
+        // the figure the Owner registration gate and UI need.
+        var approvedRegistrationCount = await _db.TournamentHorseRegistrations
+            .CountAsync(x => x.TournamentId == tournament.Id && x.Status == RegistrationStatus.Approved);
 
         return new TournamentResponse
         {
@@ -1036,6 +1041,7 @@ public class TournamentService : ITournamentService
             SurfaceType = tournament.SurfaceType?.ToString(),
             MinParticipants = tournament.MinParticipants,
             MaxParticipants = tournament.MaxParticipants,
+            ApprovedRegistrationCount = approvedRegistrationCount,
             MaxRounds = tournament.MaxRounds,
             CancelledBy = tournament.CancelledBy,
             CancellationReason = tournament.CancellationReason,

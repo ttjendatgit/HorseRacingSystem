@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   getInjuries,
   createInjury,
   markRecovered,
 } from "../../services/managementApi";
+import { getMyAssignments } from "../../services/refereeAssignmentApi";
+import { getRaceEntries } from "../../services/refereeApi";
+
 import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
 import "./RefereeInjuryPage.css";
 
@@ -68,6 +71,10 @@ function RefereeInjuryPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
 
+  const [assignments, setAssignments] = useState([]);
+  const [selectedRaceId, setSelectedRaceId] = useState("");
+  const [entries, setEntries] = useState([]);
+
   const [form, setForm] = useState({
     horseId: "",
     injuryType: "Fracture",
@@ -98,6 +105,52 @@ function RefereeInjuryPage() {
   useEffect(() => {
     loadInjuries();
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const loadAssignments = async () => {
+      try {
+        const data = await getMyAssignments();
+        if (!ignore) {
+          setAssignments(
+            Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []
+          );
+        }
+      } catch (e) {
+        console.error("Lỗi khi tải danh sách cuộc đua:", e);
+      }
+    };
+    loadAssignments();
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRaceId) {
+      setEntries([]);
+      return;
+    }
+    let ignore = false;
+    const loadEntries = async () => {
+      try {
+        const data = await getRaceEntries(selectedRaceId);
+        if (!ignore) {
+          setEntries(
+            Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []
+          );
+        }
+      } catch (e) {
+        console.error("Lỗi khi tải danh sách ngựa:", e);
+        if (!ignore) setEntries([]);
+      }
+    };
+    loadEntries();
+    return () => { ignore = true; };
+  }, [selectedRaceId]);
+
+  const assignedRaces = useMemo(
+    () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
+    [assignments]
+  );
 
   const activeCount = injuries.filter(
     (i) =>
@@ -150,6 +203,7 @@ function RefereeInjuryPage() {
         bodyPart: "",
         treatment: "",
       });
+      setSelectedRaceId("");
       loadInjuries();
     } catch (e) {
       setError(e.message || "Có lỗi xảy ra.");
@@ -259,18 +313,45 @@ function RefereeInjuryPage() {
             <form className="ri-form" onSubmit={handleSubmit}>
               <h3 className="ri-form-title">Ghi nhận chấn thương</h3>
               <div className="ri-form-grid">
+                
+                {/* 1. Dropdown Chọn Cuộc đua */}
                 <div className="ri-fgroup">
-                  <label>Mã ngựa</label>
-                  <input
-                    type="text"
-                    placeholder="Nhập Horse ID"
-                    value={form.horseId}
-                    onChange={(e) =>
-                      setForm({ ...form, horseId: e.target.value })
-                    }
+                  <label>Cuộc đua</label>
+                  <select
+                    value={selectedRaceId}
+                    onChange={(e) => {
+                      setSelectedRaceId(e.target.value);
+                      setForm({ ...form, horseId: "" }); // Đổi giải thì reset mã ngựa
+                    }}
                     required
-                  />
+                  >
+                    <option value="">-- Chọn cuộc đua --</option>
+                    {assignedRaces.map((a) => (
+                      <option key={a.raceId} value={a.raceId}>
+                        {a.raceName || a.raceId}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
+                {/* 2. Dropdown Chọn Ngựa thay cho Input cũ */}
+                <div className="ri-fgroup">
+                  <label>Ngựa</label>
+                  <select
+                    value={form.horseId}
+                    onChange={(e) => setForm({ ...form, horseId: e.target.value })}
+                    required
+                    disabled={!selectedRaceId} // Khóa nếu chưa chọn giải
+                  >
+                    <option value="">-- Chọn ngựa --</option>
+                    {entries.map((entry) => (
+                      <option key={entry.horseId} value={entry.horseId}>
+                        {entry.horseName} {entry.jockeyName ? `(Nài: ${entry.jockeyName})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="ri-fgroup">
                   <label>Loại chấn thương</label>
                   <select

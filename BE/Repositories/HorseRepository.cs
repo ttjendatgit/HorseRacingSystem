@@ -34,6 +34,9 @@ public class HorseRepository : IHorseRepository
             .Include(h => h.RaceEntries)
                 .ThenInclude(e => e.Race)
                     .ThenInclude(r => r.Track)
+            .Include(h => h.RaceEntries)
+                .ThenInclude(e => e.Race)
+                    .ThenInclude(r => r.Round)
             .Where(h => h.OwnerId == ownerId)
             .ToListAsync();
 

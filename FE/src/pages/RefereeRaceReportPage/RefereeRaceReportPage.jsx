@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import { createReport, getRaceReport, getRaceEntries, submitRaceResult } from "../../services/refereeApi";
 import "./RefereeRaceReportPage.css";
@@ -45,8 +45,8 @@ const MONTH_FULL = [
 // Race progress (RaceStatus) — event lifecycle only.
 const RACE_STATUS_LABEL = {
   Scheduled: "Đã lên lịch",
-  RegistrationOpen: "Mở đăng ký",
-  RegistrationClosed: "Đóng đăng ký",
+  RegistrationOpen: "Chuẩn bị",
+  RegistrationClosed: "Chuẩn bị",
   InProgress: "Đang đua",
   Finished: "Đã kết thúc",
   Cancelled: "Đã hủy",

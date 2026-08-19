@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { request } from "../services/apiClient";
-import { getTournamentRounds } from "../services/adminApi";
+import { getTournamentRounds, getTournamentRaces } from "../services/adminApi";
 import { Input, Select } from "./ui/Primitives";
 import { apiToVNInput, apiToVNDisplay, apiToVNDate, apiToUtcDate, vnInputToApiUtc } from "../utils/vnDateTime";
 
@@ -19,6 +19,8 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
   const [tournamentRounds, setTournamentRounds] = useState([]);
   const [roundsLoading, setRoundsLoading] = useState(false);
   const [roundsError, setRoundsError] = useState("");
+  const [roundRaces, setRoundRaces] = useState([]);
+  const [roundRacesLoading, setRoundRacesLoading] = useState(false);
 
   // Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js. All
   // Tournament/Round/Race datetimes shown or entered here go through that single shared utility,
@@ -45,6 +47,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
   const [selectedRefereeIds, setSelectedRefereeIds] = useState(raceData?._selectedRefereeIds || []);
 
+  const currentRaceId = raceData?.id || raceData?.Id || "";
   const selectedTrack = tracks.find((t) => (t.id || t.Id) === form.trackId);
   const editRoundLabel = isEdit
     ? [raceData?.roundNumber ?? raceData?.RoundNumber, raceData?.roundName ?? raceData?.RoundName].filter(Boolean).join(" — ")
@@ -57,6 +60,21 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
   const selectedRound = tournamentRounds.find((r) => (r.id ?? r.Id) === currentRoundId);
   const roundStartRaw = selectedRound?.scheduledStartDate ?? selectedRound?.ScheduledStartDate;
   const roundEndRaw = selectedRound?.scheduledEndDate ?? selectedRound?.ScheduledEndDate;
+  const roundNumber = selectedRound?.roundNumber ?? selectedRound?.RoundNumber;
+  const roundAdvanceCountRaw = selectedRound?.advanceCount ?? selectedRound?.AdvanceCount;
+  const roundAdvanceCount = roundAdvanceCountRaw === null || roundAdvanceCountRaw === undefined || roundAdvanceCountRaw === ""
+    ? null
+    : Number(roundAdvanceCountRaw);
+  const siblingQualificationSlots = roundRaces.reduce((total, race) => {
+    const id = race?.id ?? race?.Id;
+    if (currentRaceId && String(id) === String(currentRaceId)) return total;
+    const slots = race?.qualificationSlots ?? race?.QualificationSlots;
+    const numeric = slots === null || slots === undefined ? 0 : Number(slots);
+    return total + (Number.isFinite(numeric) ? numeric : 0);
+  }, 0);
+  const remainingRoundSlots = roundAdvanceCount === null
+    ? null
+    : Math.max(roundAdvanceCount - siblingQualificationSlots, 0);
 
   const loadTracks = async () => {
     try {
@@ -96,6 +114,30 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
     loadRounds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournamentId]);
+
+  useEffect(() => {
+    if (!tournamentId || !currentRoundId) {
+      setRoundRaces([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRoundRacesLoading(true);
+    getTournamentRaces(tournamentId)
+      .then((list) => {
+        if (cancelled) return;
+        const races = Array.isArray(list) ? list : [];
+        setRoundRaces(races.filter((race) => String(race.roundId ?? race.RoundId) === String(currentRoundId)));
+      })
+      .catch(() => {
+        if (!cancelled) setRoundRaces([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRoundRacesLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [tournamentId, currentRoundId]);
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -137,6 +179,31 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
       setError("Vui lòng nhập Số ngựa tối đa lớn hơn 0.");
       return;
     }
+    if (form.qualificationSlots === "") {
+      setError("Vui lòng nhập Số suất đi tiếp từ cuộc đua.");
+      return;
+    }
+
+    const qualificationSlots = Number(form.qualificationSlots);
+    const maxParticipants = Number(form.maxParticipants);
+    if (!Number.isInteger(qualificationSlots) || qualificationSlots < 0) {
+      setError("Số suất đi tiếp từ cuộc đua không được âm.");
+      return;
+    }
+    if (roundAdvanceCount === 0 && qualificationSlots !== 0) {
+      setError("Vòng chung kết yêu cầu 0 suất đi tiếp.");
+      return;
+    }
+    if (roundAdvanceCount !== null && roundAdvanceCount > 0) {
+      if (qualificationSlots >= maxParticipants) {
+        setError("Số suất đi tiếp từ cuộc đua phải nhỏ hơn Số ngựa tối đa.");
+        return;
+      }
+      if (qualificationSlots > remainingRoundSlots) {
+        setError(`Số suất đi tiếp vượt quá số suất còn lại của vòng (${remainingRoundSlots}).`);
+        return;
+      }
+    }
 
     // Phase5B fix3: friendly client-side containment check before hitting the API — the backend
     // stays authoritative (same rules re-checked there), this just avoids a round-trip for the
@@ -167,10 +234,10 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
         trackId: form.trackId || null,
         name: form.name,
         distance: Number(form.distance),
-        maxParticipants: Number(form.maxParticipants),
+        maxParticipants: maxParticipants,
         scheduledAt: vnInputToApiUtc(form.scheduledAt),
         scheduledEndAt: form.scheduledEndAt ? vnInputToApiUtc(form.scheduledEndAt) : null,
-        qualificationSlots: form.qualificationSlots === "" ? null : Number(form.qualificationSlots),
+        qualificationSlots: qualificationSlots,
       };
 
       const raceId = raceData?.id || raceData?.Id;
@@ -276,8 +343,10 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
               fall inside before entering times below. */}
           {selectedRound && (
             <div style={{padding:"10px 14px",borderRadius:10,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",marginBottom:16,fontSize:13}}>
-              <div><span style={{color:"var(--hr-muted)"}}>Vòng đấu: </span><strong style={{color:"var(--hr-paper)"}}>{(selectedRound.roundNumber ?? selectedRound.RoundNumber)} — {(selectedRound.name ?? selectedRound.Name)}</strong></div>
+              <div><span style={{color:"var(--hr-muted)"}}>Vòng đấu: </span><strong style={{color:"var(--hr-paper)"}}>Vòng {roundNumber} — {(selectedRound.name ?? selectedRound.Name)}</strong></div>
               <div><span style={{color:"var(--hr-muted)"}}>Thời gian vòng: </span><strong style={{color:"var(--hr-paper)"}}>{apiToVNDisplay(roundStartRaw)} → {apiToVNDisplay(roundEndRaw)}</strong></div>
+              {roundAdvanceCount !== null && <div><span style={{color:"var(--hr-muted)"}}>Suất đi tiếp: </span><strong style={{color:"var(--hr-paper)"}}>Vòng {roundNumber} cần tổng cộng {roundAdvanceCount} suất đi tiếp.</strong></div>}
+              {remainingRoundSlots !== null && <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-muted)"}}>{roundRacesLoading ? "Đang tính số suất còn lại..." : `Vòng còn ${remainingRoundSlots} suất đi tiếp chưa phân bổ.`}</p>}
               <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Cuộc đua phải nằm hoàn toàn trong thời gian của Vòng đấu.</p>
             </div>
           )}
@@ -323,10 +392,10 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
             <Input label="Khoảng cách cuộc đua (m) *" type="number" value={form.distance} onChange={(e) => updateForm("distance", e.target.value)} min="100" step="100" hint="Quãng đường thi đấu của cuộc đua, không phải chiều dài vật lý của đường đua." />
-            <Input label="Số ngựa tối đa *" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" placeholder="Nhập số ngựa" hint="Không được vượt quá sức chứa của đường đua." />
+            <Input label="Số ngựa tối đa *" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" placeholder="Nhập số ngựa" hint="Sức chứa tối đa của cuộc đua; số ngựa thực tế có thể ít hơn. Không được vượt quá sức chứa của đường đua." />
           </div>
 
-          <Input label="Số ngựa đi tiếp *" type="number" value={form.qualificationSlots} onChange={(e) => updateForm("qualificationSlots", e.target.value)} min="0" hint="Nhập 0 nếu đây là Cuộc đua chung kết." />
+          <Input label="Số suất đi tiếp từ cuộc đua *" type="number" value={form.qualificationSlots} onChange={(e) => updateForm("qualificationSlots", e.target.value)} min="0" hint={roundAdvanceCount === 0 ? "Vòng chung kết yêu cầu 0 suất đi tiếp." : remainingRoundSlots !== null ? `Tối đa ${remainingRoundSlots} suất cho cuộc đua này trước khi vượt AdvanceCount của vòng.` : "Nhập số suất đi tiếp từ cuộc đua này."} />
 
           <Input label="Thời gian bắt đầu *" type="datetime-local" value={form.scheduledAt} onChange={(e) => updateForm("scheduledAt", e.target.value)} required style={{colorScheme:"dark"}} hint="Phải nằm trong thời gian của Vòng đấu (giờ Việt Nam)."
             min={roundStartRaw ? apiToVNInput(roundStartRaw) : undefined} max={roundEndRaw ? apiToVNInput(roundEndRaw) : undefined} />

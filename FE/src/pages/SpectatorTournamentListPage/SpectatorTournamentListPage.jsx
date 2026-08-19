@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { unwrapResponseData } from "../../services/authRoleUtils";
 import { getTournaments } from "../../services/spectatorApi";
+import { normalizeTournamentStatus } from "../../utils/tournamentRegistration";
 import heroBg from "../../assets/racing.png";
 import "./SpectatorTournamentListPage.css";
 
@@ -38,15 +39,10 @@ const formatPrizePool = (value) => {
 };
 
 const getTournamentStatus = (t) => {
-  const isActive = t.isActive ?? t.IsActive ?? true;
-  const start = t.startDate ?? t.StartDate;
-  const end = t.endDate ?? t.EndDate;
-
-  if (!isActive || (end && new Date(end) < new Date())) return "completed";
-
-  if (start && new Date(start) > new Date()) return "upcoming";
-
-  return "active";
+  const status = normalizeTournamentStatus(t);
+  if (status === "Ongoing") return "active";
+  if (status === "Finished" || status === "Cancelled") return "completed";
+  return "upcoming";
 };
 
 const STATUS_FILTERS = [
@@ -67,7 +63,6 @@ const mapTournament = (t) => ({
   prizePool: t?.prizePool ?? t?.PrizePool ?? 0,
   startDate: t?.startDate ?? t?.StartDate,
   endDate: t?.endDate ?? t?.EndDate,
-  isActive: t?.isActive ?? t?.IsActive ?? true,
   status: getTournamentStatus(t),
 });
 
@@ -95,7 +90,7 @@ function SpectatorTournamentListPage() {
       try {
         const response = await getTournaments();
         const payload = unwrapResponseData(response);
-        const items = Array.isArray(payload) ? payload.map(mapTournament) : [];
+        const items = Array.isArray(payload) ? payload.filter((t) => normalizeTournamentStatus(t) !== "Draft").map(mapTournament) : [];
         if (!cancelled) setTournaments(items);
       } catch (err) {
         if (!cancelled) {

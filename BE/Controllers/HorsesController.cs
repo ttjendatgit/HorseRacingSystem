@@ -49,7 +49,10 @@ public class HorsesController : ControllerBase
             HorseName = h.Name,
             RaceId = e.RaceId,
             RaceName = e.Race?.Name ?? e.RaceId.ToString(),
+            TournamentId = e.Race?.Tournament?.Id,
             TournamentName = e.Race?.Tournament?.Name ?? string.Empty,
+            RoundNumber = e.Race?.Round?.RoundNumber,
+            RoundName = e.Race?.Round?.Name,
             ScheduledAt = e.Race?.ScheduledAt,
             ScheduledEndAt = e.Race?.ScheduledEndAt,
             Location = e.Race?.Track?.Name ?? e.Race?.Location ?? string.Empty,
@@ -81,6 +84,9 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    // Task C1 UI correction: the primary Admin Horse management screen (/admin/horses) needs
+    // every Horse — Pending ones especially, since those are exactly what Admin needs to act on —
+    // not just already-Approved ones. This is Admin-only and this action's sole FE consumer.
     [HttpGet("all")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetAllHorses()
@@ -89,7 +95,6 @@ public class HorsesController : ControllerBase
         var db = scope.ServiceProvider.GetRequiredService<Data.ApplicationDbContext>();
         var horses = await db.Horses
             .AsSplitQuery()
-            .Where(h => h.ApprovalStatus == Models.ApprovalStatus.Approved)
             .Include(h => h.Owner).ThenInclude(o => o!.User)
             .Include(h => h.JockeyInvitations).ThenInclude(i => i.Jockey).ThenInclude(j => j!.User)
             .Include(h => h.RaceEntries).ThenInclude(e => e.Jockey).ThenInclude(j => j!.User)
@@ -127,6 +132,7 @@ public class HorsesController : ControllerBase
                 h.OwnerId,
                 h.ApprovalStatus,
                 h.ApprovalNote,
+                h.IsArchived,
                 h.Owner,
                 h.RaceEntries,
                 h.JockeyInvitations,
@@ -171,6 +177,7 @@ public class HorsesController : ControllerBase
             h.OwnerId,
             h.ApprovalStatus,
             h.ApprovalNote,
+            h.IsArchived,
             Owner = h.Owner != null ? new
             {
                 h.Owner.Id,
@@ -220,6 +227,10 @@ public class HorsesController : ControllerBase
     // Task B Final Correction: Horse Create/Update/Delete is Owner-only business territory —
     // Jockey must not create/manage Horses (full Jockey invitation/license flow is a separate,
     // later feature). Admin's existing access here is preserved unchanged, not newly granted.
+    // Task C1 correction: Create still resolves an Owner profile from the caller — a Horse always
+    // needs an OwnerId and the request has no admin-target field, so an Admin caller without an
+    // Owner row still gets the same 404 here as before (unchanged; see report — inventing an
+    // OwnerId selector would be new privilege, out of scope for this correction pass).
     [HttpPost]
     [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> CreateHorse(HorseCreateRequest request)
@@ -234,7 +245,7 @@ public class HorsesController : ControllerBase
     public async Task<ActionResult> UpdateHorse(Guid id, HorseUpdateRequest request)
     {
         var ownerId = GetUserId();
-        var result = await _horseService.UpdateHorseAsync(ownerId, id, request);
+        var result = await _horseService.UpdateHorseAsync(ownerId, id, request, isAdmin: User.IsInRole("Admin"));
         return StatusCode(result.StatusCode, result.Result);
     }
 
@@ -243,7 +254,7 @@ public class HorsesController : ControllerBase
     public async Task<ActionResult> DeleteHorse(Guid id)
     {
         var ownerId = GetUserId();
-        var result = await _horseService.DeleteHorseAsync(ownerId, id);
+        var result = await _horseService.DeleteHorseAsync(ownerId, id, isAdmin: User.IsInRole("Admin"));
         return StatusCode(result.StatusCode, result.Result);
     }
 
