@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { unwrapResponseData } from "../../services/authRoleUtils";
 import { getRace, getRaces } from "../../services/spectatorApi";
 import "./SpectatorRaceSchedulePage.css";
@@ -52,15 +52,17 @@ const formatCountdown = (target) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
+// RaceStatus — event lifecycle only (see BE Enums.cs). RegistrationOpen/
+// RegistrationClosed are transitional compatibility values not shown here
+// since this page doesn't currently distinguish the registration window.
 const STATUS_META = {
   Scheduled: { label: "Đã lên lịch", className: "srs-badge--scheduled" },
+  RegistrationOpen: { label: "Chuẩn bị", className: "srs-badge--scheduled" },
+  RegistrationClosed: { label: "Chuẩn bị", className: "srs-badge--scheduled" },
   InProgress: { label: "Đang diễn ra", className: "srs-badge--live" },
   Finished: { label: "Đã kết thúc", className: "srs-badge--completed" },
   Canceled: { label: "Đã hủy", className: "srs-badge--canceled" },
   Cancelled: { label: "Đã hủy", className: "srs-badge--canceled" },
-  AwaitingResult: { label: "Chờ kết quả", className: "srs-badge--awaiting" },
-  ResultPendingApproval: { label: "Chờ duyệt", className: "srs-badge--pending-approval" },
-  ResultApproved: { label: "Đã duyệt kết quả", className: "srs-badge--pending-approval" },
 };
 
 const getStatusMeta = (status) => {

@@ -19,5 +19,7 @@ public class Track
 
     public int? Length { get; set; } // meters
 
+    public int? Capacity { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

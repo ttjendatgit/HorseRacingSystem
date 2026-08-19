@@ -159,6 +159,8 @@ public class RaceRankingResponse
     public Guid RaceId { get; set; }
     public string RaceName { get; set; } = string.Empty;
     public DateTime RaceDate { get; set; }
+    /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
+    public string? ResultStatus { get; set; }
     public RankingEntry[]? Rankings { get; set; }
 }
 

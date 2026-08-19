@@ -31,7 +31,14 @@ public class RaceService : IRaceService
             Name = r.Name,
             TournamentId = r.TournamentId,
             ScheduledAt = r.ScheduledAt,
-            Status = r.Status.ToString()
+            Status = r.Status.ToString(),
+            RoundId = r.RoundId,
+            RoundNumber = r.Round?.RoundNumber,
+            RoundName = r.Round?.Name,
+            TrackId = r.TrackId,
+            TrackName = r.Track?.Name,
+            QualificationSlots = r.QualificationSlots,
+            ResultStatus = r.Result?.Status.ToString()
         }).ToList();
 
         return ServiceResult<object>.Ok(summaries);
@@ -39,13 +46,13 @@ public class RaceService : IRaceService
 
     public async Task<ServiceResult<object>> GetRaceAsync(System.Guid raceId)
     {
-        var race = await _races.GetByIdWithEntriesAsync(raceId);
+        var race = await _races.GetByIdAsync(raceId);
         if (race == null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy cuộc đua");
         }
 
-        return ServiceResult<object>.Ok(race);
+        return ServiceResult<object>.Ok(RaceDetailResponseMapper.ToDetailResponse(race));
     }
 
     public async Task<ServiceResult<object>> GetRaceResultAsync(System.Guid raceId)
@@ -56,7 +63,22 @@ public class RaceService : IRaceService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kết quả");
         }
 
-        return ServiceResult<object>.Ok(result);
+        return ServiceResult<object>.Ok(new RaceResultResponse
+        {
+            RaceId = result.RaceId,
+            WinningHorseId = result.WinningHorseId,
+            TotalParticipants = result.TotalParticipants,
+            WinnerFinishTime = result.WinnerFinishTime,
+            RecordedAt = result.RecordedAt,
+            ApprovedAt = result.ApprovedAt,
+            ResultStatus = result.Status.ToString(),
+            IsOfficial = result.Status == HorseRacing.Models.RaceResultStatus.Official,
+            RejectedReason = result.RejectedReason,
+            IsDisputed = result.IsDisputed,
+            WinnerPurse = result.WinnerPurse,
+            RankingsJson = result.RankingsJson,
+            Notes = result.Notes
+        });
     }
 
     public async Task<ServiceResult<object>> GetTournamentsAsync()

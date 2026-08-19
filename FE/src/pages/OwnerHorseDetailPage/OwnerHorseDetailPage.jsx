@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getHorse } from "../../services/ownerHorseApi";
 import { resolveApiUrl } from "../../services/apiClient";
+import { isJockeyRole } from "../../services/authRoleUtils";
 import "../OwnerSharedLayout.css";
 import "./OwnerHorseDetailPage.css";
 
@@ -176,9 +177,20 @@ function OwnerHorseDetailPage() {
                   <span className={`horse-detail-status horse-detail-status--${statusLabel.toLowerCase()}`}>
                     {statusLabel}
                   </span>
-                  <Link className="secondary-button" to={`/owner/horses/${horse.id}/edit`}>
-                    Chỉnh sửa hồ sơ
-                  </Link>
+                  {(horse.isArchived ?? horse.IsArchived) ? (
+                    <span
+                      className="horse-detail-status"
+                      style={{ background: "rgba(71,85,105,0.14)", color: "#334155" }}
+                    >
+                      Đã lưu trữ
+                    </span>
+                  ) : null}
+                  {/* Editing an archived Horse is backend-rejected (HorseService.UpdateHorseAsync) — hidden here to match. */}
+                  {!isJockeyRole() && !(horse.isArchived ?? horse.IsArchived) && (
+                    <Link className="secondary-button" to={`/owner/horses/${horse.id}/edit`}>
+                      Chỉnh sửa hồ sơ
+                    </Link>
+                  )}
                 </div>
                 <span className="pill">Chi tiết ngựa</span>
                 <h1>{horse.name}</h1>

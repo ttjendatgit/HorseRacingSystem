@@ -161,7 +161,7 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         // ── RACE RESULT ──
-        var result1 = new RaceResult { Id = Guid.NewGuid(), RaceId = race1.Id, WinningHorseId = horses[0].Id, TotalParticipants = 3, WinnerFinishTime = 71.24m, RecordedAt = now.AddDays(-2).AddHours(15), PublishedAt = now.AddDays(-2).AddHours(16), ApprovedAt = now.AddDays(-2).AddHours(16), ApprovalStatus = ApprovalStatus.Approved, IsOfficial = true, WinnerPurse = 15000m, RankingsJson = "[{\"position\":1,\"horseName\":\"Silver Comet\",\"jockeyName\":\"Marcus Chen\",\"time\":71.24,\"margin\":\"-\"},{\"position\":2,\"horseName\":\"Golden Arrow\",\"jockeyName\":\"Elena Rodriguez\",\"time\":71.89,\"margin\":\"0.65s\"},{\"position\":3,\"horseName\":\"Thunder Strike\",\"jockeyName\":\"Marcus Chen\",\"time\":72.45,\"margin\":\"1.21s\"}]", Notes = "Clean race, no incidents" };
+        var result1 = new RaceResult { Id = Guid.NewGuid(), RaceId = race1.Id, WinningHorseId = horses[0].Id, TotalParticipants = 3, WinnerFinishTime = 71.24m, RecordedAt = now.AddDays(-2).AddHours(15), PublishedAt = now.AddDays(-2).AddHours(16), ApprovedAt = now.AddDays(-2).AddHours(16), Status = RaceResultStatus.Official, WinnerPurse = 15000m, RankingsJson = "[{\"position\":1,\"horseName\":\"Silver Comet\",\"jockeyName\":\"Marcus Chen\",\"time\":71.24,\"margin\":\"-\"},{\"position\":2,\"horseName\":\"Golden Arrow\",\"jockeyName\":\"Elena Rodriguez\",\"time\":71.89,\"margin\":\"0.65s\"},{\"position\":3,\"horseName\":\"Thunder Strike\",\"jockeyName\":\"Marcus Chen\",\"time\":72.45,\"margin\":\"1.21s\"}]", Notes = "Clean race, no incidents" };
         db.RaceResults.Add(result1);
         await db.SaveChangesAsync();
 

@@ -1,4 +1,4 @@
-using HorseRacing.Data;
+﻿using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
@@ -30,14 +30,23 @@ public class RaceEntryService : IRaceEntryService
         _db = db;
     }
 
+    private static bool DirectRaceRegistrationDisabled => true;
+
     public async Task<ServiceResult<object>> RegisterAsync(Guid userId, Guid horseId, Guid raceId, RaceRegistrationRequest request)
     {
+        if (DirectRaceRegistrationDisabled)
+        {
+            return ServiceResult<object>.Fail(400,
+                "Đăng ký trực tiếp vào cuộc đua không còn được hỗ trợ. Vui lòng đăng ký tham gia giải đấu.");
+        }
         var owner = await _owners.GetByUserIdAsync(userId);
         if (owner == null) return ServiceResult<object>.Fail(404, "Không tìm thấy hồ sơ chủ sở hữu");
         var horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         if (horse == null) return ServiceResult<object>.Fail(404, "Không tìm thấy ngựa");
         if (horse.ApprovalStatus != ApprovalStatus.Approved)
             return ServiceResult<object>.Fail(400, "Chỉ ngựa đã được phê duyệt mới có thể đăng ký tham gia");
+        if (horse.IsArchived)
+            return ServiceResult<object>.Fail(400, "Ngựa đã được lưu trữ (archive) và không thể đăng ký cuộc đua mới");
 
         var race = await _races.GetByIdAsync(raceId);
         if (race == null) return ServiceResult<object>.Fail(404, "Không tìm thấy cuộc đua");
@@ -45,6 +54,16 @@ public class RaceEntryService : IRaceEntryService
             return ServiceResult<object>.Fail(400, "Cuộc đua chưa mở đăng ký");
         if (race.Tournament?.RegistrationDeadline is DateTime deadline && DateTime.UtcNow > deadline.ToUniversalTime())
             return ServiceResult<object>.Fail(400, "Đã quá hạn đăng ký của giải đấu");
+
+        // Task B Final: global RaceEntry invariant — Horse must hold an Approved
+        // TournamentHorseRegistration for THIS Race's Tournament, same gate as
+        // RaceManagementService.AssignHorseToRaceAsync/BulkAssignHorsesToRaceAsync. No
+        // registration / Pending / Rejected / Withdrawn / registration for a different
+        // Tournament are all rejected identically here.
+        var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
+            x.TournamentId == race.TournamentId && x.HorseId == horseId);
+        if (registration == null || registration.Status != RegistrationStatus.Approved)
+            return ServiceResult<object>.Fail(400, "Ngựa chưa được duyệt đăng ký tham gia giải đấu này.");
         if (race.Entries.Count(e => e.Status != RegistrationStatus.Rejected && e.ScratchedAt == null) >= race.MaxParticipants)
             return ServiceResult<object>.Fail(409, $"Cuộc đua đã đủ số lượng tham gia tối đa ({race.MaxParticipants})");
         if (await _entries.ExistsAsync(raceId, horseId))

@@ -42,6 +42,20 @@ export const LABEL_BY_ROLE = LOGIN_ROLE_OPTIONS.reduce((acc, role) => {
 
 export const unwrapResponseData = (response) => response?.data ?? response;
 
+// Task B Final Correction: FE-only convenience for hiding Owner-only actions (Create/Edit/Delete
+// Horse, Register Horse to Tournament) from a Jockey — UX hiding only, the backend
+// [Authorize(Roles="HorseOwner,Admin")] gates are what's actually authoritative.
+export const getStoredUserRole = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("authUser") || "{}");
+    return user?.role ?? "";
+  } catch {
+    return "";
+  }
+};
+
+export const isJockeyRole = () => getStoredUserRole() === "jockey";
+
 export const normalizeApiRole = (value) => {
   if (value && typeof value === "object") {
     const nestedValue = value.value ?? value.name ?? value.role;

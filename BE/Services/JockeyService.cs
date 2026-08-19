@@ -33,12 +33,13 @@ public class JockeyService : IJockeyService
         _notifications = notifications;
     }
 
-    public async Task<ServiceResult<object>> GetAvailableJockeysAsync(Guid currentUserId)
+    public async Task<ServiceResult<object>> GetAvailableJockeysAsync(Guid currentUserId, bool includeUnapproved = false)
     {
         await EnsureJockeyProfilesAsync();
         var jockeys = await _jockeys.GetAvailableAsync();
         var response = jockeys
             .Where(jockey => jockey.UserId != currentUserId)
+            .Where(jockey => includeUnapproved || jockey.ApprovalStatus == ApprovalStatus.Approved)
             .Select(jockey => new JockeyListResponse
         {
             Id = jockey.Id,
@@ -148,6 +149,16 @@ public class JockeyService : IJockeyService
         if (jockey == null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ kỵ sĩ");
+        }
+
+        if (jockey.ApprovalStatus != ApprovalStatus.Approved)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Kỵ sĩ chưa được admin phê duyệt");
+        }
+
+        if (jockey.User != null && !jockey.User.IsActive)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Tài khoản kỵ sĩ đã bị vô hiệu hóa");
         }
 
         var invitation = await _invitations.GetByIdAsync(invitationId, jockey.Id);

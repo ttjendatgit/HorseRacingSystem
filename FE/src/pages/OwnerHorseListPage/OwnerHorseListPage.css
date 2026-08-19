@@ -197,6 +197,7 @@
 .oh-card-status--approved { background: rgba(16,185,129,0.1); color: #0f7a5a; }
 .oh-card-status--pending { background: rgba(245,158,11,0.1); color: #b8860b; }
 .oh-card-status--rejected { background: rgba(239,68,68,0.1); color: #b91c1c; }
+.oh-card-status--archived { background: rgba(71,85,105,0.14); color: #334155; }
 
 .oh-card-body {
   padding: 14px 18px 16px;

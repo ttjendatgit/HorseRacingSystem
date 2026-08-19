@@ -26,6 +26,8 @@ function TournamentWizard({ onClose, onSuccess }) {
       endDate: endDate.toISOString().slice(0, 16),
       registrationDeadline: deadline.toISOString().slice(0, 16),
       prizePool: 0,
+      minParticipants: 3,
+      maxParticipants: 10,
     };
   }
 
@@ -105,6 +107,18 @@ function TournamentWizard({ onClose, onSuccess }) {
       setError("Tổng giải thưởng không được âm");
       return false;
     }
+    if (!form.minParticipants || Number(form.minParticipants) < 3) {
+      setError("Số người tham gia tối thiểu phải từ 3 trở lên");
+      return false;
+    }
+    if (!form.maxParticipants || Number(form.maxParticipants) <= 0) {
+      setError("Số người tham gia tối đa phải lớn hơn 0");
+      return false;
+    }
+    if (Number(form.minParticipants) > Number(form.maxParticipants)) {
+      setError("Số người tham gia tối thiểu không được lớn hơn số người tham gia tối đa");
+      return false;
+    }
     setError("");
     return true;
   };
@@ -136,6 +150,8 @@ function TournamentWizard({ onClose, onSuccess }) {
           ? new Date(form.registrationDeadline).toISOString()
           : null,
         prizePool: form.prizePool,
+        minParticipants: Number(form.minParticipants),
+        maxParticipants: Number(form.maxParticipants),
       };
       await createTournament(payload);
       localStorage.removeItem(DRAFT_KEY);
@@ -374,6 +390,39 @@ function TournamentWizard({ onClose, onSuccess }) {
                   border: "1px solid rgba(143,100,32,0.2)", fontSize: 14
                 }}
               />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#34415b" }}>
+                  Số người tham gia tối thiểu *
+                </label>
+                <input
+                  type="number"
+                  min={3}
+                  value={form.minParticipants}
+                  onChange={(e) => updateForm("minParticipants", e.target.value)}
+                  style={{
+                    width: "100%", padding: 12, borderRadius: 8,
+                    border: "1px solid rgba(143,100,32,0.2)", fontSize: 14
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#34415b" }}>
+                  Số người tham gia tối đa *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.maxParticipants}
+                  onChange={(e) => updateForm("maxParticipants", e.target.value)}
+                  style={{
+                    width: "100%", padding: 12, borderRadius: 8,
+                    border: "1px solid rgba(143,100,32,0.2)", fontSize: 14
+                  }}
+                />
+              </div>
             </div>
           </div>
         )}

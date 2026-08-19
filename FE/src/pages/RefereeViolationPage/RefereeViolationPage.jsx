@@ -39,13 +39,9 @@ function getBadgeKey(typeValue) {
 function FlagWhistleSVG() {
   return (
     <svg className="rv-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Flag pole */}
       <line x1="80" y1="28" x2="80" y2="120" stroke="currentColor" strokeWidth="2" opacity="0.2" strokeLinecap="round" />
-      {/* Flag */}
       <path d="M82 32 L160 48 L82 64 Z" fill="var(--rh-gold)" fillOpacity="0.25" stroke="var(--rh-gold)" strokeWidth="0.8" strokeOpacity="0.3" strokeLinejoin="round" />
-      {/* Flag wave lines */}
       <path d="M155 50 C165 52 170 48 175 50" stroke="var(--rh-gold)" strokeWidth="1" opacity="0.2" fill="none" strokeLinecap="round" />
-      {/* Whistle */}
       <g opacity="0.15">
         <rect x="170" y="82" width="28" height="10" rx="4" stroke="currentColor" strokeWidth="1.2" fill="none" />
         <circle cx="198" cy="87" r="6" stroke="currentColor" strokeWidth="1.2" fill="none" />
@@ -62,9 +58,7 @@ function FlagWhistleSVG() {
 function EmptyViolationSVG() {
   return (
     <svg className="rv-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Shield with check */}
       <path d="M60 10 L90 22 L90 44 C90 60 60 74 60 74 C60 74 30 60 30 44 L30 22 Z" stroke="currentColor" strokeWidth="1" opacity="0.2" fill="currentColor" fillOpacity="0.03" strokeLinejoin="round" />
-      {/* Checkmark inside */}
       <path d="M50 42 L56 50 L70 34" stroke="var(--rh-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
       <text x="60" y="90" textAnchor="middle" fill="var(--rh-muted)" fontSize="9" fontFamily="sans-serif" opacity="0.5">Chưa có vi phạm</text>
     </svg>
@@ -75,10 +69,8 @@ function EmptyViolationSVG() {
 function ViolationPromptSVG() {
   return (
     <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
-      {/* Flag icon */}
       <line x1="40" y1="20" x2="40" y2="80" stroke="currentColor" strokeWidth="1" opacity="0.2" strokeLinecap="round" />
       <path d="M42 24 L100 34 L42 44 Z" fill="var(--rh-gold)" fillOpacity="0.2" stroke="var(--rh-gold)" strokeWidth="0.6" strokeOpacity="0.25" strokeLinejoin="round" />
-      {/* Plus icon */}
       <circle cx="130" cy="50" r="14" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" fill="none" />
       <line x1="124" y1="50" x2="136" y2="50" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
       <line x1="130" y1="44" x2="130" y2="56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
@@ -103,32 +95,21 @@ function RefereeViolationPage() {
     description: "",
   });
 
-  /* ---------- load assignments on mount ---------- */
   useEffect(() => {
     let ignore = false;
     const fn = async () => {
       try {
         const data = await getMyAssignments();
         if (!ignore)
-          setAssignments(
-            Array.isArray(data?.data)
-              ? data.data
-              : Array.isArray(data)
-                ? data
-                : []
-          );
+          setAssignments(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
       } catch (e) {
-        if (!ignore)
-          setError(
-            "Không thể tải danh sách cuộc đua: " + (e.message || "")
-          );
+        if (!ignore) setError("Không thể tải danh sách cuộc đua: " + (e.message || ""));
       }
     };
     fn();
     return () => { ignore = true; };
   }, []);
 
-  /* ---------- load entries when race changes ---------- */
   useEffect(() => {
     if (!selectedRaceId) return;
     let ignore = false;
@@ -136,13 +117,7 @@ function RefereeViolationPage() {
       try {
         const data = await getRaceEntries(selectedRaceId);
         if (!ignore)
-          setEntries(
-            Array.isArray(data?.data)
-              ? data.data
-              : Array.isArray(data)
-                ? data
-                : []
-          );
+          setEntries(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
       } catch {
         if (!ignore) setEntries([]);
       }
@@ -151,19 +126,12 @@ function RefereeViolationPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  /* ---------- load violations ---------- */
   const loadViolations = async (raceId) => {
     setLoading(true);
     setError("");
     try {
       const data = await getRaceViolations(raceId);
-      setViolations(
-        Array.isArray(data?.data)
-          ? data.data
-          : Array.isArray(data)
-            ? data
-            : []
-      );
+      setViolations(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
     } catch (e) {
       setError("Không thể tải vi phạm: " + (e.message || ""));
       setViolations([]);
@@ -172,7 +140,6 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- select a race ---------- */
   const handleRaceSelect = (raceId) => {
     setSelectedRaceId(raceId);
     setError("");
@@ -186,7 +153,6 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- submit violation ---------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -220,38 +186,30 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- derived data ---------- */
-  const assignedRaces = useMemo(
-    () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
-    [assignments]
-  );
+  const assignedRaces = useMemo(() => {
+    const unique = [...new Map(assignments.map((a) => [a.raceId, a])).values()];
+    return unique.filter((a) => {
+      const status = (a.raceStatus || a.RaceStatus || "").toLowerCase();
+      return status === "inprogress" || status === "finished";
+    });
+  }, [assignments]);
 
   const totalViolations = violations.length;
-  const resolvedCount = violations.filter(
-    (v) => v.status === "Resolved"
-  ).length;
-  const pendingCount = violations.filter(
-    (v) => v.status === "Pending" || !v.status
-  ).length;
+  const resolvedCount = violations.filter((v) => v.status === "Resolved").length;
+  const pendingCount = violations.filter((v) => v.status === "Pending" || !v.status).length;
 
-  /* ---------- render ---------- */
   return (
     <div className="rv-wrap">
       <div className="rv-container">
-        {/* ════════ Top Bar ════════ */}
         <header className="rv-topbar">
           <div>
             <h1>Vi phạm</h1>
             <p className="rv-topbar-sub">
-              Ghi nhận vi phạm quy tắc trong cuộc đua để duy trì cạnh tranh
-              công bằng.
+              Ghi nhận vi phạm quy tắc trong cuộc đua để duy trì cạnh tranh công bằng.
             </p>
           </div>
           {selectedRaceId && (
-            <button
-              className="rv-btn--gold"
-              onClick={() => setShowForm((p) => !p)}
-            >
+            <button className="rv-btn--gold" onClick={() => setShowForm((p) => !p)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -261,7 +219,6 @@ function RefereeViolationPage() {
           )}
         </header>
 
-        {/* ════════ KPI Cards ════════ */}
         <div className="rv-kpi-bar">
           <div className="rv-kpi-card">
             <span className="rv-kpi-label">Tổng số</span>
@@ -270,38 +227,25 @@ function RefereeViolationPage() {
           </div>
           <div className="rv-kpi-card">
             <span className="rv-kpi-label">Đã xử lý</span>
-            <div className="rv-kpi-value rv-kpi-value--green">
-              {resolvedCount}
-            </div>
+            <div className="rv-kpi-value rv-kpi-value--green">{resolvedCount}</div>
             <span className="rv-kpi-sub">
-              {totalViolations > 0
-                ? Math.round((resolvedCount / totalViolations) * 100)
-                : 0}
-              % tổng số
+              {totalViolations > 0 ? Math.round((resolvedCount / totalViolations) * 100) : 0}% tổng số
             </span>
           </div>
           <div className="rv-kpi-card">
             <span className="rv-kpi-label">Chờ xử lý</span>
-            <div className="rv-kpi-value rv-kpi-value--amber">
-              {pendingCount}
-            </div>
+            <div className="rv-kpi-value rv-kpi-value--amber">{pendingCount}</div>
             <span className="rv-kpi-sub">Đang chờ xem xét</span>
           </div>
         </div>
 
-        {/* ════════ Alerts ════════ */}
         {error && <div className="rv-alert rv-alert--error">{error}</div>}
-        {success && (
-          <div className="rv-alert rv-alert--success">{success}</div>
-        )}
+        {success && <div className="rv-alert rv-alert--success">{success}</div>}
 
-        {/* ════════ Race Selector ════════ */}
         <div className="rv-card rv-race-selector">
           <div className="rv-card__header">
-            <h3>Chọn cuộc đua</h3>
-            {selectedRaceId && (
-              <span className="rv-count">{entries.length} ngựa</span>
-            )}
+            <h3>Chọn cuộc đua đang diễn ra</h3>
+            {selectedRaceId && <span className="rv-count">{entries.length} ngựa</span>}
           </div>
           <select
             className="rv-select"
@@ -315,22 +259,24 @@ function RefereeViolationPage() {
               </option>
             ))}
           </select>
+          {assignedRaces.length === 0 && assignments.length > 0 && (
+            <p className="rv-hint" style={{ marginTop: 8 }}>
+              Hiện không có cuộc đua nào đang diễn ra để bắt lỗi.
+            </p>
+          )}
         </div>
 
-        {/* ════════ No race selected → full-width empty state ════════ */}
         {!selectedRaceId && (
           <div className="rv-card">
             <div className="rv-empty-state">
               <FlagWhistleSVG />
-              <p>Chọn một cuộc đua để xem và ghi nhận vi phạm.</p>
+              <p>Chọn một cuộc đua đang diễn ra để xem và ghi nhận vi phạm.</p>
             </div>
           </div>
         )}
 
-        {/* ════════ 2-Column Content ════════ */}
         {selectedRaceId && (
           <div className="rv-grid">
-            {/* ── Left Column: Thêm mới ── */}
             <div className="rv-card">
               <div className="rv-card__header">
                 <h3>Thêm mới</h3>
@@ -339,85 +285,55 @@ function RefereeViolationPage() {
               {showForm ? (
                 <form className="rv-form" onSubmit={handleSubmit}>
                   <div className="rv-form-row">
-                    <label className="rv-label rv-label--required">
-                      Ngựa
-                    </label>
+                    <label className="rv-label rv-label--required">Ngựa</label>
                     <select
                       className="rv-form-input"
                       value={form.horseId}
-                      onChange={(e) =>
-                        setForm({ ...form, horseId: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, horseId: e.target.value })}
                       required
                     >
                       <option value="">-- Chọn ngựa --</option>
                       {entries.map((entry) => (
                         <option key={entry.horseId} value={entry.horseId}>
-                          {entry.horseName}
-                          {entry.jockeyName
-                            ? ` (Nài: ${entry.jockeyName})`
-                            : ""}
+                          {entry.horseName} {entry.jockeyName ? ` (Nài: ${entry.jockeyName})` : ""}
                         </option>
                       ))}
                     </select>
                     {entries.length === 0 && (
-                      <p className="rv-hint">
-                        Không có ngựa nào trong cuộc đua này.
-                      </p>
+                      <p className="rv-hint">Không có ngựa nào trong cuộc đua này.</p>
                     )}
                   </div>
 
                   <div className="rv-form-row">
-                    <label className="rv-label rv-label--required">
-                      Loại vi phạm
-                    </label>
+                    <label className="rv-label rv-label--required">Loại vi phạm</label>
                     <select
                       className="rv-form-input"
                       value={form.violationType}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          violationType: Number(e.target.value),
-                        })
-                      }
+                      onChange={(e) => setForm({ ...form, violationType: Number(e.target.value) })}
                     >
                       {VIOLATION_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
+                        <option key={t.value} value={t.value}>{t.label}</option>
                       ))}
                     </select>
                   </div>
 
                   <div className="rv-form-row">
-                    <label className="rv-label rv-label--required">
-                      Mô tả
-                    </label>
+                    <label className="rv-label rv-label--required">Mô tả</label>
                     <textarea
                       className="rv-textarea"
                       rows={3}
                       placeholder="Mô tả chi tiết vi phạm..."
                       value={form.description}
-                      onChange={(e) =>
-                        setForm({ ...form, description: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
                       required
                     />
                   </div>
 
                   <div className="rv-form-actions">
-                    <button
-                      type="submit"
-                      className="rv-btn rv-btn--primary"
-                      disabled={submitting}
-                    >
+                    <button type="submit" className="rv-btn rv-btn--primary" disabled={submitting}>
                       {submitting ? "Đang gửi..." : "Ghi nhận vi phạm"}
                     </button>
-                    <button
-                      type="button"
-                      className="rv-btn rv-btn--cancel"
-                      onClick={() => setShowForm(false)}
-                    >
+                    <button type="button" className="rv-btn rv-btn--cancel" onClick={() => setShowForm(false)}>
                       Hủy
                     </button>
                   </div>
@@ -425,15 +341,11 @@ function RefereeViolationPage() {
               ) : (
                 <div className="rv-empty-list">
                   <ViolationPromptSVG />
-                  <p>
-                    Nhấn "+ Ghi nhận vi phạm" để ghi lại vi phạm cho cuộc đua
-                    này.
-                  </p>
+                  <p>Nhấn "+ Ghi nhận vi phạm" để ghi lại vi phạm cho cuộc đua này.</p>
                 </div>
               )}
             </div>
 
-            {/* ── Right Column: Lịch sử gần đây ── */}
             <div className="rv-card">
               <div className="rv-card__header">
                 <h3>Lịch sử gần đây</h3>
@@ -449,9 +361,7 @@ function RefereeViolationPage() {
               ) : violations.length === 0 ? (
                 <div className="rv-empty-list">
                   <EmptyViolationSVG />
-                  <p>
-                    Chưa có vi phạm nào được ghi nhận cho cuộc đua này.
-                  </p>
+                  <p>Chưa có vi phạm nào được ghi nhận cho cuộc đua này.</p>
                 </div>
               ) : (
                 <div className="rv-list">
@@ -461,35 +371,19 @@ function RefereeViolationPage() {
                         <strong className="rv-item__name">
                           {v.horseName || "Ngựa #" + v.horseId}
                         </strong>
-                        <span
-                          className={`rv-badge rv-badge--${getBadgeKey(
-                            v.violationType
-                          )}`}
-                        >
-                          {TYPE_LABELS[v.violationType] ||
-                            "Vi phạm #" + v.violationType}
+                        <span className={`rv-badge rv-badge--${getBadgeKey(v.violationType)}`}>
+                          {TYPE_LABELS[v.violationType] || "Vi phạm #" + v.violationType}
                         </span>
                       </div>
-
                       <p className="rv-item__desc">{v.description}</p>
-
                       <div className="rv-item__bottom">
                         <span className="rv-item__time">
-                          {v.createdAt
-                            ? new Date(v.createdAt).toLocaleString("vi-VN")
-                            : ""}
+                          {v.createdAt ? new Date(v.createdAt).toLocaleString("vi-VN") : ""}
                         </span>
-                        {v.status && (
-                          <span
-                            className={`rv-badge rv-badge--status-${v.status.toLowerCase()}`}
-                          >
-                            {STATUS_MAP[v.status] || v.status}
-                          </span>
-                        )}
-                        {!v.status && (
-                          <span className="rv-badge rv-badge--status-pending">
-                            Chờ xử lý
-                          </span>
+                        {(v.penalty ?? v.Penalty) ? (
+                          <span className="rv-badge rv-badge--status-resolved">Đã xử lý</span>
+                        ) : (
+                          <span className="rv-badge rv-badge--status-pending">Chờ xử lý</span>
                         )}
                       </div>
                     </div>

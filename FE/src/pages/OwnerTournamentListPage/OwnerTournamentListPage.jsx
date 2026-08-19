@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerTournaments } from "../../services/ownerApi";
+import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
+import { isJockeyRole } from "../../services/authRoleUtils";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentListPage.css";
 
-const statusFilters = ["Tất cả", "Đang diễn ra", "Mở", "Đã đóng"];
+const statusFilters = ["Tất cả", "Mở đăng ký", "Đã đủ số lượng tham gia", "Đã đóng đăng ký", "Đã kết thúc đăng ký", "Giải đã kết thúc", "Giải đã hủy"];
 
 const formatDate = (value) => {
   const date = new Date(value);
@@ -13,31 +15,31 @@ const formatDate = (value) => {
     : new Intl.DateTimeFormat("vi-VN", { month: "short", day: "numeric", year: "numeric" }).format(date);
 };
 
-const getTournamentStatus = (tournament) => {
-  if (!(tournament?.isActive ?? tournament?.IsActive)) return "Đã đóng";
-  const start = new Date(tournament?.startDate ?? tournament?.StartDate);
-  const end = new Date(tournament?.endDate ?? tournament?.EndDate);
-  const now = new Date();
-  return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && now >= start && now <= end
-    ? "Đang diễn ra" : "Mở";
+const mapTournament = (tournament) => {
+  const registrationState = getTournamentRegistrationState(tournament);
+  return {
+    id: tournament?.id ?? tournament?.Id,
+    name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
+    description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
+    startDate: tournament?.startDate ?? tournament?.StartDate,
+    endDate: tournament?.endDate ?? tournament?.EndDate,
+    dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
+    status: registrationState.label,
+    statusKey: registrationState.key,
+    canRegister: registrationState.canRegister,
+    raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
+    roundCount: tournament?.roundCount ?? tournament?.RoundCount ?? 0,
+    prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
+    venue: tournament?.venue ?? tournament?.Venue ?? "",
+    surfaceType: tournament?.surfaceType ?? tournament?.SurfaceType ?? "",
+    imageUrl: tournament?.imageUrl ?? tournament?.ImageUrl,
+  };
 };
 
-const mapTournament = (tournament) => ({
-  id: tournament?.id ?? tournament?.Id,
-  name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
-  description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
-  startDate: tournament?.startDate ?? tournament?.StartDate,
-  endDate: tournament?.endDate ?? tournament?.EndDate,
-  dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
-  status: getTournamentStatus(tournament),
-  raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
-  roundCount: tournament?.roundCount ?? tournament?.RoundCount ?? 0,
-  prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
-  venue: tournament?.venue ?? tournament?.Venue ?? "",
-  surfaceType: tournament?.surfaceType ?? tournament?.SurfaceType ?? "",
-});
-
 function OwnerTournamentListPage() {
+  // Task B Final Correction §5: Register-to-Tournament is Owner-only — hidden for Jockey (UX
+  // only; backend [Authorize(Roles="HorseOwner")] on POST /api/tournament-registrations is authoritative).
+  const canRegisterAsOwner = !isJockeyRole();
   const navigate = useNavigate();
   const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,12 +70,13 @@ function OwnerTournamentListPage() {
       t.name.toLowerCase().includes(query.toLowerCase())
     ), [query, status, tournaments]);
 
-  const totalOpen = tournaments.filter(t => t.status === "Mở" || t.status === "Đang diễn ra").length;
-  const totalClosed = tournaments.filter(t => t.status === "Đã đóng").length;
+  const totalOpen = tournaments.filter(t => t.canRegister).length;
+  const totalClosed = tournaments.filter(t => !t.canRegister).length;
 
-  const statusClass = (s) => {
-    if (s === "Đang diễn ra") return "live";
-    if (s === "Mở") return "open";
+  const statusClass = (key) => {
+    if (key === "open") return "open";
+    if (key === "registration-ended") return "live";
+    if (key === "full") return "full";
     return "closed";
   };
 
@@ -132,9 +135,9 @@ function OwnerTournamentListPage() {
                     }
                   >
                     <div className="otl-card__banner-top">
-                      <span className={`otl-badge otl-badge--${statusClass(t.status)}`}>{t.status}</span>
+                      <span className={`otl-badge otl-badge--${statusClass(t.statusKey)}`}>{t.status}</span>
                       <div className="otl-card__banner-right">
-                        {t.status !== "Đã đóng" && (
+                        {t.statusKey !== "closed" && (
                           <span className="otl-countdown">{t.raceCount} cuộc đua</span>
                         )}
                       </div>
@@ -143,7 +146,7 @@ function OwnerTournamentListPage() {
                       <h4>Giải đấu</h4>
                       <p>{t.name}</p>
                     </div>
-                    {t.status === "Đang diễn ra" && (
+                    {t.statusKey === "registration-ended" && (
                       <div className="otl-card__progress">
                         <div className="otl-card__progress-fill" style={{ width: "60%" }} />
                       </div>
@@ -163,7 +166,9 @@ function OwnerTournamentListPage() {
                     </div>
                     <div className="otl-card__actions">
                       <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(t)}>Chi tiết</button>
-                      <button className="otl-btn otl-btn--primary" onClick={() => navigate("/owner/register-tournament")}>Đăng ký</button>
+                      {t.canRegister && canRegisterAsOwner && (
+                        <button className="otl-btn otl-btn--primary" onClick={() => navigate(`/owner/register-tournament?tournamentId=${t.id}`)}>Đăng ký</button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -214,7 +219,9 @@ function OwnerTournamentListPage() {
             </div>
             <div className="otl-modal__actions">
               <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(null)}>Đóng</button>
-              <button className="otl-btn otl-btn--primary" onClick={() => { setActiveTournament(null); navigate("/owner/register-tournament"); }}>Đăng ký ngay</button>
+              {activeTournament.canRegister && canRegisterAsOwner && (
+                <button className="otl-btn otl-btn--primary" onClick={() => { const id = activeTournament.id; setActiveTournament(null); navigate(`/owner/register-tournament?tournamentId=${id}`); }}>Đăng ký ngay</button>
+              )}
             </div>
           </div>
         </div>

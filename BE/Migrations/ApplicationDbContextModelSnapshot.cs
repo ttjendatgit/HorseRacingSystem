@@ -229,6 +229,9 @@ namespace HorseRacing.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -919,7 +922,10 @@ namespace HorseRacing.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<Guid?>("RoundId")
+                    b.Property<int?>("QualificationSlots")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RoundId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("RoundNames")
@@ -1115,6 +1121,10 @@ namespace HorseRacing.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("TotalParticipants")
                         .HasColumnType("integer");
 
@@ -1244,6 +1254,9 @@ namespace HorseRacing.Migrations
                     b.Property<DateTime?>("ActualStartDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int?>("AdvanceCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -1267,7 +1280,8 @@ namespace HorseRacing.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TournamentId");
+                    b.HasIndex("TournamentId", "RoundNumber")
+                        .IsUnique();
 
                     b.ToTable("Rounds");
                 });
@@ -1278,8 +1292,15 @@ namespace HorseRacing.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Category")
                         .HasMaxLength(100)
@@ -1309,7 +1330,13 @@ namespace HorseRacing.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("MaxParticipants")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MaxRounds")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinParticipants")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -1380,11 +1407,23 @@ namespace HorseRacing.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HorseId");
+                    b.HasIndex("HorseId")
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId");
 
                     b.HasIndex("TournamentId");
+
+                    b.HasIndex("HorseId", "TournamentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId_TournamentId_Active")
+                        .HasFilter("\"Status\" IN (1, 2)");
+
+                    b.HasIndex("OwnerId", "TournamentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId_TournamentId_Active")
+                        .HasFilter("\"Status\" IN (1, 2)");
 
                     b.ToTable("TournamentHorseRegistrations");
                 });
@@ -1394,6 +1433,9 @@ namespace HorseRacing.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("Capacity")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -1999,7 +2041,8 @@ namespace HorseRacing.Migrations
                     b.HasOne("HorseRacing.Models.Round", "Round")
                         .WithMany("Races")
                         .HasForeignKey("RoundId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("HorseRacing.Models.Tournament", "Tournament")
                         .WithMany("Races")

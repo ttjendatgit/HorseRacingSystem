@@ -1,4 +1,4 @@
-// Design Tokens - Editorial Sport Command Center
+﻿// Design Tokens - Editorial Sport Command Center
 // Based on PROMPT_QUAN_LY_GIAI_DAU_VA_CUOC_DUA.md
 
 export const colors = {
@@ -142,30 +142,15 @@ export const statusColors = {
     text: "#f59e0b",
     label: "Đang diễn ra",
   },
-  awaitingresult: {
-    bg: "rgba(139,92,246,0.12)",
-    text: "#7c3aed",
-    label: "Chờ kết quả",
-  },
-  resultpendingapproval: {
-    bg: "rgba(245,158,11,0.12)",
-    text: "#b45309",
-    label: "Chờ duyệt",
-  },
-  resultapproved: {
-    bg: "rgba(16,185,129,0.12)",
-    text: "#047857",
-    label: "Đã duyệt kết quả",
-  },
   registrationopen: {
     bg: "rgba(16,185,129,0.1)",
     text: "#059669",
-    label: "Mở đăng ký",
+    label: "Chuẩn bị",
   },
   registrationclosed: {
     bg: "rgba(37,99,235,0.1)",
     text: "#1d4ed8",
-    label: "Đã đóng đăng ký",
+    label: "Chuẩn bị",
   },
 };
 

@@ -47,11 +47,35 @@ export const removeJockeyFromHorse = async (horseId, raceId, reason) =>
     }),
   );
 
+// Legacy Race-level self-registration (RaceStatus.RegistrationOpen-gated) — retained for
+// RaceStatus/StartRaceAsync lifecycle compatibility only. Not the canonical Owner registration
+// flow; see registerHorseForTournament below.
 export const registerHorseForRace = async (horseId, raceId, payload) =>
   unwrapResponseData(
     await request(`/api/horses/${horseId}/races/${raceId}/registrations`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  );
+
+// Canonical Owner registration flow (Task B) — Tournament-level, not Race-level. Backend gate:
+// Tournament.Status == Published && now < RegistrationDeadline.
+export const registerHorseForTournament = async (tournamentId, horseId) =>
+  unwrapResponseData(
+    await request("/api/tournament-registrations", {
+      method: "POST",
+      body: JSON.stringify({ tournamentId, horseId }),
+    }),
+  );
+
+export const getMyTournamentRegistrations = async () =>
+  unwrapResponseData(await request("/api/tournament-registrations/my"));
+
+// Task C1 §2: Owner-only withdraw of their own TournamentHorseRegistration.
+export const withdrawTournamentRegistration = async (registrationId) =>
+  unwrapResponseData(
+    await request(`/api/tournament-registrations/${registrationId}/withdraw`, {
+      method: "POST",
     }),
   );
 

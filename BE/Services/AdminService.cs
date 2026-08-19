@@ -399,6 +399,7 @@ public class AdminService : IAdminService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy đăng ký");
             }
 
+            // Create new user
             var newUser = new User
             {
                 Id = Guid.NewGuid(),
@@ -413,6 +414,7 @@ public class AdminService : IAdminService
 
             await _userRepo.AddAsync(newUser);
 
+            // Update registration
             registration.Status = RegistrationStatus.Approved;
             registration.ReviewedAt = DateTime.UtcNow;
             registration.ApprovedUserId = newUser.Id;
@@ -507,19 +509,49 @@ public class AdminService : IAdminService
         return await _liveResultService.UpdateRaceResultAsync(raceId, request);
     }
 
-    public async Task<ServiceResult<bool>> SettlePredictionsAsync(Guid raceId, RaceResultRequest request)
+    /// <summary>
+    /// Admin-only retry path for the correction-pass settlement gap: if a
+    /// wallet payout threw during ApproveRaceResultAsync, the affected
+    /// prediction was reverted to Pending (see PredictionRepository.
+    /// RevertWonToPendingAsync) but nothing re-invoked settlement. This
+    /// re-derives the winner from the authoritative Official RaceResult
+    /// (never from caller input) and calls the same idempotent
+    /// SettlePredictionAsync used by ApproveRaceResultAsync, which only
+    /// touches predictions still Pending — already-settled winners are
+    /// untouched and no wallet call is made for them.
+    /// </summary>
+    public async Task<ServiceResult<object>> SettlePredictionsAsync(Guid raceId)
     {
         try
         {
-            await _predictionService.SettlePredictionAsync(raceId, request.WinningHorseId);
-            return ServiceResult<bool>.Ok(true);
+            var race = await _raceRepo.GetByIdAsync(raceId);
+            if (race == null)
+                return ServiceResult<object>.Fail(404, "Không tìm thấy cuộc đua");
+
+            if (race.Status != RaceStatus.Finished)
+                return ServiceResult<object>.Fail(400, "Cuộc đua chưa kết thúc");
+
+            var raceResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
+            if (raceResult == null)
+                return ServiceResult<object>.Fail(404, "Chưa có kết quả cuộc đua.");
+
+            if (raceResult.Status != RaceResultStatus.Official)
+                return ServiceResult<object>.Fail(400, "Kết quả cuộc đua chưa chính thức (Official).");
+
+            return await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
         }
         catch (Exception ex)
         {
-            return ServiceResult<bool>.Fail(500, $"Lỗi thanh toán: {ex.Message}");
+            return ServiceResult<object>.Fail(500, $"Lỗi thanh toán: {ex.Message}");
         }
     }
 
+    /// <summary>
+    /// Approves a Provisional result -> Official. Phase2B: Race.Status is
+    /// never touched here (it is already Finished and stays Finished).
+    /// Prediction settlement is triggered from here — the moment a result
+    /// becomes Official — rather than from a later "end race" action.
+    /// </summary>
     public async Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId)
     {
         try
@@ -528,25 +560,34 @@ public class AdminService : IAdminService
             if (race == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
 
-            if (race.Status != RaceStatus.ResultPendingApproval)
-                return ServiceResult<bool>.Fail(400, "Cuộc đua không ở trạng thái chờ duyệt kết quả");
+            if (race.Status != RaceStatus.Finished)
+                return ServiceResult<bool>.Fail(400, "Cuộc đua chưa kết thúc");
 
             var raceResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
             if (raceResult == null)
                 return ServiceResult<bool>.Fail(404, "Chưa có kết quả cuộc đua. Trọng tài phải nộp kết quả trước.");
 
+            if (raceResult.Status != RaceResultStatus.Provisional)
+                return ServiceResult<bool>.Fail(400, "Kết quả không ở trạng thái chờ duyệt (Provisional)");
+
+            if (!string.IsNullOrWhiteSpace(raceResult.RejectedReason))
+                return ServiceResult<bool>.Fail(400, "Kết quả này đã bị từ chối trước đó. Trọng tài phải nộp lại kết quả trước khi có thể duyệt.");
+
+            // Check if there is at least one referee report (V1.1 mandatory-report gate)
             var hasReport = await _reportRepo.GetByRaceAsync(raceId) != null;
             if (!hasReport)
                 return ServiceResult<bool>.Fail(400, "Chưa có báo cáo từ trọng tài. Trọng tài phải nộp báo cáo trước khi duyệt kết quả.");
 
+            // Wrap in transaction: if approval/settlement fails, everything rolls back
             using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
             try
             {
-                raceResult.ApprovalStatus = ApprovalStatus.Approved;
-                raceResult.IsOfficial = true;
+                raceResult.Status = RaceResultStatus.Official;
+                raceResult.RejectedReason = null;
                 raceResult.ApprovedAt = DateTime.UtcNow;
                 await _raceResultRepo.UpdateAsync(raceResult);
 
+                // Ghi kết quả vào entry + cập nhật thành tích ngựa/kỵ sĩ
                 var entries = await _entryRepo.GetByRaceAsync(raceId);
                 foreach (var entry in entries)
                 {
@@ -579,11 +620,11 @@ public class AdminService : IAdminService
                 }
                 await _entryRepo.UpdateRangeAsync(entries);
 
-                race.Status = RaceStatus.ResultApproved;
-                race.UpdatedAt = DateTime.UtcNow;
-                await _raceRepo.UpdateAsync(race);
-
                 await _unitOfWork.SaveChangesAsync();
+
+                // Settlement only after Official — see PredictionService.SettlePredictionAsync
+                // for the explicit Race.Status==Finished + RaceResult.Status==Official guard.
+                await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
 
                 scope.Complete();
                 return ServiceResult<bool>.Ok(true);
@@ -641,6 +682,11 @@ public class AdminService : IAdminService
         }
     }
 
+    /// <summary>
+    /// Rejects a Provisional result. Phase2B: rejection is review metadata,
+    /// not a status transition — RaceResult.Status stays Provisional, and
+    /// Race.Status is never touched (already Finished, stays Finished).
+    /// </summary>
     public async Task<ServiceResult<bool>> RejectRaceResultAsync(Guid raceId, string reason)
     {
         try
@@ -649,20 +695,18 @@ public class AdminService : IAdminService
             if (race == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
 
-            if (race.Status != RaceStatus.ResultPendingApproval)
-                return ServiceResult<bool>.Fail(400, "Cuộc đua không ở trạng thái chờ duyệt kết quả");
+            if (race.Status != RaceStatus.Finished)
+                return ServiceResult<bool>.Fail(400, "Cuộc đua chưa kết thúc");
 
             var raceResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
             if (raceResult == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy kết quả cuộc đua");
 
-            raceResult.ApprovalStatus = ApprovalStatus.Rejected;
+            if (raceResult.Status != RaceResultStatus.Provisional)
+                return ServiceResult<bool>.Fail(400, "Kết quả không ở trạng thái chờ duyệt (Provisional)");
+
             raceResult.RejectedReason = reason;
             await _raceResultRepo.UpdateAsync(raceResult);
-
-            race.Status = RaceStatus.AwaitingResult;
-            race.UpdatedAt = DateTime.UtcNow;
-            await _raceRepo.UpdateAsync(race);
 
             await _unitOfWork.SaveChangesAsync();
 

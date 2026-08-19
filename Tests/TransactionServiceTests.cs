@@ -72,7 +72,10 @@ public class TransactionServiceTests
     {
         public Task<ServiceResult<object>> GetBalanceAsync(Guid userId) => Task.FromResult(ServiceResult<object>.Ok(new { balance = 0m }));
         public Task<ServiceResult<object>> AddFundsAsync(Guid userId, decimal amount, string reference) => Task.FromResult(ServiceResult<object>.Ok(new { added = amount }));
+        public Task<ServiceResult<object>> AddPointsAsync(Guid userId, decimal points, string reference) => Task.FromResult(ServiceResult<object>.Ok(new { added = points }));
         public Task<ServiceResult<object>> DeductFundsAsync(Guid userId, decimal amount, string reference) => Task.FromResult(ServiceResult<object>.Ok(new { deducted = amount }));
+        public Task<ServiceResult<decimal>> ConvertPointsToVndAsync(Guid userId, decimal points) => Task.FromResult(ServiceResult<decimal>.Ok(points));
+        public decimal GetPointsPerVnd() => 1000m;
     }
 
     private sealed class FakeNotificationService : INotificationService
