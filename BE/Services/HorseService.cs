@@ -262,6 +262,16 @@ public class HorseService : IHorseService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kỵ sĩ");
         }
 
+        if (invitedJockey.ApprovalStatus != ApprovalStatus.Approved)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Kỵ sĩ chưa được admin phê duyệt");
+        }
+
+        if (invitedJockey.User != null && !invitedJockey.User.IsActive)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Tài khoản kỵ sĩ đã bị vô hiệu hóa");
+        }
+
         if (invitedJockey.UserId == userId)
         {
             return ServiceResult<object>.Fail(

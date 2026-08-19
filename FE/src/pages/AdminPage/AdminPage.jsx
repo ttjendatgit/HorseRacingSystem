@@ -968,9 +968,8 @@ function ScheduleManagement({ type }) {
   const [selected, setSelected] = useState("");
   const [items, setItems] = useState([]);
   const [approvedHorses, setApprovedHorses] = useState([]);
-  const [approvedJockeys, setApprovedJockeys] = useState([]);
   const [message, setMessage] = useState("");
-  const [assignment, setAssignment] = useState({ raceId: "", horseId: "", jockeyId: "" });
+  const [assignment, setAssignment] = useState({ raceId: "", horseId: "" });
   const [expandedRaceId, setExpandedRaceId] = useState(null);
   const [raceEntries, setRaceEntries] = useState([]);
   const [raceReferees, setRaceReferees] = useState([]);
@@ -1066,14 +1065,7 @@ function ScheduleManagement({ type }) {
     const loadAssignmentOptions = async () => {
       try {
         const horses = await getTournamentApprovedHorses(selected);
-        const jockeys = (await getAvailableJockeys()).filter(
-          (jockey) =>
-            jockey.approvalStatus === 2 ||
-            jockey.approvalStatusName === "Approved",
-        );
-
         setApprovedHorses(Array.isArray(horses) ? horses : []);
-        setApprovedJockeys(jockeys);
       } catch (err) {
         setMessage(err.message);
       }
@@ -1087,57 +1079,13 @@ function ScheduleManagement({ type }) {
     fetcher(selected).then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   }, [selected, type]);
 
-  const selectedHorse = approvedHorses.find(
-    (horse) => (horse.id ?? horse.Id) === assignment.horseId,
-  );
-  const selectedHorseJockeyId =
-    selectedHorse?.assignedJockeyId ?? selectedHorse?.AssignedJockeyId ?? "";
-  const selectedHorseJockeyName =
-    selectedHorse?.assignedJockeyName ??
-    selectedHorse?.AssignedJockeyName ??
-    "";
-  const visibleHorses = assignment.jockeyId
-    ? approvedHorses.filter(
-        (horse) => {
-          const jockeyIds =
-            horse.assignedJockeyIds ?? horse.AssignedJockeyIds ?? [];
-          return (
-            jockeyIds.includes(assignment.jockeyId) ||
-            (horse.assignedJockeyId ?? horse.AssignedJockeyId) ===
-              assignment.jockeyId
-          );
-        },
-      )
-    : approvedHorses;
+  const visibleHorses = approvedHorses;
 
   const selectHorse = (horseId) => {
-    const horse = approvedHorses.find(
-      (item) => (item.id ?? item.Id) === horseId,
-    );
-    const assignedJockeyId =
-      horse?.assignedJockeyId ?? horse?.AssignedJockeyId ?? "";
-
     setAssignment((current) => ({
       ...current,
       horseId,
-      jockeyId: assignedJockeyId,
     }));
-  };
-
-  const selectJockey = (jockeyId) => {
-    setAssignment((current) => {
-      const horse = approvedHorses.find(
-        (item) => (item.id ?? item.Id) === current.horseId,
-      );
-      const horseJockeyId =
-        horse?.assignedJockeyId ?? horse?.AssignedJockeyId ?? "";
-
-      return {
-        ...current,
-        jockeyId,
-        horseId: jockeyId && horseJockeyId !== jockeyId ? "" : current.horseId,
-      };
-    });
   };
 
   const startEditRound = (round) => {
@@ -1209,25 +1157,16 @@ function ScheduleManagement({ type }) {
   const assignHorse = async (event) => {
     event.preventDefault();
     const horseId = assignment.horseId.trim();
-    const jockeyId = assignment.jockeyId.trim();
 
     if (!isGuid(horseId)) {
       setMessage("ID ngựa phải là GUID hợp lệ.");
       return;
     }
 
-    if (jockeyId && !isGuid(jockeyId)) {
-      setMessage("ID kỵ sĩ phải là GUID hợp lệ hoặc để trống.");
-      return;
-    }
-
     try {
-      await assignHorseToRace(assignment.raceId, {
-        horseId,
-        jockeyId: jockeyId || null,
-      });
+      await assignHorseToRace(assignment.raceId, { horseId });
       setMessage("Đã phân công ngựa vào cuộc đua thành công.");
-      setAssignment({ raceId: "", horseId: "", jockeyId: "" });
+      setAssignment({ raceId: "", horseId: "" });
       setItems(await getTournamentRaces(selected));
       refreshBusyHorses();
     } catch (err) { setMessage(err.message); }
@@ -1356,39 +1295,20 @@ function ScheduleManagement({ type }) {
           {items.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}
         </select>
         <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
-          <option value="">Chọn ngựa đã được phê duyệt</option>
+          <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
           {visibleHorses.map((horse) => {
             const horseId = horse.id ?? horse.Id;
             const isInThisRace = assignedHorseIds.has(horseId);
             const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
             const isDisabled = isInThisRace || isBusyElsewhere;
-            const jockeyName =
-              horse.assignedJockeyName ?? horse.AssignedJockeyName;
-            const assignmentStatus =
-              horse.jockeyAssignmentStatus ?? horse.JockeyAssignmentStatus;
             const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
             return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
-              {horse.name ?? horse.Name} · {jockeyName ? `${jockeyName} (${assignmentStatus || "Đã phân công"})` : "Không có kỵ sĩ"}
-              {label}
+              {horse.name ?? horse.Name}{label}
             </option>;
           })}
         </select>
-        <select className="admin-select" value={assignment.jockeyId} onChange={(e) => selectJockey(e.target.value)} disabled={Boolean(selectedHorseJockeyId)}>
-          <option value="">Không có kỵ sĩ</option>
-          {approvedJockeys.map((jockey) => <option key={jockey.id} value={jockey.id}>{jockey.fullName}</option>)}
-        </select>
-        <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa</button>
+        <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
       </form>}
-      {type === "race" && selectedHorseJockeyId ? (
-        <p className="admin-muted-note">
-          Ngựa này được phân công cho {selectedHorseJockeyName || "kỵ sĩ đã chọn"}. Kỵ sĩ sẽ được thêm tự động.
-        </p>
-      ) : null}
-      {type === "race" && approvedJockeys.length === 0 ? (
-        <p className="admin-muted-note">
-          Không có kỵ sĩ nào được phê duyệt. Hãy phê duyệt tài khoản kỵ sĩ trong Quản lý vai trò trước khi phân công vào cuộc đua.
-        </p>
-      ) : null}
 
       <section className="admin-card-grid">{items.map((item) => {
         const itemId = item.id ?? item.Id;
