@@ -928,7 +928,7 @@ function TournamentManagement() {
         {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8, marginTop: 4 }} />}
         <button className="primary-button" disabled={uploading}>Lưu giải đấu</button>
       </form>}
-      <section className="admin-card-grid">{items.map((item) => {
+      <section className="admin-card-grid admin-tournament-grid">{items.map((item) => {
         const id = item.id ?? item.Id;
         const lifecycleStatus = (item.statusName ?? item.StatusName ?? item.status ?? item.Status ?? "").toString().toLowerCase();
         const lifecycleClass = lifecycleStatus === "published" || lifecycleStatus === "ongoing" || lifecycleStatus === "1" || lifecycleStatus === "2" ? "status--active" : "status--inactive";
@@ -955,6 +955,7 @@ function TournamentManagement() {
           onBack={() => setSelectedT(null)}
           setMessage={setMessage}
           getTournamentRaces={getTournamentRaces}
+          getTournamentRounds={getTournamentRounds}
         />
       )}
     </>

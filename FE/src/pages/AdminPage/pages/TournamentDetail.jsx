@@ -54,12 +54,13 @@ function OddsEditor({ raceId, horseId, odds, setMessage }) {
   );
 }
 
-export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces }) {
+export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces, getTournamentRounds }) {
   const tId = t.id??t.Id;
   const status = t.statusName??t.StatusName;
   const isDraft = status === "Draft";
   const navigate = useNavigate();
   const [races, setRaces] = useState([]);
+  const [rounds, setRounds] = useState([]);
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [editRaceData, setEditRaceData] = useState(null);
   const [expandedRaceId, setExpandedRaceId] = useState(null);
@@ -69,6 +70,9 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
 
   const viewTournament = async () => {
     try{const d=await getTournamentRaces(tId);setRaces(Array.isArray(d)?d:[]);}catch{setRaces([]);}
+    // Vòng đấu summary — read-only context, reuses the existing rounds endpoint (already used
+    // by ScheduleManagement) rather than duplicating any round-management UI here.
+    try{const rd=await getTournamentRounds(tId);setRounds(Array.isArray(rd)?rd:[]);}catch{setRounds([]);}
   };
 
   // Task B Correction 2 §3: minimum Admin Tournament-registration review — reuses the existing
@@ -170,6 +174,39 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
         </div>
       )}
     </div>
+    <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
+      <h3 style={{margin:"0 0 12px",fontSize:16,color:"var(--hr-paper)"}}>VÒNG ĐẤU ({rounds.length})</h3>
+      {rounds.length === 0 ? (
+        <p style={{color:"var(--hr-muted)",fontSize:13,margin:0}}>Chưa có vòng đấu nào.</p>
+      ) : (
+        <div style={{display:"grid",gap:8}}>
+          {rounds.map((r) => {
+            const rid = r.id ?? r.Id;
+            const roundNumber = r.roundNumber ?? r.RoundNumber;
+            const roundName = r.name ?? r.Name;
+            const advanceCount = r.advanceCount ?? r.AdvanceCount;
+            const raceCount = r.raceCount ?? r.RaceCount ?? 0;
+            const scheduledStart = r.scheduledStartDate ?? r.ScheduledStartDate;
+            // Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount alone —
+            // Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+            const maxRounds = t.maxRounds ?? t.MaxRounds;
+            const isFinal = maxRounds != null && roundNumber === maxRounds;
+            return (
+              <div key={rid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,padding:"10px 14px",borderRadius:10,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)"}}>
+                <div>
+                  <strong style={{fontSize:14,color:"var(--hr-paper)"}}>Vòng {roundNumber}{roundName ? ` — ${roundName}` : ""}</strong>
+                  {isFinal && <span style={{marginLeft:8,padding:"1px 8px",borderRadius:999,fontSize:10,fontWeight:700,background:"rgba(184,134,59,0.16)",color:"var(--hr-gold-soft)"}}>Vòng chung kết</span>}
+                  <p style={{margin:"2px 0 0",fontSize:12,color:"var(--hr-muted)"}}>
+                    {scheduledStart ? fmtDateTime2(scheduledStart) : "Chưa xếp lịch"} · {raceCount} cuộc đua
+                    {advanceCount != null ? ` · Số ngựa vào vòng sau: ${advanceCount}` : ""}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
     {showRaceForm && !editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate} tournamentRegistrationDeadline={t.registrationDeadline??t.RegistrationDeadline}
       onClose={()=>setShowRaceForm(false)} onSuccess={()=>{setShowRaceForm(false);setMessage("Cuộc đua đã tạo!");viewTournament();}}/>}
     {editRaceData && <RaceForm tournamentId={tId} tournamentName={t.name??t.Name} tournamentStartDate={t.startDate??t.StartDate} tournamentEndDate={t.endDate??t.EndDate} tournamentRegistrationDeadline={t.registrationDeadline??t.RegistrationDeadline}
@@ -205,6 +242,7 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
           <div><strong style={{fontSize:15,color:"var(--hr-paper)"}}>{race.name??race.Name}</strong>
             <span style={{marginLeft:6,padding:"1px 8px",borderRadius:999,fontSize:10,fontWeight:700,background:raceStatusBg(st),color:raceStatusColor(st)}}>{raceStatusLabel(st)}</span>
             {rst&&<span style={{marginLeft:4,padding:"1px 8px",borderRadius:999,fontSize:10,fontWeight:700,background:resultStatusBg(rst),color:resultStatusColor(rst)}}>{resultStatusLabel(rst)}</span>}
+            {(race.roundNumber??race.RoundNumber)!=null&&<p style={{margin:"3px 0 0"}}><span style={{padding:"1px 8px",borderRadius:999,fontSize:10,fontWeight:700,background:"rgba(148,163,184,0.14)",color:"var(--hr-text)"}}>Vòng {race.roundNumber??race.RoundNumber}{(race.roundName??race.RoundName)?` · ${race.roundName??race.RoundName}`:""}</span></p>}
             <p style={{margin:"2px 0 0",fontSize:12,color:"var(--hr-muted)"}}>{fmtDate2(race.scheduledAt??race.ScheduledAt)} · {(race.distance??race.Distance??0)}m</p></div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
             {["scheduled","registrationopen","registrationclosed"].includes(st)&&<button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid transparent",background:"var(--hr-gold)",color:"var(--hr-bg-deep)",cursor:det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")?"pointer":"not-allowed",fontWeight:700,opacity:det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")?1:0.5}} disabled={!det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")} onClick={async(e)=>{e.stopPropagation();try{await request(`/api/races/management/${id}/start`,{method:"POST"});setMessage("Đã bắt đầu!");viewTournament()}catch(err){setMessage(err.message)}}}>Bắt đầu</button>}

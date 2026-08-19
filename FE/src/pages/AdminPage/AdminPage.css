@@ -139,6 +139,18 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 .admin-tournament-card dl { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0; }
 .admin-tournament-card dt { font-size: 10px; color: var(--hr-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .admin-tournament-card dd { font-size: 14px; color: var(--hr-paper); font-weight: 600; margin: 0; }
+
+/* ── Tournament card grid: capped columns so cards never get squeezed too narrow ── */
+.admin-tournament-grid { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1400px) {
+  .admin-tournament-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 1024px) {
+  .admin-tournament-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .admin-tournament-grid { grid-template-columns: repeat(1, 1fr); }
+}
 .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .admin-actions button, .admin-actions a { padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--hr-border-soft); cursor: pointer; font-family: inherit; text-decoration: none; transition: all 0.15s; background: transparent; color: var(--hr-text); }
 .admin-actions button:hover, .admin-actions a:hover { background: rgba(238,229,212,0.06); border-color: var(--hr-border); }
