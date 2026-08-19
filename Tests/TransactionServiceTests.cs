@@ -40,6 +40,72 @@ public class TransactionServiceTests
         Assert.Equal(100000m, items[0].Amount);
     }
 
+    [Fact]
+    public async Task CheckTransactionAsync_OwnPendingTransaction_ReturnsNotCompleted()
+    {
+        var userId = Guid.NewGuid();
+        var pending = new Transaction { Id = Guid.NewGuid(), UserId = userId, Amount = 100000, Status = "pending", CreatedAt = DateTime.UtcNow, Reference = "PEND" };
+        var service = BuildService(new List<Transaction> { pending });
+
+        var result = await service.CheckTransactionAsync(userId, pending.Id);
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        var completed = (bool)result.Result.Data!.GetType().GetProperty("completed")!.GetValue(result.Result.Data)!;
+        Assert.False(completed);
+    }
+
+    [Fact]
+    public async Task CheckTransactionAsync_OwnCompletedTransaction_ReturnsCompletedWithActualAmount()
+    {
+        var userId = Guid.NewGuid();
+        var completedTx = new Transaction { Id = Guid.NewGuid(), UserId = userId, Amount = 250000, Status = "completed", CreatedAt = DateTime.UtcNow.AddMinutes(-2), CompletedAt = DateTime.UtcNow, Reference = "DONE" };
+        var service = BuildService(new List<Transaction> { completedTx });
+
+        var result = await service.CheckTransactionAsync(userId, completedTx.Id);
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        var data = result.Result.Data!;
+        var completed = (bool)data.GetType().GetProperty("completed")!.GetValue(data)!;
+        var amount = (decimal)data.GetType().GetProperty("amount")!.GetValue(data)!;
+        Assert.True(completed);
+        Assert.Equal(250000m, amount);
+    }
+
+    [Fact]
+    public async Task CheckTransactionAsync_AnotherUsersTransaction_ReturnsNotFound()
+    {
+        var ownerId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var tx = new Transaction { Id = Guid.NewGuid(), UserId = ownerId, Amount = 100000, Status = "completed", CreatedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow, Reference = "OWNED" };
+        var service = BuildService(new List<Transaction> { tx });
+
+        var result = await service.CheckTransactionAsync(otherUserId, tx.Id);
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(404, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task CheckTransactionAsync_UnknownTransactionId_ReturnsNotFound()
+    {
+        var userId = Guid.NewGuid();
+        var service = BuildService(new List<Transaction>());
+
+        var result = await service.CheckTransactionAsync(userId, Guid.NewGuid());
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(404, result.StatusCode);
+    }
+
+    private static TransactionService BuildService(List<Transaction> transactions) => new(
+        new FakeTransactionRepository(transactions),
+        new FakeUserRepository(),
+        new FakeWalletService(),
+        new FakeNotificationService(),
+        new FakeUnitOfWork(),
+        new ConfigurationBuilder().AddInMemoryCollection().Build(),
+        NullLogger<TransactionService>.Instance);
+
     private sealed class FakeTransactionRepository : ITransactionRepository
     {
         private readonly List<Transaction> _transactions;
@@ -49,7 +115,7 @@ public class TransactionServiceTests
         public Task AddAsync(Transaction transaction) => Task.CompletedTask;
         public Task<Transaction?> GetByReferenceAsync(string reference) => Task.FromResult(_transactions.FirstOrDefault(t => t.Reference == reference));
         public Task<Transaction?> GetLatestByUserAsync(Guid userId) => Task.FromResult(_transactions.Where(t => t.UserId == userId).OrderByDescending(t => t.CreatedAt).FirstOrDefault());
-        public Task<bool> HasCompletedSinceAsync(Guid userId, DateTime since) => Task.FromResult(_transactions.Any(t => t.UserId == userId && t.Status == "completed" && t.CompletedAt >= since));
+        public Task<Transaction?> GetByIdAsync(Guid id) => Task.FromResult(_transactions.FirstOrDefault(t => t.Id == id));
         public Task<Transaction?> GetPendingByRefAsync(string reference) => Task.FromResult(_transactions.FirstOrDefault(t => t.Reference == reference && t.Status == "pending"));
         public Task<bool> ExistsBySepayIdAsync(long sepayTransactionId) => Task.FromResult(false);
         public Task<bool> TryCompleteByRefAsync(string reference, long sepayTransactionId) => Task.FromResult(true);

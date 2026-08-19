@@ -178,12 +178,17 @@ public class TransactionService : ITransactionService
         return ServiceResult<object>.Ok(new { message = "Giao dịch hoàn thành", userId = tx.UserId });
     }
 
-    public async Task<ServiceResult<object>> CheckTransactionAsync(Guid userId, DateTime since)
+    public async Task<ServiceResult<object>> CheckTransactionAsync(Guid userId, Guid transactionId)
     {
-        var found = await _transactionRepo.HasCompletedSinceAsync(userId, since);
-        if (found)
+        var transaction = await _transactionRepo.GetByIdAsync(transactionId);
+        if (transaction == null || transaction.UserId != userId)
         {
-            return ServiceResult<object>.Ok(new { completed = true, amount = 0 });
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy giao dịch");
+        }
+
+        if (transaction.Status == "completed")
+        {
+            return ServiceResult<object>.Ok(new { completed = true, amount = transaction.Amount });
         }
         return ServiceResult<object>.Ok(new { completed = false });
     }
