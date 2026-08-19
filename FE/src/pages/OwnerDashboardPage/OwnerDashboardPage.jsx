@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerProfile, getOwnerTournaments, getOwnerEntries, getOwnerPerformance } from "../../services/ownerApi";
+import { isJockeyRole } from "../../services/authRoleUtils";
+import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
 import "./OwnerDashboardPage.css";
 
 function OwnerDashboardPage() {
+  // Task B Final Correction §5: Create Horse / Register Tournament quick actions are Owner-only.
+  const canManageHorses = !isJockeyRole();
   const navigate = useNavigate();
   const [owner, setOwner] = useState(null);
   const [tournaments, setTournaments] = useState([]);
@@ -44,16 +48,18 @@ function OwnerDashboardPage() {
             <h1>Chào mừng trở lại, {ownerName}</h1>
             <p className="od-topbar-sub">{upcomingEntries.length} cuộc đua sắp diễn ra · {pendingCount} chờ xác nhận</p>
           </div>
-          <div className="od-topbar-actions">
-            <button className="od-btn od-btn--primary" onClick={() => navigate("/owner/horses/new")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-              Thêm ngựa
-            </button>
-            <button className="od-btn od-btn--outline" onClick={() => navigate("/owner/register-tournament")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-              Đăng ký giải
-            </button>
-          </div>
+          {canManageHorses && (
+            <div className="od-topbar-actions">
+              <button className="od-btn od-btn--primary" onClick={() => navigate("/owner/horses/new")}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                Thêm ngựa
+              </button>
+              <button className="od-btn od-btn--outline" onClick={() => navigate("/owner/register-tournament")}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                Đăng ký giải
+              </button>
+            </div>
+          )}
         </header>
 
         {profileError && <div className="od-error">{profileError}</div>}
@@ -184,18 +190,21 @@ function OwnerDashboardPage() {
                 <p className="od-muted">Chưa tham gia giải đấu nào.</p>
               ) : (
                 <div className="od-feed">
-                  {tournaments.map(t => (
+                  {tournaments.map(t => {
+                    const registrationState = getTournamentRegistrationState(t);
+                    return (
                     <div key={t.id ?? t.Id} className="od-feed-item">
-                      <div className={`od-feed-dot ${(t.isActive ?? t.IsActive) ? "od-feed-dot--green" : "od-feed-dot--gray"}`} />
+                      <div className={`od-feed-dot ${registrationState.canRegister ? "od-feed-dot--green" : "od-feed-dot--gray"}`} />
                       <div className="od-feed-content">
                         <strong>{t.name ?? t.Name}</strong>
                         <span>{t.raceCount ?? t.RaceCount ?? 0} cuộc đua</span>
                       </div>
-                      <span className={`od-chip ${(t.isActive ?? t.IsActive) ? "od-chip--active" : "od-chip--closed"}`}>
-                        {(t.isActive ?? t.IsActive) ? "Mở" : "Đã đóng"}
+                      <span className={`od-chip ${registrationState.canRegister ? "od-chip--active" : "od-chip--closed"}`}>
+                        {registrationState.label}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

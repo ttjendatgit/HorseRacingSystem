@@ -361,6 +361,14 @@
 
 .otl-badge--closed::before { background: #6b7280; }
 
+/* Capacity full — distinct tone from a deadline-based "closed" state. */
+.otl-badge--full {
+  background: rgba(185,138,69,0.14);
+  color: #b8860b;
+}
+
+.otl-badge--full::before { background: #b8860b; }
+
 /* ── Buttons ── */
 .otl-btn {
   display: inline-flex;

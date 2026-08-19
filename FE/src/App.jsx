@@ -39,6 +39,7 @@ const OwnerHorseCreatePage = lazy(() => import("./pages/OwnerHorseCreatePage/Own
 const OwnerHorseEditPage = lazy(() => import("./pages/OwnerHorseEditPage/OwnerHorseEditPage"));
 const OwnerTournamentListPage = lazy(() => import("./pages/OwnerTournamentListPage/OwnerTournamentListPage"));
 const OwnerTournamentRegisterPage = lazy(() => import("./pages/OwnerTournamentRegisterPage/OwnerTournamentRegisterPage"));
+const OwnerParticipationsPage = lazy(() => import("./pages/OwnerParticipationsPage/OwnerParticipationsPage"));
 const OwnerRaceConfirmationPage = lazy(() => import("./pages/OwnerRaceConfirmationPage/OwnerRaceConfirmationPage"));
 const RefereeDashboardPage = lazy(() => import("./pages/RefereeDashboardPage/RefereeDashboardPage"));
 const RefereeAssignmentPage = lazy(() => import("./pages/RefereeAssignmentPage/RefereeAssignmentPage"));
@@ -144,18 +145,26 @@ function AppLayout() {
               <Route path="/jockey/profile" element={<JockeyProfilePage />} />
             </Route>
 
-            {/* Owner */}
+            {/* Owner — browsing/read routes remain shared with Jockey (unchanged Owner UI) */}
             <Route element={<RequireAuth roles={["horse_owner", "jockey"]} />}>
               <Route path="/owner" element={<OwnerDashboardPage />} />
               <Route path="/owner/horses" element={<OwnerHorseListPage />} />
-              <Route path="/owner/horses/new" element={<OwnerHorseCreatePage />} />
               <Route path="/owner/horses/:id" element={<OwnerHorseDetailPage />} />
-              <Route path="/owner/horses/:id/edit" element={<OwnerHorseEditPage />} />
               <Route path="/owner/tournaments" element={<OwnerTournamentListPage />} />
-              <Route path="/owner/register-tournament" element={<OwnerTournamentRegisterPage />} />
               <Route path="/owner/schedule" element={<OwnerRaceConfirmationPage />} />
               <Route path="/owner/race-confirmations" element={<Navigate to="/owner/schedule" replace />} />
               <Route path="/owner/profile" element={<OwnerProfilePage />} />
+            </Route>
+
+            {/* Owner-only — Task B Final Correction: Create/Edit Horse and Tournament
+                registration submission are Owner business territory; Jockey must not reach
+                these routes even by direct URL (mirrors backend [Authorize(Roles="HorseOwner,Admin")]
+                / [Authorize(Roles="HorseOwner")]). Full Jockey invitation/license flow deferred. */}
+            <Route element={<RequireAuth roles={["horse_owner"]} />}>
+              <Route path="/owner/horses/new" element={<OwnerHorseCreatePage />} />
+              <Route path="/owner/horses/:id/edit" element={<OwnerHorseEditPage />} />
+              <Route path="/owner/register-tournament" element={<OwnerTournamentRegisterPage />} />
+              <Route path="/owner/participations" element={<OwnerParticipationsPage />} />
             </Route>
 
             {/* Referee */}

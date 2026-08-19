@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { unwrapResponseData } from "../../services/authRoleUtils";
 import { getRace, getRaces } from "../../services/spectatorApi";
 import "./SpectatorRaceSchedulePage.css";
@@ -57,8 +57,8 @@ const formatCountdown = (target) => {
 // since this page doesn't currently distinguish the registration window.
 const STATUS_META = {
   Scheduled: { label: "Đã lên lịch", className: "srs-badge--scheduled" },
-  RegistrationOpen: { label: "Mở đăng ký", className: "srs-badge--scheduled" },
-  RegistrationClosed: { label: "Đóng đăng ký", className: "srs-badge--scheduled" },
+  RegistrationOpen: { label: "Chuẩn bị", className: "srs-badge--scheduled" },
+  RegistrationClosed: { label: "Chuẩn bị", className: "srs-badge--scheduled" },
   InProgress: { label: "Đang diễn ra", className: "srs-badge--live" },
   Finished: { label: "Đã kết thúc", className: "srs-badge--completed" },
   Canceled: { label: "Đã hủy", className: "srs-badge--canceled" },

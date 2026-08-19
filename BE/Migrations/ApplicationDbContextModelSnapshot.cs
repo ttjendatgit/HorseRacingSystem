@@ -229,6 +229,9 @@ namespace HorseRacing.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1277,7 +1280,8 @@ namespace HorseRacing.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TournamentId");
+                    b.HasIndex("TournamentId", "RoundNumber")
+                        .IsUnique();
 
                     b.ToTable("Rounds");
                 });
@@ -1403,11 +1407,23 @@ namespace HorseRacing.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HorseId");
+                    b.HasIndex("HorseId")
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId");
 
                     b.HasIndex("TournamentId");
+
+                    b.HasIndex("HorseId", "TournamentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_HorseId_TournamentId_Active")
+                        .HasFilter("\"Status\" IN (1, 2)");
+
+                    b.HasIndex("OwnerId", "TournamentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TournamentHorseRegistrations_OwnerId_TournamentId_Active")
+                        .HasFilter("\"Status\" IN (1, 2)");
 
                     b.ToTable("TournamentHorseRegistrations");
                 });

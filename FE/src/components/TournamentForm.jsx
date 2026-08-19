@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createTournament } from "../services/adminApi";
 import { request } from "../services/apiClient";
 import { Input, Textarea, Button } from "./ui/Primitives";
+import { vnInputToApiUtc } from "../utils/vnDateTime";
 
 function TournamentForm({ onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
@@ -17,6 +18,8 @@ function TournamentForm({ onClose, onSuccess }) {
     prizePool: 0,
     imageUrl: "",
     registrationDeadline: "",
+    minParticipants: 3,
+    maxParticipants: 10,
   });
 
   const updateForm = (field, value) => {
@@ -49,11 +52,13 @@ function TournamentForm({ onClose, onSuccess }) {
         description: form.description,
         venue: form.venue,
         category: form.category,
-        startDate: new Date(form.startDate).toISOString(),
-        endDate: new Date(form.endDate).toISOString(),
+        startDate: vnInputToApiUtc(form.startDate),
+        endDate: vnInputToApiUtc(form.endDate),
         prizePool: Number(form.prizePool),
         imageUrl: form.imageUrl || null,
-        registrationDeadline: form.registrationDeadline ? new Date(form.registrationDeadline).toISOString() : null,
+        registrationDeadline: form.registrationDeadline ? vnInputToApiUtc(form.registrationDeadline) : null,
+        minParticipants: Number(form.minParticipants),
+        maxParticipants: Number(form.maxParticipants),
       };
 
       await createTournament(payload);
@@ -75,10 +80,15 @@ function TournamentForm({ onClose, onSuccess }) {
           <Textarea label="Mô tả" value={form.description} onChange={(e) => updateForm("description", e.target.value)} placeholder="Mô tả ngắn về giải đấu..." rows={3} />
           <Input label="Địa điểm" value={form.venue} onChange={(e) => updateForm("venue", e.target.value)} placeholder="Hà Nội" />
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            <Input label="Ngày bắt đầu" type="date" value={form.startDate} onChange={(e) => updateForm("startDate", e.target.value)} required style={{colorScheme:"dark"}} />
-            <Input label="Ngày kết thúc" type="date" value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
+            <Input label="Thời gian bắt đầu *" type="datetime-local" value={form.startDate} onChange={(e) => updateForm("startDate", e.target.value)} required style={{colorScheme:"dark"}} />
+            <Input label="Thời gian kết thúc *" type="datetime-local" value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
           </div>
-          <Input label="Hạn đăng ký" type="date" value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} style={{colorScheme:"dark"}} />
+          <p style={{margin:"-12px 0 16px",fontSize:12,color:"var(--hr-muted)"}}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>
+          <Input label="Hạn đăng ký ngựa *" type="datetime-local" value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} required style={{colorScheme:"dark"}} hint="Thời điểm cuối cùng Chủ ngựa được gửi đăng ký tham gia giải." />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <Input label="Số người tham gia tối thiểu" type="number" value={form.minParticipants} onChange={(e) => updateForm("minParticipants", e.target.value)} min="3" required />
+            <Input label="Số người tham gia tối đa" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" required />
+          </div>
           <Input label="Tổng tiền thưởng (VND)" type="number" value={form.prizePool} onChange={(e) => updateForm("prizePool", e.target.value)} placeholder="100000000" min="0" />
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Ảnh đại diện</label>

@@ -32,7 +32,8 @@ public class UpdateTournamentRequest
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public DateTime? RegistrationDeadline { get; set; }
-    public bool? IsActive { get; set; }
+    // IsActive removed (Phase4B): server-owned, derived from Status by lifecycle actions only.
+    // An old client sending "isActive" in the JSON body is silently ignored by normal model binding.
     public string? ImageUrl { get; set; }
 
     // Phase3B additions — all nullable; null/omitted leaves the existing DB value untouched
@@ -81,8 +82,12 @@ public class TournamentResponse
     public string? SurfaceType { get; set; }
     public int? MinParticipants { get; set; }
     public int? MaxParticipants { get; set; }
+    // Task C1 capacity gate: count of TournamentHorseRegistration rows with Status == Approved
+    // for this Tournament — the Owner registration page needs this to know whether capacity is
+    // full without a second round-trip (Pending/Rejected/Withdrawn never count here).
+    public int ApprovedRegistrationCount { get; set; }
     public int MaxRounds { get; set; }
-    /// <summary>Response-only in Phase3B; not yet populated by any write path (see AdminService/TournamentService cancellation TODO).</summary>
+    /// <summary>Populated by ChangeStatusAsync's Cancelled transition (Phase4B) with the acting user's Id.</summary>
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }
 

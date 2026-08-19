@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { getRaces } from "../../services/spectatorApi";
 import "./RaceSchedulePage.css";
 
@@ -11,7 +11,7 @@ const fDate = (v) =>
     : "Chưa xác định";
 
 const statusLabel = (s) => {
-  const m = { scheduled: "Đã lên lịch", registrationopen: "Mở đăng ký", registrationclosed: "Đóng đăng ký", inprogress: "Đang diễn ra", finished: "Đã kết thúc", cancelled: "Đã hủy" };
+  const m = { scheduled: "Đã lên lịch", registrationopen: "Chuẩn bị", registrationclosed: "Chuẩn bị", inprogress: "Đang diễn ra", finished: "Đã kết thúc", cancelled: "Đã hủy" };
   return m[(s ?? "").toLowerCase()] ?? s ?? "Đã lên lịch";
 };
 
