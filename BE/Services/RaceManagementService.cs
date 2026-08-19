@@ -128,6 +128,13 @@ public class RaceManagementService : IRaceManagementService
                 }
             }
 
+            var qualificationErrors = await ValidateQualificationSlotsForRaceSaveAsync(
+                round.Id, null, request.QualificationSlots, request.MaxParticipants);
+            if (qualificationErrors.Count > 0)
+            {
+                return ServiceResult<RaceDetailResponse>.Error(string.Join("; ", qualificationErrors), 400);
+            }
+
             var race = new Race
             {
                 Id = Guid.NewGuid(),
@@ -243,6 +250,15 @@ public class RaceManagementService : IRaceManagementService
                     }
                 }
             }
+            var candidateQualificationSlots = request.QualificationSlots.HasValue
+                ? request.QualificationSlots.Value
+                : race.QualificationSlots;
+            var qualificationErrors = await ValidateQualificationSlotsForRaceSaveAsync(
+                race.RoundId, race.Id, candidateQualificationSlots, candidateMaxParticipants);
+            if (qualificationErrors.Count > 0)
+            {
+                return ServiceResult<RaceDetailResponse>.Fail(400, string.Join("; ", qualificationErrors));
+            }
 
             if (!string.IsNullOrEmpty(request.Name))
                 race.Name = request.Name;
@@ -342,6 +358,11 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
+            if ((race.Round?.RoundNumber ?? 1) > 1)
+            {
+                return ServiceResult<bool>.Fail(400, "Ngựa ở vòng sau phải được xác định từ kết quả vòng trước.");
+            }
+
             if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.RegistrationOpen)
             {
                 return ServiceResult<bool>.Fail(400, $"Không thể thêm ngựa vào cuộc đua có trạng thái '{race.Status}'. Cuộc đua phải ở trạng thái Đã lên lịch hoặc Đang mở đăng ký.");
@@ -362,13 +383,19 @@ public class RaceManagementService : IRaceManagementService
             {
                 return ServiceResult<bool>.Fail(400, "Ngựa chưa được admin phê duyệt");
             }
+            if (horse.IsArchived)
+            {
+                return ServiceResult<bool>.Fail(400, "Ngựa đã được lưu trữ (archive) và không thể phân công vào cuộc đua mới.");
+            }
 
             // Task B §6: RaceEntry gate — Horse must hold an Approved TournamentHorseRegistration
-            // for THIS Race's Tournament (no registration / Pending / Rejected / Withdrawn /
-            // registration for a different Tournament are all rejected the same way here).
-            var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
-                x.TournamentId == race.TournamentId && x.HorseId == request.HorseId);
-            if (registration == null || registration.Status != RegistrationStatus.Approved)
+            // for THIS Race's Tournament. Historical Withdrawn/Rejected rows must not hide a
+            // newer Approved registration.
+            var hasApprovedRegistration = await _db.TournamentHorseRegistrations.AnyAsync(x =>
+                x.TournamentId == race.TournamentId &&
+                x.HorseId == request.HorseId &&
+                x.Status == RegistrationStatus.Approved);
+            if (!hasApprovedRegistration)
             {
                 return ServiceResult<bool>.Fail(400, "Ngựa chưa được duyệt đăng ký tham gia giải đấu này.");
             }
@@ -473,6 +500,11 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
+            if ((race.Round?.RoundNumber ?? 1) > 1)
+            {
+                return ServiceResult<bool>.Fail(400, "Ngựa ở vòng sau phải được xác định từ kết quả vòng trước.");
+            }
+
             if (race.Status != RaceStatus.Scheduled && race.Status != RaceStatus.RegistrationOpen)
             {
                 return ServiceResult<bool>.Fail(400, $"Không thể thêm ngựa vào cuộc đua có trạng thái '{race.Status}'. Cuộc đua phải ở trạng thái Đã lên lịch hoặc Đang mở đăng ký.");
@@ -504,12 +536,19 @@ public class RaceManagementService : IRaceManagementService
                     errors.Add($"Ngựa \"{horse.Name}\" chưa được phê duyệt");
                     continue;
                 }
+                if (horse.IsArchived)
+                {
+                    errors.Add($"Ngựa \"{horse.Name}\" đã được lưu trữ (archive)");
+                    continue;
+                }
 
                 // Task B §6: same RaceEntry gate as AssignHorseToRaceAsync — Approved
                 // TournamentHorseRegistration for this Race's Tournament, required.
-                var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x =>
-                    x.TournamentId == race.TournamentId && x.HorseId == horseId);
-                if (registration == null || registration.Status != RegistrationStatus.Approved)
+                var hasApprovedRegistration = await _db.TournamentHorseRegistrations.AnyAsync(x =>
+                    x.TournamentId == race.TournamentId &&
+                    x.HorseId == horseId &&
+                    x.Status == RegistrationStatus.Approved);
+                if (!hasApprovedRegistration)
                 {
                     errors.Add($"Ngựa \"{horse.Name}\" chưa được duyệt đăng ký tham gia giải đấu này");
                     continue;
@@ -680,9 +719,13 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
             }
 
-            if (race.Status != RaceStatus.RegistrationClosed)
+            var canStartFromPreRaceStatus =
+                race.Status == RaceStatus.Scheduled ||
+                race.Status == RaceStatus.RegistrationOpen ||
+                race.Status == RaceStatus.RegistrationClosed;
+            if (!canStartFromPreRaceStatus)
             {
-                return ServiceResult<bool>.Fail(400, $"Không thể bắt đầu cuộc đua với trạng thái '{race.Status}'. Phải đóng đăng ký trước khi bắt đầu.");
+                return ServiceResult<bool>.Fail(400, $"Không thể bắt đầu cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải ở trạng thái chuẩn bị trước khi bắt đầu.");
             }
 
             var entries = await _entryRepo.GetByRaceAsync(raceId);
@@ -833,6 +876,47 @@ public class RaceManagementService : IRaceManagementService
         }
     }
 
+    private async Task<List<string>> ValidateQualificationSlotsForRaceSaveAsync(
+        Guid roundId, Guid? currentRaceId, int? qualificationSlots, int maxParticipants)
+    {
+        var errors = new List<string>();
+        var round = await _roundRepo.GetByIdAsync(roundId);
+
+        if (!qualificationSlots.HasValue)
+        {
+            if (round?.AdvanceCount == 0)
+                errors.Add("Vòng chung kết phải có 0 suất đi tiếp.");
+            return errors;
+        }
+
+        if (qualificationSlots.Value < 0)
+            errors.Add("Số suất đi tiếp từ cuộc đua không được âm.");
+
+        if (round?.AdvanceCount is null)
+            return errors;
+
+        if (round.AdvanceCount.Value == 0)
+        {
+            if (qualificationSlots.Value != 0)
+                errors.Add("Vòng chung kết phải có 0 suất đi tiếp.");
+            return errors;
+        }
+
+        if (qualificationSlots.Value >= maxParticipants)
+            errors.Add("Số suất đi tiếp từ cuộc đua phải nhỏ hơn số ngựa tối đa của cuộc đua.");
+
+        var siblingSlots = await _db.Races
+            .AsNoTracking()
+            .Where(r => r.RoundId == roundId && (!currentRaceId.HasValue || r.Id != currentRaceId.Value))
+            .SumAsync(r => r.QualificationSlots ?? 0);
+        var candidateTotal = siblingSlots + qualificationSlots.Value;
+        if (candidateTotal > round.AdvanceCount.Value)
+        {
+            errors.Add($"Tổng số suất đi tiếp của vòng ({candidateTotal}) không được vượt quá AdvanceCount ({round.AdvanceCount.Value}).");
+        }
+
+        return errors;
+    }
     /// <summary>
     /// Phase5B Fix3: reject a Race scheduled outside its Round's window at Create/Update time,
     /// instead of only at Publish. Mirrors ValidateRoundScheduleWithinTournament's convention

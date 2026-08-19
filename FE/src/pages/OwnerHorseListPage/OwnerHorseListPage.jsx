@@ -135,8 +135,14 @@ function OwnerHorseListPage() {
   };
 
   const handleDelete = async (horse) => {
-    if (!window.confirm(`Xóa ${horse.name ?? horse.Name}?`)) return;
-    try { await deleteHorse(horse.id ?? horse.Id); loadHorses(); }
+    // Task C1 §1: a Horse with participation history is archived (not destroyed) by this same
+    // endpoint — the confirm/result copy must not promise permanent deletion either way.
+    if (!window.confirm(`Xóa ${horse.name ?? horse.Name}? Nếu ngựa đã có lịch sử tham gia, hệ thống sẽ lưu trữ thay vì xóa vĩnh viễn.`)) return;
+    try {
+      const message = await deleteHorse(horse.id ?? horse.Id);
+      if (typeof message === "string" && message) alert(message);
+      loadHorses();
+    }
     catch (e) { alert(e.message); }
   };
 
@@ -194,6 +200,9 @@ function OwnerHorseListPage() {
             const winRate = totalRaces > 0 ? Math.round((totalWins / totalRaces) * 100) : 0;
             const approvalStatus = h.approvalStatus ?? h.ApprovalStatus ?? 0;
             const statusLabel = approvalStatusMap[approvalStatus] ?? "Chưa xác định";
+            // Task C1 §1: IsArchived is a distinct axis from ApprovalStatus (admin profile
+            // review) — never conflate the two badges.
+            const isArchived = h.isArchived ?? h.IsArchived ?? false;
             const horseWinRate = totalRaces > 0 ? Math.round((totalWins / totalRaces) * 100) : 0;
             const speed = Math.min(95, 45 + totalWins * 8);
             const stamina = Math.min(95, 35 + (totalRaces - totalWins) * 4);
@@ -204,7 +213,12 @@ function OwnerHorseListPage() {
             return (
               <div key={id} className="oh-card">
                 <div className="oh-card-img" style={{ backgroundImage: imageUrl ? `url(${imageUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                  <div className={"oh-card-status" + (statusClass[approvalStatus] ? " oh-card-status--" + statusClass[approvalStatus] : "")}>{statusLabel}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div className={"oh-card-status" + (statusClass[approvalStatus] ? " oh-card-status--" + statusClass[approvalStatus] : "")}>{statusLabel}</div>
+                    {isArchived && (
+                      <div className="oh-card-status oh-card-status--archived">Đã lưu trữ</div>
+                    )}
+                  </div>
                 </div>
                 <div className="oh-card-body">
                   <div className="oh-card-header">
@@ -236,15 +250,21 @@ function OwnerHorseListPage() {
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                       </button>
                     )}
-                    <button className="oh-btn-icon" onClick={() => openAssign(h)} title="Chỉ định kỵ sĩ">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                    </button>
-                    {canManageHorses && (
+                    {/* New JockeyInvitations are backend-rejected for an archived Horse (HorseService.InviteJockeyAsync). */}
+                    {!isArchived && (
+                      <button className="oh-btn-icon" onClick={() => openAssign(h)} title="Chỉ định kỵ sĩ">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                      </button>
+                    )}
+                    {/* Task C1 correction §2: once archived there is nothing further to delete —
+                        hiding the button avoids a no-op "Delete" affordance on a terminal state. */}
+                    {canManageHorses && !isArchived && (
                       <button className="oh-btn-icon" onClick={() => handleDelete(h)} title="Xóa">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                       </button>
                     )}
-                    {canManageHorses && (
+                    {/* Editing an archived Horse is backend-rejected (HorseService.UpdateHorseAsync) — hidden here to match. */}
+                    {canManageHorses && !isArchived && (
                       <Link to={`/owner/horses/${id}/edit`} className="oh-btn-icon" title="Chỉnh sửa">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </Link>

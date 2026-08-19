@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerProfile, getOwnerTournaments, getOwnerEntries, getOwnerPerformance } from "../../services/ownerApi";
 import { isJockeyRole } from "../../services/authRoleUtils";
+import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
 import "./OwnerDashboardPage.css";
 
 function OwnerDashboardPage() {
@@ -189,18 +190,21 @@ function OwnerDashboardPage() {
                 <p className="od-muted">Chưa tham gia giải đấu nào.</p>
               ) : (
                 <div className="od-feed">
-                  {tournaments.map(t => (
+                  {tournaments.map(t => {
+                    const registrationState = getTournamentRegistrationState(t);
+                    return (
                     <div key={t.id ?? t.Id} className="od-feed-item">
-                      <div className={`od-feed-dot ${(t.isActive ?? t.IsActive) ? "od-feed-dot--green" : "od-feed-dot--gray"}`} />
+                      <div className={`od-feed-dot ${registrationState.canRegister ? "od-feed-dot--green" : "od-feed-dot--gray"}`} />
                       <div className="od-feed-content">
                         <strong>{t.name ?? t.Name}</strong>
                         <span>{t.raceCount ?? t.RaceCount ?? 0} cuộc đua</span>
                       </div>
-                      <span className={`od-chip ${(t.isActive ?? t.IsActive) ? "od-chip--active" : "od-chip--closed"}`}>
-                        {(t.isActive ?? t.IsActive) ? "Mở" : "Đã đóng"}
+                      <span className={`od-chip ${registrationState.canRegister ? "od-chip--active" : "od-chip--closed"}`}>
+                        {registrationState.label}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

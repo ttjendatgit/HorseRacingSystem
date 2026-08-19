@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
@@ -1170,7 +1170,7 @@ public class Phase5StructuralTests
         var create = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
         {
             Name = "Post-publish Race", TournamentId = tournamentId, RoundId = round1Id,
-            ScheduledAt = DateTime.UtcNow.AddDays(30), TrackId = track, MaxParticipants = 5
+            ScheduledAt = DateTime.UtcNow.AddDays(30), TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.False(create.Result.Success);
         Assert.Equal(400, create.StatusCode);
@@ -1349,7 +1349,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundStart.AddHours(-1), ScheduledEndAt = roundStart.AddHours(1),
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
@@ -1367,7 +1367,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundEnd.AddHours(-1), ScheduledEndAt = roundEnd.AddHours(1),
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
@@ -1385,7 +1385,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.True(result.Result.Success, result.Result.Message);
     }
@@ -1401,7 +1401,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundEnd.AddHours(-1), ScheduledEndAt = roundEnd,
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.True(result.Result.Success, result.Result.Message);
     }
@@ -1417,7 +1417,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundStart, ScheduledEndAt = roundStart,
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
@@ -1434,7 +1434,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.True(create.Result.Success, create.Result.Message);
         var raceId = create.Result.Data!.Id;
@@ -1460,7 +1460,7 @@ public class Phase5StructuralTests
         {
             Name = "Race", TournamentId = tournamentId, RoundId = roundId,
             ScheduledAt = roundStart.AddHours(1), ScheduledEndAt = roundStart.AddHours(2),
-            TrackId = track, MaxParticipants = 5
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.True(result.Result.Success, result.Result.Message);
     }

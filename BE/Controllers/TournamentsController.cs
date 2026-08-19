@@ -1,7 +1,9 @@
-using System;
+﻿using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
+using HorseRacing.Models;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +34,22 @@ public class TournamentsController : ControllerBase
         return Guid.TryParse(value, out actorId);
     }
 
+    private bool IsAdminCaller() => User?.IsInRole("Admin") == true;
+
+    private static bool IsDraftTournament(TournamentResponse? tournament)
+    {
+        return tournament?.Status == TournamentStatus.Draft ||
+               string.Equals(tournament?.StatusName, nameof(TournamentStatus.Draft), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> ShouldHideDraftTournamentAsync(Guid tournamentId)
+    {
+        if (IsAdminCaller()) return false;
+
+        var tournament = await _tournamentService.GetTournamentAsync(tournamentId);
+        return tournament.Result.Success && IsDraftTournament(tournament.Result.Data);
+    }
+
     // Tournament CRUD
     [HttpPost]
     public async Task<ActionResult> CreateTournament([FromBody] CreateTournamentRequest request)
@@ -45,6 +63,13 @@ public class TournamentsController : ControllerBase
     public async Task<ActionResult> GetAllTournaments()
     {
         var result = await _tournamentService.GetAllTournamentsAsync();
+        if (!IsAdminCaller() && result.Result.Success && result.Result.Data != null)
+        {
+            result.Result.Data = result.Result.Data
+                .Where(tournament => !IsDraftTournament(tournament))
+                .ToList();
+        }
+
         return StatusCode(result.StatusCode, result.Result);
     }
 
@@ -61,6 +86,9 @@ public class TournamentsController : ControllerBase
     public async Task<ActionResult> GetTournament(Guid id)
     {
         var result = await _tournamentService.GetTournamentAsync(id);
+        if (!IsAdminCaller() && result.Result.Success && IsDraftTournament(result.Result.Data))
+            return NotFound(ApiResult<TournamentResponse>.Fail("Không tìm thấy giải đấu"));
+
         return StatusCode(result.StatusCode, result.Result);
     }
 
@@ -93,6 +121,9 @@ public class TournamentsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> GetTournamentStats(Guid id)
     {
+        if (await ShouldHideDraftTournamentAsync(id))
+            return NotFound(ApiResult<object>.Fail("Không tìm thấy giải đấu"));
+
         var result = await _tournamentService.GetStatsAsync(id);
         return StatusCode(result.StatusCode, result.Result);
     }
@@ -101,6 +132,9 @@ public class TournamentsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> GetTournamentTimeline(Guid id)
     {
+        if (await ShouldHideDraftTournamentAsync(id))
+            return NotFound(ApiResult<object>.Fail("Không tìm thấy giải đấu"));
+
         var result = await _tournamentService.GetTimelineAsync(id);
         return StatusCode(result.StatusCode, result.Result);
     }
@@ -121,6 +155,9 @@ public class TournamentsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> GetRoundsByTournament(Guid tournamentId)
     {
+        if (await ShouldHideDraftTournamentAsync(tournamentId))
+            return NotFound(ApiResult<object>.Fail("Không tìm thấy giải đấu"));
+
         var result = await _roundService.GetRoundsByTournamentAsync(tournamentId);
         return StatusCode(result.StatusCode, result.Result);
     }

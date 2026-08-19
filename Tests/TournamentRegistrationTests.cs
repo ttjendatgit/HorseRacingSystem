@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -700,7 +700,7 @@ public class TournamentRegistrationTests
     }
 
     [Fact]
-    public async Task RaceEntryServiceRegister_ApprovedRegistration_Allowed()
+    public async Task RaceEntryServiceRegister_ApprovedRegistration_RejectedBecauseDirectRaceRegistrationDisabled()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (tournamentId, raceId) = await CreateRegistrationOpenRaceAsync(f);
@@ -709,7 +709,11 @@ public class TournamentRegistrationTests
 
         var service = BuildRaceEntryService(f);
         var result = await service.RegisterAsync(userId, horseId, raceId, new RaceRegistrationRequest());
-        Assert.True(result.Result.Success, result.Result.Message);
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("không còn được hỗ trợ", result.Result.Message);
+        Assert.False(await f.Db.RaceEntries.AnyAsync(e => e.RaceId == raceId && e.HorseId == horseId));
     }
 
     [Fact]

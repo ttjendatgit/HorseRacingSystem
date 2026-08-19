@@ -118,18 +118,35 @@ public class HorseService : IHorseService
         return ServiceResult<object>.Ok(horse);
     }
 
-    public async Task<ServiceResult<object>> UpdateHorseAsync(Guid userId, Guid horseId, HorseUpdateRequest request)
+    public async Task<ServiceResult<object>> UpdateHorseAsync(Guid userId, Guid horseId, HorseUpdateRequest request, bool isAdmin = false)
     {
-        var owner = await GetOwnerProfileAsync(userId);
-        if (owner == null)
+        Horse? horse;
+        if (isAdmin)
         {
-            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
+            // Admin management: no Owner row required, targets the Horse directly by id.
+            horse = await _horses.GetByIdAsync(horseId);
+        }
+        else
+        {
+            var owner = await GetOwnerProfileAsync(userId);
+            if (owner == null)
+            {
+                return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
+            }
+            horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         }
 
-        var horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         if (horse == null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy ngựa");
+        }
+
+        // Task C1 correction §2: an archived Horse is retired from editing — smallest consistent
+        // behavior is a single backend gate (applies to both Owner and Admin), matching how every
+        // other new-participation gate for IsArchived is enforced server-side.
+        if (horse.IsArchived)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Ngựa đã được lưu trữ (archive) và không thể chỉnh sửa.");
         }
 
         var validationError = ValidateHorseStats(request.DateOfBirth, request.Age, request.TotalRaces, request.TotalWins);
@@ -154,18 +171,61 @@ public class HorseService : IHorseService
         return ServiceResult<object>.Ok(horse);
     }
 
-    public async Task<ServiceResult<string>> DeleteHorseAsync(Guid userId, Guid horseId)
+    /// <summary>
+    /// Task C1 §1: true when the Horse has ANY row in ANY of these tables — the exact "has
+    /// history" definition, checked directly rather than inferred. A Horse with history must
+    /// never be hard-deleted (that would destroy Tournament/Race history, or — for a
+    /// RaceResult.WinningHorseId reference — outright fail with an unhandled FK violation, since
+    /// that FK is Restrict on a non-nullable column).
+    /// </summary>
+    private async Task<bool> HasParticipationHistoryAsync(Guid horseId)
     {
-        var owner = await GetOwnerProfileAsync(userId);
-        if (owner == null)
+        if (await _db.TournamentHorseRegistrations.AnyAsync(x => x.HorseId == horseId)) return true;
+        if (await _db.RaceEntries.AnyAsync(e => e.HorseId == horseId)) return true;
+        if (await _db.RaceResults.AnyAsync(rr => rr.WinningHorseId == horseId)) return true;
+        if (await _db.Predictions.AnyAsync(p => p.PredictedHorseId == horseId)) return true;
+        if (await _db.JockeyInvitations.AnyAsync(i => i.HorseId == horseId)) return true;
+        if (await _db.HorseHealthChecks.AnyAsync(h => h.HorseId == horseId)) return true;
+        if (await _db.InjuryRecords.AnyAsync(i => i.HorseId == horseId)) return true;
+        if (await _db.Contracts.AnyAsync(c => c.HorseId == horseId)) return true;
+        if (await _db.HorseTransfers.AnyAsync(t => t.HorseId == horseId)) return true;
+        return false;
+    }
+
+    public async Task<ServiceResult<string>> DeleteHorseAsync(Guid userId, Guid horseId, bool isAdmin = false)
+    {
+        Horse? horse;
+        if (isAdmin)
         {
-            return ServiceResult<string>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
+            // Admin management: no Owner row required, targets the Horse directly by id — the
+            // same delete-or-archive rule below applies identically regardless of who triggers it.
+            horse = await _horses.GetByIdAsync(horseId);
+        }
+        else
+        {
+            var owner = await GetOwnerProfileAsync(userId);
+            if (owner == null)
+            {
+                return ServiceResult<string>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
+            }
+            horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         }
 
-        var horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
         if (horse == null)
         {
             return ServiceResult<string>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy ngựa");
+        }
+
+        // Task C1 §1: a Horse with ANY participation history is archived (soft-deactivated), not
+        // hard-deleted — preserves TournamentHorseRegistration/RaceEntry/RaceResult/Prediction/
+        // JockeyInvitation/HealthCheck/Injury/Contract/Transfer history exactly as-is. Only a
+        // Horse with zero history is still genuinely hard-deleted.
+        if (await HasParticipationHistoryAsync(horse.Id))
+        {
+            horse.IsArchived = true;
+            await _horses.UpdateAsync(horse);
+            await _unitOfWork.SaveChangesAsync();
+            return ServiceResult<string>.Ok("Ngựa có lịch sử tham gia giải đấu/cuộc đua nên đã được lưu trữ thay vì xóa vĩnh viễn.");
         }
 
         await RemoveHorseRelatedDataAsync(horse);
@@ -187,6 +247,13 @@ public class HorseService : IHorseService
         if (horse == null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy ngựa");
+        }
+
+        // Task C1 correction §2: JockeyInvitation is itself one of the 9 "has history" tables and
+        // a new-participation path — an archived Horse must not accumulate new invitations.
+        if (horse.IsArchived)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Ngựa đã được lưu trữ (archive) và không thể mời kỵ sĩ mới.");
         }
 
         var invitedJockey = await _jockeys.GetByIdAsync(request.JockeyId);

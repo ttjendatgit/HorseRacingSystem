@@ -71,6 +71,14 @@ export const registerHorseForTournament = async (tournamentId, horseId) =>
 export const getMyTournamentRegistrations = async () =>
   unwrapResponseData(await request("/api/tournament-registrations/my"));
 
+// Task C1 §2: Owner-only withdraw of their own TournamentHorseRegistration.
+export const withdrawTournamentRegistration = async (registrationId) =>
+  unwrapResponseData(
+    await request(`/api/tournament-registrations/${registrationId}/withdraw`, {
+      method: "POST",
+    }),
+  );
+
 export const confirmRaceEntry = async (raceId, entryId) =>
   unwrapResponseData(
     await request(`/api/horses/races/${raceId}/entries/${entryId}/owner-confirm`, {

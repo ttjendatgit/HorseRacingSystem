@@ -49,6 +49,12 @@ public class Horse
     [MaxLength(1000)]
     public string? ApprovalNote { get; set; }
 
+    // Task C1 §1: distinct from ApprovalStatus (admin profile review) — set when a Horse with
+    // participation history is "deleted" so that history is preserved instead of destroyed. An
+    // archived Horse is never eligible for new Tournament/Race registration (see
+    // TournamentRegistrationsController.Register, RaceManagementService, RaceEntryService).
+    public bool IsArchived { get; set; } = false;
+
     public Owner? Owner { get; set; }
 
     public ICollection<RaceEntry> RaceEntries { get; set; } = new List<RaceEntry>();

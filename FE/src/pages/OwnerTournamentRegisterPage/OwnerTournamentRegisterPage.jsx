@@ -1,30 +1,52 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   getMyHorses,
   getMyTournamentRegistrations,
   registerHorseForTournament,
+  withdrawTournamentRegistration,
 } from "../../services/ownerHorseApi";
 import { getOwnerTournaments } from "../../services/ownerApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
-import { canRegisterTournament } from "../../utils/tournamentRegistration";
+import { getTournamentRegistrationState, getCapacityFullMessage } from "../../utils/tournamentRegistration";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentRegisterPage.css";
 
-const mapTournament = (tournament) => ({
-  id: tournament?.id ?? tournament?.Id,
-  name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
-  description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
-  registrationDeadline: tournament?.registrationDeadline ?? tournament?.RegistrationDeadline,
-  raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
-  registerable: canRegisterTournament(tournament),
-});
+const mapTournament = (tournament) => {
+  const registrationState = getTournamentRegistrationState(tournament);
+  return {
+    id: tournament?.id ?? tournament?.Id,
+    name: tournament?.name ?? tournament?.Name ?? "Giải đấu",
+    description: tournament?.description ?? tournament?.Description ?? "Không có mô tả.",
+    registrationDeadline: tournament?.registrationDeadline ?? tournament?.RegistrationDeadline,
+    raceCount: tournament?.raceCount ?? tournament?.RaceCount ?? 0,
+    registerable: registrationState.canRegister,
+    registrationLabel: registrationState.label,
+    registrationKey: registrationState.key,
+    capacityMessage: getCapacityFullMessage(tournament),
+  };
+};
 
 const registrationStatusLabel = (status) => {
   if (status === "Approved") return "Đã duyệt";
   if (status === "Rejected") return "Từ chối";
   if (status === "Withdrawn") return "Đã rút";
   return "Chờ duyệt";
+};
+
+const mapRegistration = (r) => {
+  const status = r.status ?? r.Status ?? "Pending";
+  return {
+    id: r.id ?? r.Id ?? Date.now(),
+    horseId: r.horseId ?? r.HorseId,
+    tournamentId: r.tournamentId ?? r.TournamentId,
+    horse: r.horseName ?? r.HorseName ?? "Không rõ",
+    tournament: r.tournamentName ?? r.TournamentName ?? "Giải đấu",
+    tournamentStatus: r.tournamentStatus ?? r.TournamentStatus ?? "",
+    statusRaw: status,
+    status: registrationStatusLabel(status),
+    submitted: (r.createdAt ?? r.CreatedAt ?? "").toString().slice(0, 10),
+  };
 };
 
 function OwnerTournamentRegisterPage() {
@@ -46,6 +68,32 @@ function OwnerTournamentRegisterPage() {
   const [tournamentError, setTournamentError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
+  const [withdrawingId, setWithdrawingId] = useState("");
+  const [withdrawMsg, setWithdrawMsg] = useState("");
+
+  const refreshRegistrations = async () => {
+    try {
+      const data = await getMyTournamentRegistrations();
+      const list = Array.isArray(data) ? data : [];
+      setRegistrations(list.map(mapRegistration));
+    } catch {
+      // keep existing list on refresh failure
+    }
+  };
+
+  const handleWithdraw = async (registration) => {
+    setWithdrawingId(registration.id);
+    setWithdrawMsg("");
+    try {
+      await withdrawTournamentRegistration(registration.id);
+      await refreshRegistrations();
+      setWithdrawMsg("Đã rút đăng ký thành công.");
+    } catch (err) {
+      setWithdrawMsg("Lỗi: " + (err?.message || "Không thể rút đăng ký."));
+    } finally {
+      setWithdrawingId("");
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -105,21 +153,7 @@ function OwnerTournamentRegisterPage() {
         const data = await getMyTournamentRegistrations();
         if (isMounted) {
           const list = Array.isArray(data) ? data : [];
-          setRegistrations(
-            list.map((r) => {
-              const status = r.status ?? r.Status ?? "Pending";
-              return {
-                id: r.id ?? r.Id ?? Date.now(),
-                horseId: r.horseId ?? r.HorseId,
-                tournamentId: r.tournamentId ?? r.TournamentId,
-                horse: r.horseName ?? r.HorseName ?? "Không rõ",
-                tournament: r.tournamentName ?? r.TournamentName ?? "Giải đấu",
-                statusRaw: status,
-                status: registrationStatusLabel(status),
-                submitted: (r.createdAt ?? r.CreatedAt ?? "").toString().slice(0, 10),
-              };
-            }),
-          );
+          setRegistrations(list.map(mapRegistration));
         }
       } catch {
         if (isMounted) setRegistrations([]);
@@ -147,6 +181,18 @@ function OwnerTournamentRegisterPage() {
   // be a false negative, not a real "closed" state.
   const tournamentUnavailable =
     !isTournamentLoading && cameFromTournamentCard && !selectedTournament?.registerable;
+
+  const unavailableTournamentMessage = selectedTournament
+    ? selectedTournament.registrationKey === "unpublished"
+      ? "Giải đấu chưa được công bố."
+      // Capacity being full gets its own X/Y message — never phrased as "Đã đóng đăng ký",
+      // since the registration deadline itself may still be open.
+      : selectedTournament.registrationKey === "full"
+        ? selectedTournament.capacityMessage
+        : `Giải đấu ${selectedTournament.registrationLabel.toLowerCase()}.`
+    : cameFromTournamentCard
+      ? "Giải đấu chưa được công bố."
+      : "Cần chọn giải đấu đang mở đăng ký.";
 
   const hasExistingRegistration = useMemo(() => {
     if (!selectedHorseId || !selectedTournamentId) return false;
@@ -179,8 +225,8 @@ function OwnerTournamentRegisterPage() {
     {
       label: "Trạng thái đăng ký giải",
       value: selectedTournament
-        ? (selectedTournament.registerable ? "Đang mở đăng ký" : "Đã đóng đăng ký")
-        : "Chưa chọn giải đấu",
+        ? selectedTournament.registrationLabel
+        : (cameFromTournamentCard ? "Giải đấu chưa được công bố." : "Chưa chọn giải đấu"),
       tone: selectedTournament?.registerable ? "success" : "warning",
     },
   ];
@@ -198,6 +244,7 @@ function OwnerTournamentRegisterPage() {
           tournamentId: selectedTournament.id,
           horse: selectedHorse.name,
           tournament: selectedTournament.name,
+          tournamentStatus: "Published",
           statusRaw: "Pending",
           status: "Chờ duyệt",
           submitted: new Date().toISOString().slice(0, 10),
@@ -277,15 +324,15 @@ function OwnerTournamentRegisterPage() {
                         <span>Giải đấu đã chọn</span>
                         <strong>{selectedTournament.name}</strong>
                         <p>
-                          Hạn đăng ký: {apiToVNDisplay(selectedTournament.registrationDeadline) || "Chưa thiết lập"}
+                          Hạn đăng ký: {apiToVNDisplay(selectedTournament.registrationDeadline) || "Chưa thiết lập"} · {selectedTournament.registrationLabel}
                         </p>
                       </div>
                     </div>
                   ) : (
-                    <p className="form-error">Không tìm thấy giải đấu đã chọn.</p>
+                    <p className="form-error">Giải đấu chưa được công bố.</p>
                   )}
                   {tournamentUnavailable ? (
-                    <p className="form-error">Giải đấu hiện không mở đăng ký.</p>
+                    <p className="form-error" style={{ whiteSpace: "pre-line" }}>{unavailableTournamentMessage}</p>
                   ) : null}
                 </div>
               ) : (
@@ -356,10 +403,10 @@ function OwnerTournamentRegisterPage() {
                 >
                   {isSubmitting
                     ? "Đang gửi..."
-                    : hasExistingRegistration
-                      ? "Đã đăng ký"
-                      : tournamentUnavailable
-                        ? "Giải đấu đã đóng"
+                    : tournamentUnavailable
+                      ? unavailableTournamentMessage
+                      : hasExistingRegistration
+                        ? "Đã đăng ký"
                         : "Xem lại đăng ký"}
                 </button>
                 {hasExistingRegistration ? (
@@ -401,36 +448,62 @@ function OwnerTournamentRegisterPage() {
               <h2>Trạng thái đăng ký</h2>
               <p>Theo dõi yêu cầu giải đấu đã gửi từ chuồng ngựa.</p>
             </div>
+            {withdrawMsg ? (
+              <p className={withdrawMsg.startsWith("Lỗi") ? "form-error" : "form-success"}>
+                {withdrawMsg}
+              </p>
+            ) : null}
             <div className="registration-table">
               {registrations.length === 0 ? (
                 <p className="muted">Chưa có đăng ký nào.</p>
               ) : (
-                registrations.map((registration) => (
-                  <article key={registration.id} className="registration-row">
-                    <div>
-                      <span>Ngựa</span>
-                      <strong>{registration.horse}</strong>
-                    </div>
-                    <div>
-                      <span>Giải đấu</span>
-                      <strong>{registration.tournament}</strong>
-                    </div>
-                    <div>
-                      <span>Đã gửi</span>
-                      <strong>{registration.submitted}</strong>
-                    </div>
-                    <div>
-                      <span>Trạng thái</span>
-                      <strong
-                        className={`registration-status-pill registration-status-pill--${registration.status
-                          .toLowerCase()
-                          .replace(/\s+/g, "-")}`}
-                      >
-                        {registration.status}
-                      </strong>
-                    </div>
-                  </article>
-                ))
+                registrations.map((registration) => {
+                  // Task C1 §2: Withdraw is only offered while the backend would actually allow
+                  // it — Pending or Approved, and the Tournament is still Published. The
+                  // Approved+RaceEntry-exists case can't be known client-side, so that rejection
+                  // surfaces from the backend's response message after the attempt.
+                  const canWithdraw =
+                    (registration.statusRaw === "Pending" || registration.statusRaw === "Approved") &&
+                    registration.tournamentStatus === "Published";
+                  return (
+                    <article key={registration.id} className="registration-row">
+                      <div>
+                        <span>Ngựa</span>
+                        <strong>{registration.horse}</strong>
+                      </div>
+                      <div>
+                        <span>Giải đấu</span>
+                        <strong>{registration.tournament}</strong>
+                      </div>
+                      <div>
+                        <span>Đã gửi</span>
+                        <strong>{registration.submitted}</strong>
+                      </div>
+                      <div>
+                        <span>Trạng thái</span>
+                        <strong
+                          className={`registration-status-pill registration-status-pill--${registration.status
+                            .toLowerCase()
+                            .replace(/\s+/g, "-")}`}
+                        >
+                          {registration.status}
+                        </strong>
+                      </div>
+                      {canWithdraw ? (
+                        <div>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={withdrawingId === registration.id}
+                            onClick={() => handleWithdraw(registration)}
+                          >
+                            {withdrawingId === registration.id ? "Đang rút..." : "Rút đăng ký"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })
               )}
             </div>
           </section>
