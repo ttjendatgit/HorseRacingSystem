@@ -415,65 +415,17 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, "Ngựa đã được thêm vào cuộc đua này.");
             }
 
-            var activeJockeyInvitation = horse.JockeyInvitations
-                .Where(invitation =>
-                    invitation.Status == JockeyInvitationStatus.Pending ||
-                    invitation.Status == JockeyInvitationStatus.Accepted)
-                .OrderByDescending(invitation => invitation.CreatedAt)
-                .FirstOrDefault();
-            var raceAssignedJockey = horse.RaceEntries
-                .Where(entry => entry.Jockey != null)
-                .OrderByDescending(entry => entry.Race?.ScheduledAt ?? DateTime.MinValue)
-                .Select(entry => entry.Jockey)
-                .FirstOrDefault();
-            var assignedJockey = activeJockeyInvitation?.Jockey ?? raceAssignedJockey;
-
-            if (assignedJockey != null &&
-                request.JockeyId.HasValue &&
-                request.JockeyId.Value != assignedJockey.Id)
-            {
-                return ServiceResult<bool>.Fail(
-                    400,
-                    $"Ngựa đã được phân công cho kỵ sĩ {assignedJockey.User?.FullName ?? assignedJockey.Id.ToString()}");
-            }
-
-            if (assignedJockey != null)
-            {
-                request.JockeyId = assignedJockey.Id;
-            }
-
-            if (request.JockeyId.HasValue)
-            {
-                var jockey = await _jockeyRepo.GetByIdAsync(request.JockeyId.Value);
-                if (jockey == null)
-                {
-                    return ServiceResult<bool>.Fail(404, "Không tìm thấy kỵ sĩ");
-                }
-                if (jockey.ApprovalStatus != ApprovalStatus.Approved)
-                {
-                    return ServiceResult<bool>.Fail(400, "Kỵ sĩ chưa được admin phê duyệt");
-                }
-
-                var hasScheduleConflict = await _entryRepo.HasJockeyScheduleConflictAsync(
-                    jockey.Id, race.ScheduledAt, race.ScheduledEndAt ?? race.ScheduledAt.AddMinutes(30));
-                if (hasScheduleConflict)
-                {
-                    return ServiceResult<bool>.Fail(
-                        409,
-                        "Kỵ sĩ này đã có cuộc đua trùng thời gian");
-                }
-            }
-
+            // J1: Admin assigns only the horse; jockey selection stays in the owner invitation flow.
             var entry = new RaceEntry
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
                 HorseId = request.HorseId,
-                JockeyId = request.JockeyId,
-                // Admin trực tiếp gán ngựa → tự duyệt đăng ký và tự động xác nhận
+                JockeyId = null,
+                // Admin-created entries wait for the owner/jockey invitation flow.
                 Status = RegistrationStatus.Approved,
-                OwnerConfirmed = true,
-                JockeyConfirmed = true
+                OwnerConfirmed = false,
+                JockeyConfirmed = false
             };
 
             await _entryRepo.AddAsync(entry);
@@ -573,10 +525,10 @@ public class RaceManagementService : IRaceManagementService
                     Id = Guid.NewGuid(),
                     RaceId = raceId,
                     HorseId = horseId,
-                    // Admin trực tiếp gán ngựa → tự duyệt đăng ký và tự động xác nhận
+                    // Admin-created entries wait for the owner/jockey invitation flow.
                     Status = RegistrationStatus.Approved,
-                    OwnerConfirmed = true,
-                    JockeyConfirmed = true
+                    OwnerConfirmed = false,
+                    JockeyConfirmed = false
                 };
                 await _entryRepo.AddAsync(entry);
                 added++;

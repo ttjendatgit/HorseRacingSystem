@@ -105,6 +105,9 @@ function OwnerHorseListPage() {
       setJockeys(
         Array.isArray(data)
           ? data.filter(j => {
+              const approvalStatus = String(j.approvalStatus ?? j.ApprovalStatus ?? "").toLowerCase();
+              const approvalStatusName = String(j.approvalStatusName ?? j.ApprovalStatusName ?? "").toLowerCase();
+              if (approvalStatus !== "2" && approvalStatusName !== "approved") return false;
               const jUserId = String(j.userId ?? j.UserId ?? "").toLowerCase();
               // Exclude self, but allow selecting jockeys assigned to other horses (backend validates schedule overlap)
               if (jUserId === currentUserId) return false;

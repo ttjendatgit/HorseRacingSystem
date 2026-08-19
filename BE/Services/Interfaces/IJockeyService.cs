@@ -6,7 +6,7 @@ namespace HorseRacing.Services.Interfaces;
 
 public interface IJockeyService
 {
-    Task<ServiceResult<object>> GetAvailableJockeysAsync(Guid currentUserId);
+    Task<ServiceResult<object>> GetAvailableJockeysAsync(Guid currentUserId, bool includeUnapproved = false);
     Task<ServiceResult<object>> GetInvitationsAsync(Guid userId);
     Task<ServiceResult<object>> RespondInvitationAsync(Guid userId, Guid invitationId, JockeyInvitationRespondRequest request);
     Task<ServiceResult<object>> WithdrawInvitationAsync(Guid userId, Guid invitationId, JockeyInvitationWithdrawRequest request);
