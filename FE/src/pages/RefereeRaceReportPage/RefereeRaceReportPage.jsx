@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
-import { createReport, getRaceReport, getRaceEntries, submitRaceResult } from "../../services/refereeApi";
+import { createReport, getRaceReport, getRaceEntries, getRaceHealthChecks, submitRaceResult } from "../../services/refereeApi";
 import "./RefereeRaceReportPage.css";
 
 const REPORT_TYPES = [
@@ -72,6 +72,7 @@ export default function RefereeRaceReportPage() {
   const [recentReports, setRecentReports] = useState([]);
   // Submit result states
   const [resultEntries, setResultEntries] = useState([]);
+  const [healthChecks, setHealthChecks] = useState([]);
   const [resultWinningHorseId, setResultWinningHorseId] = useState("");
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
@@ -116,19 +117,35 @@ export default function RefereeRaceReportPage() {
       .catch(() => setExistingReport(null));
   }, [selectedRaceId]);
 
-  // Load race entries for result submission
+  // Load race entries + health checks for result submission
   useEffect(() => {
     if (!selectedRaceId) {
       setResultEntries([]);
+      setHealthChecks([]);
       return;
     }
-    getRaceEntries(selectedRaceId)
-      .then((d) => {
-        const list = Array.isArray(d) ? d : [];
-        setResultEntries(list);
-      })
-      .catch(() => setResultEntries([]));
+    Promise.all([
+      getRaceEntries(selectedRaceId).catch(() => []),
+      getRaceHealthChecks(selectedRaceId).catch(() => []),
+    ]).then(([entriesData, hcData]) => {
+      setResultEntries(Array.isArray(entriesData) ? entriesData : []);
+      setHealthChecks(Array.isArray(hcData) ? hcData : []);
+    });
   }, [selectedRaceId]);
+
+  // A horse whose most recent health check failed cannot be declared the
+  // winner — it was never cleared to race in the first place.
+  const validResultEntries = useMemo(() => {
+    return resultEntries.filter((entry) => {
+      const horseId = entry.horseId || entry.HorseId;
+      const checks = healthChecks.filter((c) => (c.horseId || c.HorseId) === horseId);
+      if (checks.length === 0) return true;
+      const latest = [...checks].sort(
+        (a, b) => new Date(b.createdAt || b.CreatedAt) - new Date(a.createdAt || a.CreatedAt)
+      )[0];
+      return (latest.status || latest.Status) !== "Failed";
+    });
+  }, [resultEntries, healthChecks]);
 
   // Chart data — monthly count (simulated from recent reports)
   const [chartData, setChartData] = useState(() => {
@@ -397,12 +414,17 @@ export default function RefereeRaceReportPage() {
                   disabled={!canSubmitResult}
                 >
                   <option value="">-- Chọn ngựa thắng --</option>
-                  {resultEntries.map((entry) => (
+                  {validResultEntries.map((entry) => (
                     <option key={entry.horseId || entry.HorseId} value={entry.horseId || entry.HorseId}>
                       🐎 {entry.horseName || entry.HorseName} — Tỉ lệ: {(entry.odds || entry.Odds || 1).toFixed(2)}x
                     </option>
                   ))}
                 </select>
+                {validResultEntries.length === 0 && resultEntries.length > 0 && (
+                  <p className="rr-muted" style={{ marginTop: 4, color: "#b45309" }}>
+                    * Toàn bộ ngựa trong giải đều bị đánh Không Đạt sức khỏe.
+                  </p>
+                )}
               </div>
               <button
                 type="submit"

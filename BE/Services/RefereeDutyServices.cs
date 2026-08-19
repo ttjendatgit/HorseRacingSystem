@@ -423,6 +423,7 @@ public class ViolationRecordService : IViolationRecordService
             RaceId = v.RaceId,
             RaceName = race?.Name,
             RaceEntryId = v.RaceEntryId,
+            HorseId = entry?.HorseId,
             HorseName = entry?.Horse?.Name,
             RefereeId = v.RefereeId,
             RefereeName = referee?.User?.FullName,

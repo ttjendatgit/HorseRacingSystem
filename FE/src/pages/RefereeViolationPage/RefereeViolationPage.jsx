@@ -221,18 +221,23 @@ function RefereeViolationPage() {
   };
 
   /* ---------- derived data ---------- */
-  const assignedRaces = useMemo(
-    () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
-    [assignments]
-  );
+  // Violations can only be recorded for the race actually active right now —
+  // restrict the selector to RaceStatus.InProgress only. Not Finished (the
+  // race is over), not Tournament.IsActive, not a ScheduledAt comparison.
+  const assignedRaces = useMemo(() => {
+    const unique = [...new Map(assignments.map((a) => [a.raceId, a])).values()];
+    return unique.filter((a) => {
+      const status = (a.raceStatus || a.RaceStatus || "").toLowerCase();
+      return status === "inprogress";
+    });
+  }, [assignments]);
 
   const totalViolations = violations.length;
-  const resolvedCount = violations.filter(
-    (v) => v.status === "Resolved"
-  ).length;
-  const pendingCount = violations.filter(
-    (v) => v.status === "Pending" || !v.status
-  ).length;
+  const resolvedCount = violations.filter((v) => {
+    const penalty = v.penalty ?? v.Penalty;
+    return Boolean(penalty && penalty.trim());
+  }).length;
+  const pendingCount = totalViolations - resolvedCount;
 
   /* ---------- render ---------- */
   return (
@@ -298,7 +303,7 @@ function RefereeViolationPage() {
         {/* ════════ Race Selector ════════ */}
         <div className="rv-card rv-race-selector">
           <div className="rv-card__header">
-            <h3>Chọn cuộc đua</h3>
+            <h3>Chọn cuộc đua đang diễn ra</h3>
             {selectedRaceId && (
               <span className="rv-count">{entries.length} ngựa</span>
             )}
@@ -315,6 +320,11 @@ function RefereeViolationPage() {
               </option>
             ))}
           </select>
+          {assignedRaces.length === 0 && assignments.length > 0 && (
+            <p className="rv-hint">
+              Hiện không có cuộc đua nào đang diễn ra để bắt lỗi.
+            </p>
+          )}
         </div>
 
         {/* ════════ No race selected → full-width empty state ════════ */}
@@ -322,7 +332,7 @@ function RefereeViolationPage() {
           <div className="rv-card">
             <div className="rv-empty-state">
               <FlagWhistleSVG />
-              <p>Chọn một cuộc đua để xem và ghi nhận vi phạm.</p>
+              <p>Chọn một cuộc đua đang diễn ra để xem và ghi nhận vi phạm.</p>
             </div>
           </div>
         )}
@@ -479,16 +489,13 @@ function RefereeViolationPage() {
                             ? new Date(v.createdAt).toLocaleString("vi-VN")
                             : ""}
                         </span>
-                        {v.status && (
-                          <span
-                            className={`rv-badge rv-badge--status-${v.status.toLowerCase()}`}
-                          >
-                            {STATUS_MAP[v.status] || v.status}
+                        {(v.penalty ?? v.Penalty) ? (
+                          <span className="rv-badge rv-badge--status-resolved">
+                            {STATUS_MAP.Resolved}
                           </span>
-                        )}
-                        {!v.status && (
+                        ) : (
                           <span className="rv-badge rv-badge--status-pending">
-                            Chờ xử lý
+                            {STATUS_MAP.Pending}
                           </span>
                         )}
                       </div>

@@ -28,6 +28,7 @@ public class AdminService : IAdminService
     private readonly IRaceResultRepository _raceResultRepo;
     private readonly IRaceEntryRepository _entryRepo;
     private readonly IRaceReportRepository _reportRepo;
+    private readonly IViolationRecordRepository _violationRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public AdminService(
@@ -45,6 +46,7 @@ public class AdminService : IAdminService
         IRaceResultRepository raceResultRepo,
         IRaceEntryRepository entryRepo,
         IRaceReportRepository reportRepo,
+        IViolationRecordRepository violationRepo,
         IUnitOfWork unitOfWork)
     {
         _userRepo = userRepo;
@@ -61,6 +63,7 @@ public class AdminService : IAdminService
         _raceResultRepo = raceResultRepo;
         _entryRepo = entryRepo;
         _reportRepo = reportRepo;
+        _violationRepo = violationRepo;
         _unitOfWork = unitOfWork;
     }
 
@@ -712,6 +715,29 @@ public class AdminService : IAdminService
         catch (Exception ex)
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi từ chối kết quả: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penalty)
+    {
+        try
+        {
+            var violation = await _violationRepo.GetByIdAsync(violationId);
+            if (violation == null)
+                return ServiceResult<bool>.Fail(404, "Không tìm thấy vi phạm này.");
+
+            if (!string.IsNullOrWhiteSpace(violation.Penalty))
+                return ServiceResult<bool>.Fail(400, "Vi phạm này đã được xử lý trước đó.");
+
+            violation.Penalty = penalty;
+            await _violationRepo.UpdateAsync(violation);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<bool>.Fail(500, $"Lỗi xử lý vi phạm: {ex.Message}");
         }
     }
 

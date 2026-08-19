@@ -975,6 +975,8 @@ function ScheduleManagement({ type }) {
   const [raceEntries, setRaceEntries] = useState([]);
   const [raceReferees, setRaceReferees] = useState([]);
   const [raceViolations, setRaceViolations] = useState([]);
+  const [resolvingViolation, setResolvingViolation] = useState(null);
+  const [penaltyText, setPenaltyText] = useState("");
   const [raceResult, setRaceResult] = useState(null);
   const [raceReport, setRaceReport] = useState(null);
   const [assignedHorseIds, setAssignedHorseIds] = useState(new Set());
@@ -1173,10 +1175,43 @@ function ScheduleManagement({ type }) {
     } catch (err) { setMessage(err.message); }
   };
 
+  const submitResolveViolation = async (violationId) => {
+    if (!penaltyText.trim()) {
+      alert("Vui lòng nhập hình phạt (ví dụ: Trừ 50% thưởng, Cấm thi đấu...)");
+      return;
+    }
+    try {
+      await request(`/api/admin/violations/${violationId}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ penalty: penaltyText.trim() }),
+      });
+      setMessage("Đã xử lý vi phạm thành công.");
+      setResolvingViolation(null);
+      setPenaltyText("");
+      const violRes = await request(`/api/referees/race/${expandedRaceId}/violations`);
+      setRaceViolations(Array.isArray(violRes) ? violRes : violRes?.data ?? []);
+    } catch (err) {
+      setMessage("Lỗi xử lý vi phạm: " + err.message);
+    }
+  };
+
   const handleRaceAction = async (raceId, action) => {
     const labels = { start: "bắt đầu", end: "kết thúc", cancel: "hủy", approve: "duyệt kết quả", reject: "từ chối kết quả" };
     if (action === "approve") {
-      if (!window.confirm("Duyệt kết quả này thành chính thức (Official)? Dự đoán sẽ được thanh toán ngay sau khi duyệt.")) return;
+      // Warn if the provisional winner has an unresolved violation, so Admin
+      // doesn't pay out a prediction for a horse that may end up disqualified.
+      // Matched by HorseId (authoritative), not HorseName.
+      const winnerHorseId = raceResult?.winningHorseId ?? raceResult?.WinningHorseId;
+      const isWinnerViolated = winnerHorseId != null && raceViolations.some(v => {
+        const violationHorseId = v.horseId ?? v.HorseId;
+        const penalty = v.penalty ?? v.Penalty;
+        return violationHorseId === winnerHorseId && !(penalty && penalty.trim());
+      });
+      const confirmMsg = isWinnerViolated
+        ? "⚠️ CẢNH BÁO: Ngựa thắng cuộc đang có VI PHẠM chưa xử lý. Bạn có chắc chắn muốn duyệt kết quả và trả thưởng cho con ngựa này không?"
+        : "Duyệt kết quả này thành chính thức (Official)? Dự đoán sẽ được thanh toán ngay sau khi duyệt.";
+      if (!window.confirm(confirmMsg)) return;
       try {
         await approveRaceResult(raceId);
         setMessage("Kết quả đã chính thức (Official). Dự đoán đã được thanh toán.");
@@ -1464,13 +1499,43 @@ function ScheduleManagement({ type }) {
               {raceViolations.length > 0 && (
                 <div style={{marginTop:12}}>
                   <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-danger)"}}>Vi phạm ({raceViolations.length})</h4>
-                  {raceViolations.map(v => (
-                    <div key={v.id ?? v.Id} style={{padding:"8px 12px",marginBottom:6,borderRadius:8,background:"rgba(201,105,90,0.12)",border:"1px solid rgba(201,105,90,0.3)",fontSize:12}}>
-                      <strong style={{color:"var(--hr-danger)"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
-                      <span style={{color:"var(--hr-muted)",marginLeft:8}}>— {v.horseName ?? v.HorseName} — {v.refereeName ?? v.RefereeName}</span>
-                      <p style={{margin:"4px 0 0",color:"var(--hr-text)"}}>{v.description ?? v.Description}</p>
-                    </div>
-                  ))}
+                  {raceViolations.map(v => {
+                    const vId = v.id ?? v.Id;
+                    const penalty = v.penalty ?? v.Penalty;
+                    const isResolved = Boolean(penalty && penalty.trim());
+                    return (
+                      <div key={vId} style={{padding:"8px 12px",marginBottom:6,borderRadius:8,background:"rgba(201,105,90,0.12)",border:"1px solid rgba(201,105,90,0.3)",fontSize:12}}>
+                        <strong style={{color:"var(--hr-danger)"}}>{VIOLATION_LABELS[v.violationType ?? v.ViolationType] ?? "Vi phạm"}</strong>
+                        <span style={{color:"var(--hr-muted)",marginLeft:8}}>— {v.horseName ?? v.HorseName} — {v.refereeName ?? v.RefereeName}</span>
+                        <p style={{margin:"4px 0 0",color:"var(--hr-text)"}}>{v.description ?? v.Description}</p>
+                        {isResolved ? (
+                          <div style={{marginTop:6}}>
+                            <span style={{fontSize:11,fontWeight:700,color:"var(--hr-success)"}}>✓ Đã xử lý</span>
+                            <p style={{margin:"2px 0 0",color:"var(--hr-text)"}}>Hình phạt: {penalty}</p>
+                          </div>
+                        ) : resolvingViolation === vId ? (
+                          <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={penaltyText}
+                              onChange={e => setPenaltyText(e.target.value)}
+                              placeholder="Nhập hình phạt..."
+                              style={{flex:1,minWidth:160,padding:"4px 8px",borderRadius:6,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)",color:"var(--hr-text)",fontSize:12}}
+                            />
+                            <button style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={() => submitResolveViolation(vId)}>Lưu</button>
+                            <button style={{padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid var(--hr-border-soft)",background:"transparent",color:"var(--hr-text)",cursor:"pointer"}} onClick={() => { setResolvingViolation(null); setPenaltyText(""); }}>Hủy</button>
+                          </div>
+                        ) : (
+                          <button
+                            style={{marginTop:6,padding:"4px 10px",fontSize:11,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"transparent",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}}
+                            onClick={e => { e.stopPropagation(); setResolvingViolation(vId); setPenaltyText(""); }}
+                          >
+                            Xử lý phạt
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {itemStatus === "finished" && raceResult && (() => {

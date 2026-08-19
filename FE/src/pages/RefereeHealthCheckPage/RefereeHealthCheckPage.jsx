@@ -255,6 +255,22 @@ function RefereeHealthCheckPage() {
     [assignments]
   );
 
+  // A horse is no longer offered for a new check once any prior check for it
+  // was finalized (approved to race, or Failed) — re-checking it is pointless.
+  const availableEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      const targetHorseId = entry.horseId || entry.HorseId;
+      const horseChecks = healthChecks.filter(
+        (c) => (c.horseId || c.HorseId) === targetHorseId
+      );
+      if (horseChecks.length === 0) return true;
+      const isFinalized = horseChecks.some(
+        (c) => c.approvedToRace || c.ApprovedToRace || c.status === "Failed" || c.Status === "Failed"
+      );
+      return !isFinalized;
+    });
+  }, [entries, healthChecks]);
+
   const { total, passed, failed, recheck } = useMemo(() => {
     const t = healthChecks.length;
     const p = healthChecks.filter((c) => c.status === "Passed").length;
@@ -375,7 +391,7 @@ function RefereeHealthCheckPage() {
                       required
                     >
                       <option value="">-- Chọn ngựa --</option>
-                      {entries.map((entry) => (
+                      {availableEntries.map((entry) => (
                         <option key={entry.horseId} value={entry.horseId}>
                           {entry.horseName}
                           {entry.jockeyName
@@ -387,6 +403,11 @@ function RefereeHealthCheckPage() {
                     {entries.length === 0 && (
                       <p className="rh-hint">
                         Không có ngựa nào trong cuộc đua này.
+                      </p>
+                    )}
+                    {entries.length > 0 && availableEntries.length === 0 && (
+                      <p className="rh-hint">
+                        Tất cả ngựa đã được kiểm tra xong.
                       </p>
                     )}
                   </div>
@@ -440,7 +461,7 @@ function RefereeHealthCheckPage() {
                     <button
                       type="submit"
                       className="rh-btn rh-btn--primary"
-                      disabled={submitting}
+                      disabled={submitting || availableEntries.length === 0}
                     >
                       {submitting ? "Đang gửi..." : "Gửi kiểm tra"}
                     </button>

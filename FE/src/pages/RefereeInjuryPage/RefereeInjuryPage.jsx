@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   getInjuries,
   createInjury,
   markRecovered,
 } from "../../services/managementApi";
+import { getMyAssignments } from "../../services/refereeAssignmentApi";
+import { getRaceEntries } from "../../services/refereeApi";
 import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
 import "./RefereeInjuryPage.css";
 
@@ -68,6 +70,10 @@ function RefereeInjuryPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
 
+  const [assignments, setAssignments] = useState([]);
+  const [selectedRaceId, setSelectedRaceId] = useState("");
+  const [entries, setEntries] = useState([]);
+
   const [form, setForm] = useState({
     horseId: "",
     injuryType: "Fracture",
@@ -76,6 +82,34 @@ function RefereeInjuryPage() {
     bodyPart: "",
     treatment: "",
   });
+
+  useEffect(() => {
+    let ignore = false;
+    getMyAssignments()
+      .then((data) => {
+        if (ignore) return;
+        setAssignments(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
+      })
+      .catch(() => { if (!ignore) setAssignments([]); });
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRaceId) { setEntries([]); return; }
+    let ignore = false;
+    getRaceEntries(selectedRaceId)
+      .then((data) => {
+        if (ignore) return;
+        setEntries(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
+      })
+      .catch(() => { if (!ignore) setEntries([]); });
+    return () => { ignore = true; };
+  }, [selectedRaceId]);
+
+  const assignedRaces = useMemo(
+    () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
+    [assignments]
+  );
 
   const loadInjuries = async () => {
     setLoading(true);
@@ -142,6 +176,7 @@ function RefereeInjuryPage() {
       });
       setSuccessMsg("Đã ghi nhận chấn thương thành công.");
       setShowForm(false);
+      setSelectedRaceId("");
       setForm({
         horseId: "",
         injuryType: "Fracture",
@@ -260,16 +295,39 @@ function RefereeInjuryPage() {
               <h3 className="ri-form-title">Ghi nhận chấn thương</h3>
               <div className="ri-form-grid">
                 <div className="ri-fgroup">
-                  <label>Mã ngựa</label>
-                  <input
-                    type="text"
-                    placeholder="Nhập Horse ID"
+                  <label>Cuộc đua</label>
+                  <select
+                    value={selectedRaceId}
+                    onChange={(e) => {
+                      setSelectedRaceId(e.target.value);
+                      setForm({ ...form, horseId: "" });
+                    }}
+                  >
+                    <option value="">-- Chọn cuộc đua --</option>
+                    {assignedRaces.map((a) => (
+                      <option key={a.raceId} value={a.raceId}>
+                        {a.raceName || a.raceId}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ri-fgroup">
+                  <label>Ngựa</label>
+                  <select
                     value={form.horseId}
                     onChange={(e) =>
                       setForm({ ...form, horseId: e.target.value })
                     }
+                    disabled={!selectedRaceId}
                     required
-                  />
+                  >
+                    <option value="">-- Chọn ngựa --</option>
+                    {entries.map((entry) => (
+                      <option key={entry.horseId} value={entry.horseId}>
+                        {entry.horseName}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="ri-fgroup">
                   <label>Loại chấn thương</label>
