@@ -15,6 +15,16 @@ public class CreatePrizeRequest
     public string? SponsorName { get; set; }
     public string? Description { get; set; }
 }
+public class UpdatePrizeRequest
+{
+    public int? Position { get; set; }
+    public decimal PercentageOfPool { get; set; }   // required when the prize is tournament-scoped
+    public decimal? Amount { get; set; }             // used only for race-only (non-tournament) prizes
+    public string? Name { get; set; }
+    public string? SponsorName { get; set; }
+    public string? Description { get; set; }
+}
+
 
 public class PrizeResponse
 {
@@ -169,4 +179,13 @@ public class InjuryRecordResponse
     public DateTime? RecoveredAt { get; set; }
     public bool ClearedToRace { get; set; }
     public DateTime? ClearedAt { get; set; }
+}
+
+public class PrizeAllocationResponse
+{
+    public decimal TotalPrizePool { get; set; }
+    public decimal AllocatedPercent { get; set; }
+    public decimal RemainingPercent { get; set; }
+    public decimal AllocatedAmount { get; set; }
+    public decimal RemainingAmount { get; set; }
 }

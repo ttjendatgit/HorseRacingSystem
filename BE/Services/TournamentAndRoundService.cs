@@ -338,6 +338,19 @@ public class TournamentService : ITournamentService
             // Phase3B additions — null/omitted leaves the existing value untouched (see UpdateTournamentRequest).
             if (request.PrizePool.HasValue)
                 tournament.PrizePool = candidatePrizePool;
+            if (request.PrizePool.HasValue && candidatePrizePool != tournament.PrizePool)
+            {
+                // Recompute Amount for every non-distributed, percentage-based prize on this tournament
+                // so the stored dollar figure stays in sync with the new pool total.
+                var affectedPrizes = await _db.Prizes
+                    .Where(p => p.TournamentId == tournament.Id && !p.IsDistributed && p.PercentageOfPool > 0)
+                    .ToListAsync();
+
+                foreach (var prize in affectedPrizes)
+                {
+                    prize.Amount = Math.Round(candidatePrizePool * prize.PercentageOfPool / 100m, 2, MidpointRounding.AwayFromZero);
+                }
+            }
             if (request.Venue != null)
                 tournament.Venue = candidateVenue;
             if (request.Country != null)

@@ -7,6 +7,15 @@ export const getPrizes = async () => unwrap(await request("/api/management/prize
 export const getPrizesByTournament = async (id) => unwrap(await request(`/api/management/prizes/tournament/${id}`));
 export const createPrize = (p) => request("/api/management/prizes", { method: "POST", body: JSON.stringify(p) });
 export const deletePrize = (id) => request(`/api/management/prizes/${id}`, { method: "DELETE" });
+export const updatePrize = (id, payload) =>
+  request(`/api/management/prizes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+// Optional, if you add 2.6:
+export const getPrizeAllocation = (tournamentId) =>
+  request(`/api/management/prizes/tournament/${tournamentId}/allocation`);
 
 // ── Protests ──
 export const getProtests = async () => unwrap(await request("/api/management/protests"));
