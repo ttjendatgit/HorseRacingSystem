@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Repositories.Interfaces;
@@ -63,10 +65,47 @@ public class RaceService : IRaceService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kết quả");
         }
 
+        // R0 §9/§12: expose a bounded, ordered ranking (Position/HorseId/
+        // HorseName) rather than making FE parse RankingsJson itself. A
+        // legacy result (pre-R0, RankingsJson null) or one whose stored JSON
+        // fails to parse degrades safely to Rankings = null — the winner is
+        // still available via WinningHorseId/WinningHorseName below.
+        List<RaceResultRankingItemResponse>? rankings = null;
+        if (!string.IsNullOrWhiteSpace(result.RankingsJson))
+        {
+            try
+            {
+                var stored = JsonSerializer.Deserialize<List<RaceResultRankingItemRequest>>(result.RankingsJson);
+                if (stored != null)
+                {
+                    var race = await _races.GetByIdWithEntriesAsync(raceId);
+                    var horseNameById = race?.Entries?
+                        .Where(e => e.Horse != null)
+                        .ToDictionary(e => e.HorseId, e => e.Horse!.Name)
+                        ?? new Dictionary<System.Guid, string>();
+
+                    rankings = stored
+                        .OrderBy(r => r.Position)
+                        .Select(r => new RaceResultRankingItemResponse
+                        {
+                            Position = r.Position,
+                            HorseId = r.HorseId,
+                            HorseName = horseNameById.TryGetValue(r.HorseId, out var name) ? name : null
+                        })
+                        .ToList();
+                }
+            }
+            catch (JsonException)
+            {
+                rankings = null;
+            }
+        }
+
         return ServiceResult<object>.Ok(new RaceResultResponse
         {
             RaceId = result.RaceId,
             WinningHorseId = result.WinningHorseId,
+            WinningHorseName = result.WinningHorse?.Name,
             TotalParticipants = result.TotalParticipants,
             WinnerFinishTime = result.WinnerFinishTime,
             RecordedAt = result.RecordedAt,
@@ -77,6 +116,7 @@ public class RaceService : IRaceService
             IsDisputed = result.IsDisputed,
             WinnerPurse = result.WinnerPurse,
             RankingsJson = result.RankingsJson,
+            Rankings = rankings,
             Notes = result.Notes
         });
     }

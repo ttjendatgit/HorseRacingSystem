@@ -451,7 +451,7 @@ public class Phase3ContractTests
         await f.RaceManagement.CloseRegistrationAsync(seeded.Id);
         await f.RaceManagement.StartRaceAsync(seeded.Id);
         await f.RaceManagement.EndRaceAsync(seeded.Id);
-        await f.LiveResult.UpdateRaceResultAsync(seeded.Id, new RaceResultRequest { WinningHorseId = seeded.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(seeded.Id, RaceLifecycleTests.WinnerLoserRanking(seeded.WinnerHorseId, seeded.LoserHorseId));
 
         var getResult = await f.RaceSvc.GetRaceAsync(seeded.Id);
         var dto = Assert.IsType<RaceDetailResponse>(getResult.Result.Data);

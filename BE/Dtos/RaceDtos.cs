@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace HorseRacing.Dtos;
 
@@ -91,6 +92,7 @@ public class RaceResultResponse
 {
     public Guid RaceId { get; set; }
     public Guid WinningHorseId { get; set; }
+    public string? WinningHorseName { get; set; }
     public int TotalParticipants { get; set; }
     public decimal? WinnerFinishTime { get; set; }
     public DateTime RecordedAt { get; set; }
@@ -102,8 +104,23 @@ public class RaceResultResponse
     public string? RejectedReason { get; set; }
     public bool IsDisputed { get; set; }
     public decimal? WinnerPurse { get; set; }
+    /// <summary>Raw stored value, kept for compatibility. Prefer <see cref="Rankings"/>.</summary>
     public string? RankingsJson { get; set; }
+    /// <summary>
+    /// R0: bounded, ordered ranking (Position ascending). Null when the
+    /// result predates R0 or its RankingsJson could not be parsed — callers
+    /// must degrade to WinningHorseId/WinningHorseName in that case, never
+    /// fabricate positions (see R0 §12).
+    /// </summary>
+    public List<RaceResultRankingItemResponse>? Rankings { get; set; }
     public string? Notes { get; set; }
+}
+
+public class RaceResultRankingItemResponse
+{
+    public int Position { get; set; }
+    public Guid HorseId { get; set; }
+    public string? HorseName { get; set; }
 }
 
 public class JockeyAssignedRaceResponse
