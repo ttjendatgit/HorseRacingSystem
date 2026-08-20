@@ -19,6 +19,9 @@ public interface IRaceEntryRepository
     Task<List<Guid>> GetHorseIdsInActiveRacesAsync();
     Task<bool> IsHorseInActiveRaceAsync(Guid horseId, Guid? excludeRaceId = null);
     Task<bool> HasJockeyScheduleConflictAsync(Guid jockeyId, DateTime scheduledAt, DateTime scheduledEndAt, Guid? excludeEntryId = null);
+    // J3: Tournament-long Horse/Jockey pairing checks — see RaceEntryRepository for details.
+    Task<List<RaceEntry>> GetOfficialAssignmentsForJockeyAsync(Guid jockeyId);
+    Task<RaceEntry?> GetOfficialAssignmentForHorseInTournamentAsync(Guid horseId, Guid tournamentId);
     Task AddAsync(RaceEntry entry);
     Task UpdateAsync(RaceEntry entry);
     Task UpdateRangeAsync(IEnumerable<RaceEntry> entries);

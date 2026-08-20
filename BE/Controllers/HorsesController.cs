@@ -65,7 +65,17 @@ public class HorsesController : ControllerBase
             JockeyConfirmed = e.JockeyConfirmed,
             JockeyName = e.Jockey?.User?.FullName ?? string.Empty,
             GateNumber = e.GateNumber,
-            FinishPosition = e.FinishPosition
+            FinishPosition = e.FinishPosition,
+            // J3: Owner Final Confirm picks one of these — only Accepted invitations for this
+            // exact Horse+Race are eligible. No official Jockey yet means this list drives the UI.
+            AcceptedInvitations = (h.JockeyInvitations ?? new List<JockeyInvitation>())
+                .Where(i => i.RaceId == e.RaceId && i.Status == JockeyInvitationStatus.Accepted)
+                .Select(i => new
+                {
+                    InvitationId = i.Id,
+                    JockeyId = i.JockeyId,
+                    JockeyName = i.Jockey?.User?.FullName ?? string.Empty
+                })
         }));
         return Ok(entries);
     }
@@ -377,6 +387,15 @@ public class HorsesController : ControllerBase
     {
         var ownerId = GetUserId();
         var result = await _horseService.ConfirmOwnerAsync(ownerId, raceId, entryId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
+    // J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+    [HttpPost("{horseId:guid}/races/{raceId:guid}/jockeys/final-confirm")]
+    public async Task<ActionResult> FinalConfirmJockey(Guid horseId, Guid raceId, OwnerFinalConfirmJockeyRequest request)
+    {
+        var ownerId = GetUserId();
+        var result = await _horseService.FinalConfirmJockeyAsync(ownerId, horseId, raceId, request);
         return StatusCode(result.StatusCode, result.Result);
     }
 

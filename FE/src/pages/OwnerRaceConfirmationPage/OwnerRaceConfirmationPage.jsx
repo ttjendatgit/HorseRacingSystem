@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { confirmRaceEntry, getMyRaceEntries } from "../../services/ownerHorseApi";
+import { confirmRaceEntry, finalConfirmJockey, getMyRaceEntries } from "../../services/ownerHorseApi";
 import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
 import { getJockeyNameDisplay, getJockeyConfirmedDisplay } from "../../utils/jockeyAssignmentDisplay";
 import "../JockeySchedulePage/JockeySchedulePage.css";
@@ -25,6 +25,8 @@ export default function OwnerRaceConfirmationPage() {
   const [detailMode, setDetailMode] = useState("race");
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState(null);
+  const [finalConfirmingId, setFinalConfirmingId] = useState(null);
+  const [selectedInvitationByEntry, setSelectedInvitationByEntry] = useState({});
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -49,6 +51,12 @@ export default function OwnerRaceConfirmationPage() {
     ownerConfirmed: Boolean(field(entry, "ownerConfirmed", "OwnerConfirmed")),
     jockeyConfirmed: Boolean(field(entry, "jockeyConfirmed", "JockeyConfirmed")),
     gateNumber: field(entry, "gateNumber", "GateNumber"),
+    // J3: candidates for Owner Final Confirm — Accepted invitations for this exact Horse+Race.
+    acceptedInvitations: (field(entry, "acceptedInvitations", "AcceptedInvitations") ?? []).map((inv) => ({
+      invitationId: field(inv, "invitationId", "InvitationId"),
+      jockeyId: field(inv, "jockeyId", "JockeyId"),
+      jockeyName: field(inv, "jockeyName", "JockeyName") ?? "",
+    })),
   });
 
   const load = useCallback(async (preserveId) => {
@@ -77,6 +85,24 @@ export default function OwnerRaceConfirmationPage() {
       setMessage(`Không thể xác nhận: ${error.message}`);
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const handleFinalConfirm = async (entry, invitationId) => {
+    const invitation = entry.acceptedInvitations.find((inv) => inv.invitationId === invitationId);
+    if (!invitation) return;
+    const jockeyLabel = invitation.jockeyName || "kỵ sĩ này";
+    if (!window.confirm(`Xác nhận chọn ${jockeyLabel} làm kỵ sĩ chính thức cho ${entry.horseName} trong ${entry.raceName}?`)) return;
+    try {
+      setFinalConfirmingId(entry.entryId);
+      setMessage("");
+      await finalConfirmJockey(entry.horseId, entry.raceId, invitationId);
+      setMessage("Đã chọn kỵ sĩ chính thức.");
+      await load(entry.entryId);
+    } catch (error) {
+      setMessage(`Không thể chọn kỵ sĩ chính thức: ${error.message}`);
+    } finally {
+      setFinalConfirmingId(null);
     }
   };
 
@@ -130,7 +156,34 @@ export default function OwnerRaceConfirmationPage() {
           <div className="js-card__meta"><span>{formatDate(item.scheduledAt)}</span><span>{item.location}</span>{item.distance && <span>{item.distance}m</span>}</div>
         </div>)}</div>
         <div className="js-detail">{selected ? <><div className="js-detail-tabs"><button className={`js-dt ${detailMode === "race" ? "js-dt--active" : ""}`} onClick={() => setDetailMode("race")}>Cuộc đua</button><button className={`js-dt ${detailMode === "horse" ? "js-dt--active" : ""}`} onClick={() => setDetailMode("horse")}>Ngựa của tôi</button></div>
-          {detailMode === "race" ? <><h2 className="js-detail-title">{selected.raceName}</h2><p className="js-detail-sub">{selected.tournamentName}</p><div className="js-blocks"><DetailBlock label="Thời gian" value={formatDate(selected.scheduledAt)} /><DetailBlock label="Đường đua" value={selected.location} /><DetailBlock label="Cự ly" value={selected.distance ? `${selected.distance}m` : "--"} /><DetailBlock label="Số người tối đa" value={selected.maxParticipants} /><DetailBlock label="Trạng thái" value={getOwnerRaceStatusLabel(selected.raceStatus)} /></div></> : <><h2 className="js-detail-title">{selected.horseName}</h2><p className="js-detail-sub">Thông tin tham gia cuộc đua</p><div className="js-blocks"><DetailBlock label="Kỵ sĩ" value={getJockeyNameDisplay(selected)} /><DetailBlock label="Kỵ sĩ xác nhận" value={getJockeyConfirmedDisplay(selected)} /><DetailBlock label="Cổng xuất phát" value={selected.gateNumber ?? "Chưa xếp"} /><DetailBlock label="Trạng thái đăng ký" value={selected.status} /></div></>}
+          {detailMode === "race" ? <><h2 className="js-detail-title">{selected.raceName}</h2><p className="js-detail-sub">{selected.tournamentName}</p><div className="js-blocks"><DetailBlock label="Thời gian" value={formatDate(selected.scheduledAt)} /><DetailBlock label="Đường đua" value={selected.location} /><DetailBlock label="Cự ly" value={selected.distance ? `${selected.distance}m` : "--"} /><DetailBlock label="Số người tối đa" value={selected.maxParticipants} /><DetailBlock label="Trạng thái" value={getOwnerRaceStatusLabel(selected.raceStatus)} /></div></> : <><h2 className="js-detail-title">{selected.horseName}</h2><p className="js-detail-sub">Thông tin tham gia cuộc đua</p><div className="js-blocks"><DetailBlock label="Kỵ sĩ" value={getJockeyNameDisplay(selected)} /><DetailBlock label="Kỵ sĩ xác nhận" value={getJockeyConfirmedDisplay(selected)} /><DetailBlock label="Cổng xuất phát" value={selected.gateNumber ?? "Chưa xếp"} /><DetailBlock label="Trạng thái đăng ký" value={selected.status} /></div>
+            {selected.jockeyId == null && <div className="js-block">
+              <div style={{width:"100%"}}>
+                <span className="js-block-label">Chọn kỵ sĩ chính thức</span>
+                {selected.acceptedInvitations.length === 0 ? (
+                  <strong className="js-block-value">Chưa có kỵ sĩ nào chấp nhận lời mời.</strong>
+                ) : (
+                  <div style={{display:"flex", gap:8, marginTop:6, flexWrap:"wrap"}}>
+                    <select
+                      value={selectedInvitationByEntry[selected.entryId] ?? ""}
+                      onChange={(e) => setSelectedInvitationByEntry((prev) => ({ ...prev, [selected.entryId]: e.target.value }))}
+                    >
+                      <option value="">-- Chọn kỵ sĩ --</option>
+                      {selected.acceptedInvitations.map((inv) => (
+                        <option key={inv.invitationId} value={inv.invitationId}>{inv.jockeyName || "Kỵ sĩ"}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="js-btn js-btn--primary"
+                      disabled={!selectedInvitationByEntry[selected.entryId] || finalConfirmingId === selected.entryId}
+                      onClick={() => handleFinalConfirm(selected, selectedInvitationByEntry[selected.entryId])}
+                    >
+                      {finalConfirmingId === selected.entryId ? "Đang xác nhận..." : "Chọn kỵ sĩ chính thức"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>}</>}
           <div className="js-detail-actions">{!selected.ownerConfirmed && <button className="js-btn js-btn--primary" disabled={confirmingId === selected.entryId} onClick={() => handleConfirm(selected)}>{confirmingId === selected.entryId ? "Đang xác nhận..." : "Xác nhận tham gia cuộc đua"}</button>}</div></> : <p className="js-detail-empty">Chọn một cuộc đua để xem chi tiết.</p>}</div>
       </div>
       {showTimeline && <div className="js-timeline"><h3>Lịch đua</h3><div className="js-tl-list">{Object.entries(groups).map(([date, items]) => <div className="js-tl-day" key={date}><div className="js-tl-line"><span className="js-tl-dot"/><div className="js-tl-bar"/></div><div className="js-tl-content"><span className="js-tl-date">{date}</span>{items.map((item) => <div className="js-tl-race" key={item.entryId} onClick={() => { setSelected(item); setDetailMode("race"); }}><div><strong>{item.raceName}</strong><span>{item.horseName} · {formatDate(item.scheduledAt)}</span></div><span className={`js-badge ${item.ownerConfirmed ? "js-badge--ok" : "js-badge--warn"}`}>{item.ownerConfirmed ? "Chủ đã xác nhận" : "Chờ chủ"}</span></div>)}</div></div>)}</div></div>}

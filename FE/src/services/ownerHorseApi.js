@@ -47,6 +47,15 @@ export const removeJockeyFromHorse = async (horseId, raceId, invitationId, reaso
     }),
   );
 
+// J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+export const finalConfirmJockey = async (horseId, raceId, invitationId) =>
+  unwrapResponseData(
+    await request(`/api/horses/${horseId}/races/${raceId}/jockeys/final-confirm`, {
+      method: "POST",
+      body: JSON.stringify({ invitationId }),
+    }),
+  );
+
 // Legacy Race-level self-registration (RaceStatus.RegistrationOpen-gated) — retained for
 // RaceStatus/StartRaceAsync lifecycle compatibility only. Not the canonical Owner registration
 // flow; see registerHorseForTournament below.
