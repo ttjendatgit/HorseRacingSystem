@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { finalConfirmJockey, getMyRaceEntries } from "../../services/ownerHorseApi";
 import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
+import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import { getJockeyNameDisplay, getJockeyConfirmedDisplay } from "../../utils/jockeyAssignmentDisplay";
 import "../JockeySchedulePage/JockeySchedulePage.css";
 
@@ -131,7 +132,7 @@ export default function OwnerRaceConfirmationPage() {
           <div className="js-card__meta"><span>{formatDate(item.scheduledAt)}</span><span>{item.location}</span>{item.distance && <span>{item.distance}m</span>}</div>
         </div>)}</div>
         <div className="js-detail">{selected ? <><div className="js-detail-tabs"><button className={`js-dt ${detailMode === "race" ? "js-dt--active" : ""}`} onClick={() => setDetailMode("race")}>Cuộc đua</button><button className={`js-dt ${detailMode === "horse" ? "js-dt--active" : ""}`} onClick={() => setDetailMode("horse")}>Ngựa của tôi</button></div>
-          {detailMode === "race" ? <><h2 className="js-detail-title">{selected.raceName}</h2><p className="js-detail-sub">{selected.tournamentName}</p><div className="js-blocks"><DetailBlock label="Thời gian" value={formatDate(selected.scheduledAt)} /><DetailBlock label="Đường đua" value={selected.location} /><DetailBlock label="Cự ly" value={selected.distance ? `${selected.distance}m` : "--"} /><DetailBlock label="Số người tối đa" value={selected.maxParticipants} /><DetailBlock label="Trạng thái" value={getOwnerRaceStatusLabel(selected.raceStatus)} /></div></> : <><h2 className="js-detail-title">{selected.horseName}</h2><p className="js-detail-sub">Thông tin tham gia cuộc đua</p><div className="js-blocks"><DetailBlock label="Kỵ sĩ" value={getJockeyNameDisplay(selected)} /><DetailBlock label="Kỵ sĩ xác nhận" value={getJockeyConfirmedDisplay(selected)} /><DetailBlock label="Cổng xuất phát" value={selected.gateNumber ?? "Chưa xếp"} /><DetailBlock label="Trạng thái đăng ký" value={selected.status} /></div>
+          {detailMode === "race" ? <><h2 className="js-detail-title">{selected.raceName}</h2><p className="js-detail-sub">{selected.tournamentName}</p><div className="js-blocks"><DetailBlock label="Thời gian" value={formatDate(selected.scheduledAt)} /><DetailBlock label="Đường đua" value={selected.location} /><DetailBlock label="Cự ly" value={selected.distance ? `${selected.distance}m` : "--"} /><DetailBlock label="Số người tối đa" value={selected.maxParticipants} /><DetailBlock label="Trạng thái" value={getOwnerRaceStatusLabel(selected.raceStatus)} /></div></> : <><h2 className="js-detail-title">{selected.horseName}</h2><p className="js-detail-sub">Thông tin tham gia cuộc đua</p><div className="js-blocks"><DetailBlock label="Kỵ sĩ" value={getJockeyNameDisplay(selected)} /><DetailBlock label="Kỵ sĩ xác nhận" value={getJockeyConfirmedDisplay(selected)} /><DetailBlock label="Cổng xuất phát" value={selected.gateNumber ?? "Chưa xếp"} /><DetailBlock label="Trạng thái tham gia" value={getRegistrationStatusLabel(selected.status)} /></div>
             {selected.jockeyId == null && <div className="js-block">
               <div style={{width:"100%"}}>
                 <span className="js-block-label">Chọn kỵ sĩ chính thức</span>
