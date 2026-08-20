@@ -369,6 +369,18 @@ public class TournamentService : ITournamentService
             if (tournament == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy giải đấu");
 
+            // T-D1: once a Tournament leaves Draft it is historical/auditable data — hard delete
+            // (Race graph / registrations / rounds / the Tournament row itself) must never run for
+            // it. Checked before any query touches the Race/RaceEntry/etc. graph below, so a
+            // Published/Ongoing/Finished/Cancelled Tournament's history is never partially touched.
+            // Admin uses the existing Cancel flow (ChangeStatusAsync) for Published/Ongoing instead.
+            if (tournament.Status != TournamentStatus.Draft)
+            {
+                return ServiceResult<bool>.Fail(
+                    409,
+                    "Chỉ có thể xóa giải đấu khi đang ở trạng thái Bản nháp. Các giải đấu đã công bố phải được lưu lại để bảo toàn lịch sử.");
+            }
+
             // Get all race IDs in this tournament
             var raceIds = (await _raceRepo.GetByTournamentAsync(id)).Select(r => r.Id).ToList();
 
