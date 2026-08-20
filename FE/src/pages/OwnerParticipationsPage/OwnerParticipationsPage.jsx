@@ -69,7 +69,6 @@ function OwnerParticipationsPage() {
             roundName: e.roundName ?? e.RoundName,
             scheduledAt: e.scheduledAt ?? e.ScheduledAt,
             raceStatus: e.raceStatus ?? e.RaceStatus ?? "",
-            ownerConfirmed: e.ownerConfirmed ?? e.OwnerConfirmed ?? false,
             jockeyName: e.jockeyName ?? e.JockeyName ?? "",
             finishPosition: e.finishPosition ?? e.FinishPosition ?? null,
           })),
@@ -114,10 +113,6 @@ function OwnerParticipationsPage() {
       <div className="op-entry-row">
         <span>Lịch thi đấu</span>
         <strong>{apiToVNDisplay(entry.scheduledAt) || "Chưa xếp lịch"}</strong>
-      </div>
-      <div className="op-entry-row">
-        <span>Chủ ngựa xác nhận</span>
-        <strong>{entry.ownerConfirmed ? "Đã xác nhận" : "Chưa xác nhận"}</strong>
       </div>
       <div className="op-entry-row">
         <span>Kỵ sĩ hiện tại</span>

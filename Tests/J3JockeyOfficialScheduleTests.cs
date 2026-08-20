@@ -318,6 +318,8 @@ public class J3JockeyOfficialScheduleTests
     private static async Task<Guid> CreateRawRaceEntryWithJockeyAsync(
         RaceLifecycleTests.LifecycleFixture f, Guid raceId, Guid horseId, Guid jockeyId)
     {
+        // O1: any valid Admin-lineage RaceEntry has OwnerConfirmed = true — Owner consent already
+        // happened at Tournament registration.
         var entry = new RaceEntry
         {
             Id = Guid.NewGuid(),
@@ -325,7 +327,7 @@ public class J3JockeyOfficialScheduleTests
             HorseId = horseId,
             JockeyId = jockeyId,
             Status = RegistrationStatus.Approved,
-            OwnerConfirmed = false,
+            OwnerConfirmed = true,
             JockeyConfirmed = true
         };
         f.Db.RaceEntries.Add(entry);

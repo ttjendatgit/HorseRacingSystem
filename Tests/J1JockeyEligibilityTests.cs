@@ -15,8 +15,11 @@ namespace Tests;
 public class J1JockeyEligibilityTests
 {
     [Fact]
-    public async Task AdminAssignHorse_RoundOneCreatesEntryWithoutJockeyOrConfirmations()
+    public async Task AdminAssignHorse_RoundOneCreatesEntryWithOwnerConfirmedAndNoJockey()
     {
+        // O1: Owner already consented at Tournament-registration level (registered -> Admin
+        // approved) — this authoritative Admin assignment is the RaceEntry creation itself, so
+        // OwnerConfirmed is true immediately. There is no second manual Owner confirmation step.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (ownerUserId, ownerId, horseId) = await CreateApprovedOwnerHorseAsync(f, "admin-null");
         var (tournamentId, raceId) = await CreateRaceAsync(f, "admin-null", roundNumber: 1);
@@ -31,7 +34,7 @@ public class J1JockeyEligibilityTests
         Assert.Equal(201, result.StatusCode);
         var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
         Assert.Null(entry.JockeyId);
-        Assert.False(entry.OwnerConfirmed);
+        Assert.True(entry.OwnerConfirmed);
         Assert.False(entry.JockeyConfirmed);
         Assert.Equal(RegistrationStatus.Approved, entry.Status);
         Assert.NotEqual(Guid.Empty, ownerUserId);
@@ -55,7 +58,7 @@ public class J1JockeyEligibilityTests
         Assert.True(result.Result.Success, result.Result.Message);
         var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
         Assert.Null(entry.JockeyId);
-        Assert.False(entry.OwnerConfirmed);
+        Assert.True(entry.OwnerConfirmed);
         Assert.False(entry.JockeyConfirmed);
     }
 

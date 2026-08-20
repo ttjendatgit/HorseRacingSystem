@@ -227,7 +227,6 @@ export default function JockeySchedulePage() {
                         <DetailBlock icon="" label="Cự ly" value={selectedRace.distance ? `${selectedRace.distance}m` : ""} />
                         <DetailBlock icon="" label="Số người" value={selectedRace.maxParticipants} />
                         <DetailBlock icon="" label="Trạng thái" value={selectedRace.status} />
-                        <DetailBlock icon="" label="Chủ ngựa" value={selectedRace.ownerConfirmed ? "Đã xác nhận" : "Chờ"} />
                       </div>
                     </div>
                   ) : (
