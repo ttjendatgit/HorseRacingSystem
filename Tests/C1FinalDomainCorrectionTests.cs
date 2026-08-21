@@ -25,7 +25,7 @@ public class C1FinalDomainCorrectionTests
 
     private static TournamentsController BuildTournamentsController(RaceLifecycleTests.LifecycleFixture f, string? role = null)
     {
-        return new TournamentsController(f.TournamentSvc, f.RoundSvc)
+        return new TournamentsController(f.TournamentSvc, f.RoundSvc, f.RaceManagement)
         {
             ControllerContext = new ControllerContext
             {

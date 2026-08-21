@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Transactions;
 using HorseRacing.Dtos;
@@ -608,7 +607,7 @@ public class AdminService : IAdminService
             List<RaceResultRankingItemRequest> ranking;
             try
             {
-                ranking = ParseAndValidateStoredRanking(raceResult.RankingsJson, raceResult.WinningHorseId, entries);
+                ranking = RaceResultRankingValidator.ParseAndValidate(raceResult.RankingsJson, raceResult.WinningHorseId, entries);
             }
             catch (InvalidOperationException ex)
             {
@@ -677,65 +676,6 @@ public class AdminService : IAdminService
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi phê duyệt kết quả: {ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// R0: re-derives and re-validates the ranking stored at Provisional
-    /// submission time, immediately before it is committed as Official.
-    /// Guards against the entry set having changed since submission (stale
-    /// RankingsJson) and against any malformed stored JSON — throws
-    /// InvalidOperationException with a clean Vietnamese message on any
-    /// problem, which the caller turns into a 400 rather than a partial
-    /// apply or an unhandled DB exception.
-    /// </summary>
-    private static List<RaceResultRankingItemRequest> ParseAndValidateStoredRanking(
-        string? rankingsJson, Guid winningHorseId, List<RaceEntry> participants)
-    {
-        if (string.IsNullOrWhiteSpace(rankingsJson))
-            throw new InvalidOperationException("Kết quả này không có bảng xếp hạng hợp lệ để duyệt.");
-
-        List<RaceResultRankingItemRequest>? items;
-        try
-        {
-            items = JsonSerializer.Deserialize<List<RaceResultRankingItemRequest>>(rankingsJson);
-        }
-        catch (JsonException)
-        {
-            throw new InvalidOperationException("Bảng xếp hạng đã lưu không hợp lệ và không thể duyệt.");
-        }
-
-        if (items == null || items.Count == 0)
-            throw new InvalidOperationException("Bảng xếp hạng đã lưu không hợp lệ và không thể duyệt.");
-
-        var participantIds = participants.Select(p => p.HorseId).ToHashSet();
-        var seenHorseIds = new HashSet<Guid>();
-        var seenPositions = new HashSet<int>();
-        foreach (var item in items)
-        {
-            if (!participantIds.Contains(item.HorseId) ||
-                item.Position <= 0 ||
-                !seenHorseIds.Add(item.HorseId) ||
-                !seenPositions.Add(item.Position))
-            {
-                throw new InvalidOperationException(
-                    "Bảng xếp hạng đã lưu không còn khớp với danh sách ngựa tham gia cuộc đua này. Trọng tài phải nộp lại kết quả.");
-            }
-        }
-
-        if (items.Count != participants.Count ||
-            !seenPositions.SetEquals(Enumerable.Range(1, items.Count)))
-        {
-            throw new InvalidOperationException(
-                "Bảng xếp hạng đã lưu không còn khớp với danh sách ngựa tham gia cuộc đua này. Trọng tài phải nộp lại kết quả.");
-        }
-
-        var winner = items.Single(i => i.Position == 1);
-        if (winner.HorseId != winningHorseId)
-        {
-            throw new InvalidOperationException("Ngựa thắng cuộc không khớp với vị trí 1 trong bảng xếp hạng đã lưu.");
-        }
-
-        return items;
     }
 
     public async Task<ServiceResult<object>> GetPredictionsAsync()

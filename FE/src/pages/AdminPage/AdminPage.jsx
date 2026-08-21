@@ -8,6 +8,7 @@ import {
   createTournament,
   deleteTournament,
   endRace,
+  generateNextRound,
   getAdminDashboard,
   getAdminUser,
   getAdminUsers,
@@ -1115,6 +1116,18 @@ function ScheduleManagement({ type }) {
     setForm(defaultRoundForm);
   };
 
+  // Q1: server is the sole source of truth for readiness — this only sends the current Round's
+  // id, never Horse IDs, rankings, or target assignments.
+  const generateNextRoundForRound = async (roundId) => {
+    try {
+      const result = await generateNextRound(roundId);
+      const data = result?.data ?? result?.Data ?? {};
+      const generated = data.generatedEntries ?? data.GeneratedEntries;
+      setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
+      setItems(await getTournamentRounds(selected));
+    } catch (err) { setMessage(err.message); }
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     // Phase5B fix: friendly client-side containment check before hitting the API — the backend
@@ -1379,6 +1392,14 @@ function ScheduleManagement({ type }) {
               {isDraftTournament && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
                   <button onClick={() => startEditRound(item)}>Sửa</button>
+                </div>
+              )}
+              {/* Q1: only offered for a non-final Round of a non-Draft Tournament — the backend
+                  remains authoritative on actual readiness (every source Race Finished with an
+                  Official result); this button just avoids offering it somewhere it can never work. */}
+              {!isDraftTournament && !isFinal && (
+                <div className="admin-actions" style={{ marginTop: 8 }}>
+                  <button onClick={() => generateNextRoundForRound(itemId)}>Tạo vòng tiếp theo</button>
                 </div>
               )}
             </article>
