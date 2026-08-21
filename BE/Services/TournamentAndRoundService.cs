@@ -629,12 +629,13 @@ public class TournamentService : ITournamentService
 
     /// <summary>
     /// Phase5 structural readiness (V1.1 §6/§7/§8). Final-Round-dependent checks (race count vs
-    /// final, QualificationSlots exact-zero-vs-required-sum) only run once the sequence AND the
-    /// Final-Round invariant (exactly one AdvanceCount=0, highest RoundNumber) are BOTH independently
-    /// valid — never derived merely from MAX(RoundNumber), per the locked Phase5 decision. Facts that
-    /// don't depend on which Round is Final (RoundNumber sequence, per-Race MaxParticipants, schedule
-    /// containment, Track existence/capacity/overlap) are still validated even when the sequence or
-    /// Final Round is ambiguous, so those errors surface immediately rather than being masked.
+    /// final, QualificationSlots exact-zero-vs-required-sum) only run once the sequence is valid.
+    /// V0: the Final Round is identified purely by RoundNumber == Tournament.MaxRounds — never
+    /// inferred from AdvanceCount == 0, rounds.Count, or any other heuristic. AdvanceCount == 0 is
+    /// a CONSEQUENCE that gets validated against the Final Round once it's known, not the way the
+    /// Final Round is found. Facts that don't depend on which Round is Final (per-Race
+    /// MaxParticipants, schedule containment, Track existence/capacity/overlap) are still validated
+    /// even when the sequence is invalid, so those errors surface immediately rather than being masked.
     /// </summary>
     private async Task<List<string>> ValidateStructuralReadinessAsync(Tournament tournament)
     {
@@ -649,30 +650,21 @@ public class TournamentService : ITournamentService
         if (rounds.Count == 0)
             return errors; // already reported by ValidatePublishTournamentFieldsAsync
 
-        // ── Sequence: unique, gapless, starts at 1 ──
-        var sequenceValid = rounds.Select(r => r.RoundNumber).OrderBy(n => n)
-            .SequenceEqual(Enumerable.Range(1, rounds.Count));
+        // ── Sequence: exactly Tournament.MaxRounds Rounds, numbered uniquely 1..MaxRounds ──
+        // V0: identity is 1..Tournament.MaxRounds, not 1..rounds.Count — a Round set only
+        // satisfies this SequenceEqual when it has neither too few/too many Rounds, no gaps, and
+        // no duplicates, so "count == MaxRounds" and "gapless 1..MaxRounds" are both expressed by
+        // this single check; no separate count comparison is needed.
+        var sequenceValid = tournament.MaxRounds > 0 &&
+            rounds.Select(r => r.RoundNumber).OrderBy(n => n)
+                .SequenceEqual(Enumerable.Range(1, tournament.MaxRounds));
         if (!sequenceValid)
-            errors.Add("Thứ tự Vòng đấu (RoundNumber) phải liên tục, không trùng, và bắt đầu từ 1.");
+            errors.Add($"Giải đấu phải có đúng {tournament.MaxRounds} Vòng đấu (MaxRounds), đánh số liên tục, không trùng, và bắt đầu từ 1.");
 
-        // ── Final Round: exactly one AdvanceCount=0, and it must be the highest RoundNumber ──
-        Round? finalRound = null;
-        if (sequenceValid)
-        {
-            var zeroAdvanceRounds = rounds.Where(r => r.AdvanceCount == 0).ToList();
-            if (zeroAdvanceRounds.Count == 0)
-                errors.Add("Giải đấu phải có đúng 1 Vòng chung kết (AdvanceCount = 0).");
-            else if (zeroAdvanceRounds.Count > 1)
-                errors.Add("Chỉ được có đúng 1 Vòng chung kết (AdvanceCount = 0).");
-            else
-            {
-                var candidate = zeroAdvanceRounds[0];
-                if (candidate.RoundNumber != rounds.Max(r => r.RoundNumber))
-                    errors.Add("Vòng chung kết (AdvanceCount = 0) phải là Vòng đấu cuối cùng (RoundNumber lớn nhất).");
-                else
-                    finalRound = candidate;
-            }
-        }
+        // ── Final Round: source of truth is RoundNumber == Tournament.MaxRounds (V0) ──
+        // Once the sequence is valid, exactly one Round has RoundNumber == MaxRounds by
+        // construction — no separate "search for the AdvanceCount=0 Round" step is needed.
+        Round? finalRound = sequenceValid ? rounds.Single(r => r.RoundNumber == tournament.MaxRounds) : null;
 
         // ── AdvanceCount: universal bounds (non-null, >= 0), for every Round regardless of Final ──
         foreach (var round in rounds)

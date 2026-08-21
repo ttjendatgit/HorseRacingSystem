@@ -19,7 +19,7 @@ public class Phase5StructuralTests
 {
     // ── Shared builders ─────────────────────────────────────────────────
 
-    private static CreateTournamentRequest ValidDraftTournamentRequest(DateTime start, DateTime end, int maxParticipants, int minParticipants = 3)
+    private static CreateTournamentRequest ValidDraftTournamentRequest(DateTime start, DateTime end, int maxParticipants, int minParticipants = 3, int maxRounds = 1)
         => new CreateTournamentRequest
         {
             Name = "Phase5 Tournament",
@@ -27,7 +27,8 @@ public class Phase5StructuralTests
             EndDate = end,
             RegistrationDeadline = start.AddDays(-1),
             MinParticipants = minParticipants,
-            MaxParticipants = maxParticipants
+            MaxParticipants = maxParticipants,
+            MaxRounds = maxRounds
         };
 
     private static async Task<Guid> CreateTrackAsync(RaceLifecycleTests.LifecycleFixture f, int? capacity)
@@ -63,13 +64,13 @@ public class Phase5StructuralTests
         return (tournamentId, round.Result.Data!.Id, roundStart, roundEnd);
     }
 
-    /// <summary>Fully valid, Publish-ready 2-Round Tournament: Round1 (non-final, AdvanceCount=4, 1 Race MaxParticipants=10/QualificationSlots=4) -> Round2 (final, AdvanceCount=0, 1 Race MaxParticipants=4/QualificationSlots=0).</summary>
+    /// <summary>Fully valid, Publish-ready 2-Round Tournament (Tournament.MaxRounds=2): Round1 (non-final, AdvanceCount=4, 1 Race MaxParticipants=10/QualificationSlots=4) -> Round2 (final because RoundNumber(2)==MaxRounds(2), AdvanceCount=0, 1 Race MaxParticipants=4/QualificationSlots=0).</summary>
     private static async Task<(Guid tournamentId, Guid round1Id, Guid round2Id, Guid race1Id, Guid race2Id)> BuildValidPublishableTournamentAsync(
         RaceLifecycleTests.LifecycleFixture f)
     {
         var start = DateTime.UtcNow.AddDays(10);
         var end = start.AddDays(20);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, end, maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, end, maxParticipants: 10, maxRounds: 2));
         Assert.True(create.Result.Success, create.Result.Message);
         var tournamentId = create.Result.Data!.Id;
 
@@ -259,9 +260,11 @@ public class Phase5StructuralTests
     [Fact]
     public async Task Publish_SequenceGap_Rejected()
     {
+        // V0-D: MaxRounds=3 but Round2 is missing (only 1, 3 exist) — a genuine gap against the
+        // 1..MaxRounds identity, not merely "fewer rounds than MaxRounds".
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 3));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -293,9 +296,11 @@ public class Phase5StructuralTests
     [Fact]
     public async Task Publish_NoFinalRound_Rejected()
     {
+        // V0: neither Round has AdvanceCount=0. Round2 (RoundNumber == MaxRounds == 2) is still
+        // correctly identified as Final by RoundNumber — its wrong AdvanceCount is what's rejected.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -316,9 +321,13 @@ public class Phase5StructuralTests
     [Fact]
     public async Task Publish_MultipleAdvanceCountZero_Rejected()
     {
+        // V0: Round2 (RoundNumber == MaxRounds == 2) is Final regardless of AdvanceCount, and its
+        // AdvanceCount=0 is correct. Round1 is non-final (RoundNumber(1) != MaxRounds(2)) and its
+        // AdvanceCount=0 is what's now rejected — "two zero-AdvanceCount rounds" is no longer a
+        // distinct error class, it's just "a non-final round improperly has AdvanceCount=0".
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -333,15 +342,18 @@ public class Phase5StructuralTests
 
         var publish = await PublishAsync(f, tournamentId);
         Assert.False(publish.Result.Success);
-        Assert.Contains("Chỉ được có đúng 1", publish.Result.Message);
+        Assert.Contains("Vòng 1 (không phải chung kết) phải có AdvanceCount > 0", publish.Result.Message);
     }
 
     [Fact]
     public async Task Publish_ZeroAdvanceCountNotLast_Rejected()
     {
+        // V0: Round1 (AdvanceCount=0) is NOT Final — RoundNumber(1) != MaxRounds(2) — so its
+        // AdvanceCount=0 is invalid for a non-final Round. Round2 (the real Final, by RoundNumber)
+        // has AdvanceCount=4, also invalid (Final must be 0). Both are independently reported.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -356,16 +368,156 @@ public class Phase5StructuralTests
 
         var publish = await PublishAsync(f, tournamentId);
         Assert.False(publish.Result.Success);
-        Assert.Contains("phải là Vòng đấu cuối cùng", publish.Result.Message);
+        Assert.Contains("Vòng 1 (không phải chung kết) phải có AdvanceCount > 0", publish.Result.Message);
+        Assert.Contains("Vòng chung kết (Vòng 2) phải có AdvanceCount = 0", publish.Result.Message);
     }
 
     [Fact]
     public async Task Publish_ValidFinalRound_Passes()
     {
+        // V0-A: MaxRounds=2, Round1 (non-final) AdvanceCount=4 > 0, Round2 (final, RoundNumber
+        // == MaxRounds) AdvanceCount=0 — publish succeeds when all other rules are valid.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (tournamentId, _, _, _, _) = await BuildValidPublishableTournamentAsync(f);
         var publish = await PublishAsync(f, tournamentId);
         Assert.True(publish.Result.Success, publish.Result.Message);
+    }
+
+    // ── V0: FINAL ROUND IS DETERMINED BY RoundNumber == Tournament.MaxRounds, NEVER BY
+    //        AdvanceCount == 0, rounds.Count, OR ANY OTHER HEURISTIC ──────────────────────────
+    // V0-D (missing/gapped Round against MaxRounds) is already covered by Publish_SequenceGap_Rejected
+    // above. V0-H (Final Round with >1 Race), V0-I (non-final QualificationSlots sum mismatch), and
+    // V0-J (Final Race QualificationSlots > 0) are already covered by Publish_FinalWithMultipleRaces_Rejected,
+    // Publish_QualificationSlotSumMismatch_Rejected, and Publish_FinalQualificationSlotsNonZero_Rejected
+    // respectively — all of which now exercise the corrected RoundNumber-based Final determination
+    // via BuildValidPublishableTournamentAsync (Tournament.MaxRounds=2).
+
+    [Fact]
+    public async Task Publish_ThreeRound_NonFinalRoundWithZeroAdvanceCount_Rejected()
+    {
+        // V0-B: MaxRounds=3. Round2 has AdvanceCount=0 but RoundNumber(2) != MaxRounds(3) — it is
+        // NOT Final, so AdvanceCount=0 on it must still be rejected as a non-final Round.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(30), maxParticipants: 10, maxRounds: 3));
+        var tournamentId = create.Result.Data!.Id;
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1), AdvanceCount = 8
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2), AdvanceCount = 0
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R3", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = start.AddDays(2), ScheduledEndDate = start.AddDays(3), AdvanceCount = 0
+        });
+
+        var publish = await PublishAsync(f, tournamentId);
+        Assert.False(publish.Result.Success);
+        Assert.Contains("Vòng 2 (không phải chung kết) phải có AdvanceCount > 0", publish.Result.Message);
+    }
+
+    [Fact]
+    public async Task Publish_ThreeRound_FinalRoundWithPositiveAdvanceCount_Rejected()
+    {
+        // V0-C: MaxRounds=3. Round3 (RoundNumber == MaxRounds) IS Final by definition regardless
+        // of its AdvanceCount — its positive AdvanceCount is what's rejected, not "not being final".
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(30), maxParticipants: 10, maxRounds: 3));
+        var tournamentId = create.Result.Data!.Id;
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1), AdvanceCount = 8
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2), AdvanceCount = 4
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R3", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = start.AddDays(2), ScheduledEndDate = start.AddDays(3), AdvanceCount = 2 // should be 0
+        });
+
+        var publish = await PublishAsync(f, tournamentId);
+        Assert.False(publish.Result.Success);
+        Assert.Contains("Vòng chung kết (Vòng 3) phải có AdvanceCount = 0", publish.Result.Message);
+    }
+
+    [Fact]
+    public async Task DuplicateRoundNumber_RejectedByDbConstraintBeforeEverReachingPublish()
+    {
+        // V0-E: RoundService.CreateRoundAsync already rejects a duplicate RoundNumber at create
+        // time (see Create_DuplicateRoundNumber_Rejected). This proves the guarantee goes one
+        // layer deeper still — a unique index on (TournamentId, RoundNumber) (see migration
+        // EnforceUniqueRoundNumberPerTournament) makes a duplicate RoundNumber impossible to
+        // persist at all, even by seeding directly and bypassing RoundService entirely. So
+        // "duplicate RoundNumber -> publish fails" is unreachable as a Publish-time scenario:
+        // the data can never exist for Publish to see in the first place.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
+        var tournamentId = create.Result.Data!.Id;
+        f.Db.AddRange(
+            new Round { Id = Guid.NewGuid(), Name = "R1a", TournamentId = tournamentId, RoundNumber = 1, ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1), AdvanceCount = 4 },
+            new Round { Id = Guid.NewGuid(), Name = "R1b", TournamentId = tournamentId, RoundNumber = 1, ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2), AdvanceCount = 0 });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => f.Db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Publish_RoundCountLessThanMaxRounds_Rejected()
+    {
+        // V0-F: MaxRounds=3 but only Round1 and Round2 exist — a count mismatch (not a gap or
+        // duplicate) must still fail the sequence check, since identity is 1..MaxRounds, not
+        // 1..rounds.Count.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(30), maxParticipants: 10, maxRounds: 3));
+        var tournamentId = create.Result.Data!.Id;
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1), AdvanceCount = 4
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2), AdvanceCount = 0
+        });
+
+        var publish = await PublishAsync(f, tournamentId);
+        Assert.False(publish.Result.Success);
+        Assert.Contains("liên tục", publish.Result.Message);
+    }
+
+    [Fact]
+    public async Task Publish_SingleRoundTournament_MaxRoundsOne_Succeeds()
+    {
+        // V0-G: MaxRounds=1 — Round1 IS the Final Round (RoundNumber == MaxRounds), with no
+        // non-final Round required before it. One Race, AdvanceCount=0, QualificationSlots=0.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, roundId, roundStart, roundEnd) = await BuildDraftSingleFinalRoundAsync(f);
+        var track = await CreateTrackAsync(f, capacity: 5);
+        var race = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
+        {
+            Name = "Final Race", TournamentId = tournamentId, RoundId = roundId,
+            ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
+            TrackId = track, MaxParticipants = 5, QualificationSlots = 0
+        });
+        Assert.True(race.Result.Success, race.Result.Message);
+
+        var publish = await PublishAsync(f, tournamentId);
+        Assert.True(publish.Result.Success, publish.Result.Message);
+        Assert.Equal(TournamentStatus.Published, publish.Result.Data!.Status);
     }
 
     // ── ADVANCECOUNT ────────────────────────────────────────────────────
@@ -375,7 +527,7 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -398,7 +550,7 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -419,12 +571,11 @@ public class Phase5StructuralTests
     [Fact]
     public async Task Publish_NonFinalZero_Rejected()
     {
-        // A non-final Round with AdvanceCount == 0 necessarily collides with the "exactly one
-        // AdvanceCount == 0" invariant once the real Final Round is added — surfaced as the
-        // multiple-zero rejection rather than a separate isolated message.
+        // V0: a non-final Round (RoundNumber != MaxRounds) with AdvanceCount == 0 is rejected
+        // directly by the non-final ">0" rule — no longer surfaced via a "multiple zero" scan.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -447,7 +598,7 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -470,7 +621,7 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -936,7 +1087,7 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
         var r1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {

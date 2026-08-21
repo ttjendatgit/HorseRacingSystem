@@ -1357,13 +1357,17 @@ function ScheduleManagement({ type }) {
 
         if (type === "round") {
           const roundNumber = item.roundNumber ?? item.RoundNumber;
-          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value (Final Round
-          // hint below) and must never be treated as "not set".
+          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value and must
+          // never be treated as "not set".
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
+          // V0: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount alone —
+          // Draft data may temporarily hold AdvanceCount=0 on a non-final round (see TournamentDetail.jsx).
+          const maxRounds = selectedTournament?.maxRounds ?? selectedTournament?.MaxRounds;
+          const isFinal = maxRounds != null && roundNumber === maxRounds;
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>
-              {advanceCount === 0 && (
+              {isFinal && (
                 <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>
               )}
               <h3>{item.name ?? item.Name}</h3>
