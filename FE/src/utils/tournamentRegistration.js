@@ -80,6 +80,13 @@ export const getTournamentRegistrationState = (tournament, now = new Date()) => 
 export const canRegisterTournament = (tournament, now) =>
   getTournamentRegistrationState(tournament, now).canRegister;
 
+// T-D1: hard delete (DELETE /api/tournaments/{id}) is backend-rejected (409) for anything past
+// Draft — once Published/Ongoing/Finished/Cancelled, a Tournament is historical/auditable data.
+// This is FE affordance only (hide the "Xóa" button); the backend guard in
+// TournamentAndRoundService.DeleteTournamentAsync remains the authoritative check.
+export const canHardDeleteTournament = (tournament) =>
+  normalizeTournamentStatus(tournament) === "Draft";
+
 // "Giải đấu đã đủ X/Y ngựa tham gia.\nHẹn bạn ở giải đấu tiếp theo." — only meaningful once the
 // Tournament is actually at/over capacity; returns null otherwise so callers don't need to guard.
 export const getCapacityFullMessage = (tournament, now = new Date()) => {

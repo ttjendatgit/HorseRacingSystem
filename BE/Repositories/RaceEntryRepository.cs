@@ -55,38 +55,24 @@ public class RaceEntryRepository : IRaceEntryRepository
             .FirstOrDefaultAsync(e => e.RaceId == raceId && e.HorseId == horseId);
     }
 
-    public async Task<List<RaceEntry>> GetByJockeyAsync(Guid jockeyId)
+    // J3 schedule correctness: a race belongs in the Jockey's OFFICIAL schedule only when
+    // RaceEntry.JockeyId == this Jockey — never inferred from an Accepted invitation (J2
+    // acceptance is not assignment) or from the caller also owning the Horse. Only Owner Final
+    // Confirm (HorseService.FinalConfirmJockeyAsync) sets JockeyId, so that equality check is the
+    // single source of truth here. This is a pure display query — it returns EVERY official
+    // RaceEntry as-is (including ones in a Finished/Cancelled Tournament, or several within the
+    // same Tournament) and applies no per-Tournament dedup; the one-active-Tournament business
+    // lock is enforced only at Final Confirm time (HorseService), never here.
+    public Task<List<RaceEntry>> GetByJockeyAsync(Guid jockeyId)
     {
-        var jockeyUserId = await _db.Jockeys
-            .Where(jockey => jockey.Id == jockeyId)
-            .Select(jockey => (Guid?)jockey.UserId)
-            .FirstOrDefaultAsync();
-
-        var entries = await _db.RaceEntries
+        return _db.RaceEntries
             .Include(e => e.Race)
                 .ThenInclude(r => r!.Tournament)
             .Include(e => e.Horse)
             .Include(e => e.Jockey)
-            .Where(e =>
-                e.JockeyId == jockeyId ||
-                (e.Horse != null && e.Horse.JockeyInvitations.Any(invitation =>
-                    invitation.JockeyId == jockeyId &&
-                    invitation.Status == JockeyInvitationStatus.Accepted)) ||
-                (jockeyUserId.HasValue &&
-                 e.Horse != null &&
-                 e.Horse.Owner != null &&
-                 e.Horse.Owner.UserId == jockeyUserId.Value))
+            .Where(e => e.JockeyId == jockeyId && e.Race != null)
+            .OrderBy(e => e.Race!.ScheduledAt)
             .ToListAsync();
-
-        return entries
-            .Where(entry => entry.Race != null)
-            .GroupBy(entry => entry.Race!.TournamentId)
-            .Select(group => group
-                .OrderByDescending(entry => entry.JockeyId == jockeyId)
-                .ThenByDescending(entry => entry.JockeyConfirmed)
-                .ThenByDescending(entry => entry.Status == RegistrationStatus.Approved)
-                .First())
-            .ToList();
     }
 
     public Task<List<RaceEntry>> GetPendingConfirmationsByJockeyAsync(Guid jockeyId)
@@ -156,6 +142,45 @@ public class RaceEntryRepository : IRaceEntryRepository
             query = query.Where(e => e.Id != excludeEntryId.Value);
 
         return query.AnyAsync();
+    }
+
+    // J3: every official assignment (RaceEntry.JockeyId == jockeyId) for this Jockey, used to
+    // detect the Tournament-long Horse/Jockey pairing (one Jockey, one Horse per Tournament) and
+    // the one-active-Tournament-per-Jockey lock. Only a Rejected RaceEntry is excluded — Race.Status
+    // is otherwise irrelevant here: once a pairing is established it stays the source of truth for
+    // that Tournament even after the specific Race that created it finishes (a later Round's
+    // RaceEntry for the same Horse carries the same Jockey forward automatically — see J3 §7).
+    // Race.Tournament is included so the caller can check TournamentId identity + Tournament.Status
+    // without a second query.
+    public Task<List<RaceEntry>> GetOfficialAssignmentsForJockeyAsync(Guid jockeyId)
+    {
+        return _db.RaceEntries
+            .Include(e => e.Race)
+                .ThenInclude(r => r!.Tournament)
+            .Where(e =>
+                e.JockeyId == jockeyId &&
+                e.Status != RegistrationStatus.Rejected &&
+                e.Race != null)
+            .ToListAsync();
+    }
+
+    // J3: does this Horse already have an official Jockey (RaceEntry.JockeyId != null) anywhere in
+    // this Tournament? One Horse pairs with at most one Jockey per Tournament, for the Horse's
+    // entire Tournament journey — this intentionally is NOT scoped to a single RaceEntry, so it
+    // also catches a pairing already established on a different (e.g. earlier-Round) RaceEntry for
+    // the same Horse.
+    public Task<RaceEntry?> GetOfficialAssignmentForHorseInTournamentAsync(Guid horseId, Guid tournamentId)
+    {
+        return _db.RaceEntries
+            .Include(e => e.Jockey)
+                .ThenInclude(j => j!.User)
+            .Where(e =>
+                e.HorseId == horseId &&
+                e.JockeyId != null &&
+                e.Status != RegistrationStatus.Rejected &&
+                e.Race != null &&
+                e.Race.TournamentId == tournamentId)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<RaceEntry?> GetByIdAsync(Guid id)

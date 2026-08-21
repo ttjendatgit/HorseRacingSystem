@@ -24,6 +24,22 @@ namespace Tests;
 /// </summary>
 public class RaceLifecycleTests
 {
+    /// <summary>
+    /// R0: every submission is now a full ranking, not a bare WinningHorseId.
+    /// This is the standard two-horse (winner/loser) full ranking shared by
+    /// every pre-R0 lifecycle test in this file and in Phase3ContractTests —
+    /// LifecycleFixture only ever seeds exactly these two RaceEntries.
+    /// </summary>
+    public static RaceResultRequest WinnerLoserRanking(Guid winnerHorseId, Guid loserHorseId) =>
+        new()
+        {
+            Rankings = new List<RaceResultRankingItemRequest>
+            {
+                new() { HorseId = winnerHorseId, Position = 1 },
+                new() { HorseId = loserHorseId, Position = 2 },
+            }
+        };
+
     [Fact]
     public async Task EventProgress_ScheduledToFinished_FollowsLockedSequence()
     {
@@ -62,7 +78,7 @@ public class RaceLifecycleTests
         await f.RaceManagement.StartRaceAsync(race.Id);
 
         var submit = await f.LiveResult.UpdateRaceResultAsync(race.Id,
-            new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+            WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
 
         Assert.False(submit.Result.Success);
     }
@@ -98,7 +114,7 @@ public class RaceLifecycleTests
 
         // First submission -> Provisional
         var submit = await f.LiveResult.UpdateRaceResultAsync(race.Id,
-            new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+            WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         Assert.True(submit.Result.Success);
 
         var result = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);
@@ -117,7 +133,7 @@ public class RaceLifecycleTests
 
         // Resubmit -> stays Provisional, clears RejectedReason
         var resubmit = await f.LiveResult.UpdateRaceResultAsync(race.Id,
-            new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+            WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         Assert.True(resubmit.Result.Success);
         result = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);
         Assert.Equal(RaceResultStatus.Provisional, result!.Status);
@@ -153,7 +169,7 @@ public class RaceLifecycleTests
         await f.AddPendingPredictionAsync(race.Id, loserId, race.LoserHorseId, betAmount: 50m, odds: 3m);
 
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
 
         // Direct settlement attempt on a Finished-but-Provisional race must fail.
         var earlySettle = await f.Prediction.SettlePredictionAsync(race.Id, race.WinnerHorseId);
@@ -202,7 +218,7 @@ public class RaceLifecycleTests
         await f.AddPendingPredictionAsync(race.Id, winnerBId, race.WinnerHorseId, betAmount: 50m, odds: 4m);
 
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
 
         // Inject a payout failure for winner B only.
@@ -270,7 +286,7 @@ public class RaceLifecycleTests
         await f.AddPendingPredictionAsync(race.Id, winnerBId, race.WinnerHorseId, betAmount: 50m, odds: 4m);
 
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
 
         // Winner B's payout fails during approval; winner A succeeds normally.
@@ -315,7 +331,7 @@ public class RaceLifecycleTests
         await f.AddPendingPredictionAsync(race.Id, winnerId, race.WinnerHorseId, betAmount: 100m, odds: 2m);
 
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
 
         var approve = await f.Admin.ApproveRaceResultAsync(race.Id);
@@ -344,7 +360,7 @@ public class RaceLifecycleTests
         await f.RaceManagement.CloseRegistrationAsync(race.Id);
         await f.RaceManagement.StartRaceAsync(race.Id);
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
 
         // D: result exists but is still Provisional (never approved).
         var retry = await f.Admin.SettlePredictionsAsync(race.Id);
@@ -371,7 +387,7 @@ public class RaceLifecycleTests
         await f.RaceManagement.CloseRegistrationAsync(race.Id);
         await f.RaceManagement.StartRaceAsync(race.Id);
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
 
         var result = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);
         Assert.Equal(RaceResultStatus.Provisional, result!.Status);
@@ -387,12 +403,12 @@ public class RaceLifecycleTests
         await f.RaceManagement.CloseRegistrationAsync(race.Id);
         await f.RaceManagement.StartRaceAsync(race.Id);
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
         await f.Admin.ApproveRaceResultAsync(race.Id);
 
         var resubmit = await f.LiveResult.UpdateRaceResultAsync(race.Id,
-            new RaceResultRequest { WinningHorseId = race.LoserHorseId });
+            WinnerLoserRanking(race.LoserHorseId, race.WinnerHorseId));
 
         Assert.False(resubmit.Result.Success);
         var result = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);
@@ -410,7 +426,7 @@ public class RaceLifecycleTests
         await f.RaceManagement.CloseRegistrationAsync(race.Id);
         await f.RaceManagement.StartRaceAsync(race.Id);
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
 
         var reject = await f.Admin.RejectRaceResultAsync(race.Id, "Sai ngựa thắng");
@@ -435,13 +451,13 @@ public class RaceLifecycleTests
         await f.RaceManagement.CloseRegistrationAsync(race.Id);
         await f.RaceManagement.StartRaceAsync(race.Id);
         await f.RaceManagement.EndRaceAsync(race.Id);
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
 
         var reject = await f.Admin.RejectRaceResultAsync(race.Id, "Sai ngựa thắng");
         Assert.True(reject.Result.Success, reject.Result.Message);
 
-        var resubmit = await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        var resubmit = await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         Assert.True(resubmit.Result.Success, resubmit.Result.Message);
 
         var resultAfterResubmit = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);
@@ -496,7 +512,7 @@ public class RaceLifecycleTests
         var cancelNoResult = await f.RaceManagement.CancelRaceAsync(race.Id);
         Assert.False(cancelNoResult.Result.Success);
 
-        await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest { WinningHorseId = race.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(race.Id, WinnerLoserRanking(race.WinnerHorseId, race.LoserHorseId));
         await f.AddMandatoryReportAsync(race.Id);
         await f.Admin.ApproveRaceResultAsync(race.Id);
 
@@ -793,6 +809,40 @@ public class RaceLifecycleTests
             await Db.SaveChangesAsync();
 
             return new SeededRace(raceId, winnerHorse.Id, loserHorse.Id);
+        }
+
+        /// <summary>
+        /// R0: adds one more start-eligible RaceEntry (own Owner/Horse/Jockey,
+        /// Approved+Confirmed, health check Passed+Approved) to an already
+        /// seeded race, so multi-horse (3+) full-ranking scenarios can be
+        /// built on top of CreateReadyToStartRaceAsync's base two. Must be
+        /// called before OpenRegistration/StartRace. Requires
+        /// CreateReadyToStartRaceAsync to have run first (uses its Referee).
+        /// </summary>
+        public async Task<Guid> AddExtraApprovedEntryAsync(Guid raceId)
+        {
+            var n = ++_counter;
+            var ownerUser = new User { Id = Guid.NewGuid(), Email = $"owner{n}@test.com", PasswordHash = "x", FullName = "Owner", Role = UserRole.HorseOwner };
+            var owner = new Owner { Id = Guid.NewGuid(), UserId = ownerUser.Id, OwnerCode = $"OWN-{n}" };
+            var jockeyUser = new User { Id = Guid.NewGuid(), Email = $"jockey{n}@test.com", PasswordHash = "x", FullName = "Jockey", Role = UserRole.Jockey };
+            var jockey = new Jockey { Id = Guid.NewGuid(), UserId = jockeyUser.Id, ApprovalStatus = ApprovalStatus.Approved };
+            var horse = new Horse { Id = Guid.NewGuid(), Name = $"Horse{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
+            Db.AddRange(ownerUser, owner, jockeyUser, jockey, horse);
+            await Db.SaveChangesAsync();
+
+            Db.Add(new RaceEntry
+            {
+                Id = Guid.NewGuid(), RaceId = raceId, HorseId = horse.Id, JockeyId = jockey.Id,
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+            });
+            Db.Add(new HorseHealthCheck
+            {
+                Id = Guid.NewGuid(), HorseId = horse.Id, RaceId = raceId, RefereeId = _refereeId,
+                Status = HealthCheckStatus.Passed, ApprovedToRace = true, CheckedAt = DateTime.UtcNow
+            });
+            await Db.SaveChangesAsync();
+
+            return horse.Id;
         }
 
         public async Task AddMandatoryReportAsync(Guid raceId)

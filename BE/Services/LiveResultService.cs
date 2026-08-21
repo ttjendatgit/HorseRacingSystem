@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -167,6 +168,9 @@ public class LiveResultService : ILiveResultService
     /// Phase2B: gated purely on RaceStatus == Finished (event-progress) and
     /// RaceResultStatus (result-lifecycle). Never mutates Race.Status. Cannot
     /// be used to edit an Official result.
+    /// R0: the submitted Rankings[] is the single source of truth for the
+    /// result — WinningHorseId is derived from Rankings[Position == 1], never
+    /// an independently-editable second source (see ValidateAndCanonicalize).
     /// </summary>
     public async Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, RaceResultRequest request)
     {
@@ -178,29 +182,41 @@ public class LiveResultService : ILiveResultService
                 return ServiceResult<bool>.Error("Không tìm thấy cuộc đua", 404);
             }
 
-            // Validate that the winning horse is actually in this race
-            var isHorseInRace = await _entryRepo.ExistsAsync(raceId, request.WinningHorseId);
-            if (!isHorseInRace)
-            {
-                return ServiceResult<bool>.Error("Ngựa thắng không có trong danh sách tham gia cuộc đua này", 400);
-            }
-
             if (race.Status != RaceStatus.Finished)
             {
                 return ServiceResult<bool>.Error($"Không thể nộp kết quả cho cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải đã kết thúc.", 400);
             }
 
             var existingResult = await _raceResultRepo.GetByRaceIdAsync(raceId);
+            if (existingResult != null && existingResult.Status == RaceResultStatus.Official)
+            {
+                return ServiceResult<bool>.Error("Kết quả đã chính thức (Official) và không thể nộp lại qua đường thông thường.", 400);
+            }
+
+            var participants = await _entryRepo.GetByRaceAsync(raceId);
+            var validationError = ValidateAndCanonicalizeRankings(request.Rankings, participants, out var canonical);
+            if (validationError != null)
+            {
+                return ServiceResult<bool>.Error(validationError, 400);
+            }
+
+            // Positions are validated continuous 1..N above, so the first
+            // item after ascending sort is always exactly Position 1.
+            var canonicalWinnerId = canonical[0].HorseId;
+            if (request.WinningHorseId.HasValue && request.WinningHorseId.Value != canonicalWinnerId)
+            {
+                return ServiceResult<bool>.Error(
+                    "WinningHorseId không khớp với ngựa xếp vị trí 1 trong Rankings. Bảng xếp hạng là nguồn xác định người thắng cuộc duy nhất.",
+                    400);
+            }
+
+            var rankingsJson = JsonSerializer.Serialize(canonical);
 
             if (existingResult != null)
             {
-                if (existingResult.Status == RaceResultStatus.Official)
-                {
-                    return ServiceResult<bool>.Error("Kết quả đã chính thức (Official) và không thể nộp lại qua đường thông thường.", 400);
-                }
-
                 // Resubmission: remains Provisional, clears rejection metadata.
-                existingResult.WinningHorseId = request.WinningHorseId;
+                existingResult.WinningHorseId = canonicalWinnerId;
+                existingResult.RankingsJson = rankingsJson;
                 existingResult.Notes = request.Notes;
                 existingResult.RecordedAt = DateTime.UtcNow;
                 existingResult.Status = RaceResultStatus.Provisional;
@@ -215,7 +231,8 @@ public class LiveResultService : ILiveResultService
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
-                WinningHorseId = request.WinningHorseId,
+                WinningHorseId = canonicalWinnerId,
+                RankingsJson = rankingsJson,
                 RecordedAt = DateTime.UtcNow,
                 Status = RaceResultStatus.Provisional,
                 RejectedReason = null,
@@ -231,6 +248,65 @@ public class LiveResultService : ILiveResultService
         {
             return ServiceResult<bool>.Error($"Lỗi cập nhật kết quả cuộc đua: {ex.Message}", 500);
         }
+    }
+
+    /// <summary>
+    /// R0 full-ranking validation. A submitted result must cover every
+    /// current RaceEntry for this Race exactly once, with continuous
+    /// 1..N positions — there is no DNS/DNF/DQ classification implemented
+    /// yet, so partial rankings are rejected rather than given invented
+    /// semantics. Returns null (canonical populated, sorted ascending by
+    /// Position) on success, or a Vietnamese business-error message on
+    /// failure — never lets a DB exception stand in for validation.
+    /// </summary>
+    private static string? ValidateAndCanonicalizeRankings(
+        List<RaceResultRankingItemRequest>? rankings,
+        List<RaceEntry> participants,
+        out List<RaceResultRankingItemRequest> canonical)
+    {
+        canonical = new List<RaceResultRankingItemRequest>();
+
+        if (rankings == null || rankings.Count == 0)
+        {
+            return "Bảng xếp hạng không được để trống.";
+        }
+
+        var participantIds = participants.Select(p => p.HorseId).ToHashSet();
+        var seenHorseIds = new HashSet<Guid>();
+        var seenPositions = new HashSet<int>();
+
+        foreach (var item in rankings)
+        {
+            if (!participantIds.Contains(item.HorseId))
+            {
+                return $"Ngựa {item.HorseId} không thuộc danh sách tham gia cuộc đua này.";
+            }
+            if (item.Position <= 0)
+            {
+                return "Vị trí xếp hạng phải là số nguyên dương.";
+            }
+            if (!seenHorseIds.Add(item.HorseId))
+            {
+                return "Một ngựa không được xuất hiện nhiều hơn một lần trong bảng xếp hạng.";
+            }
+            if (!seenPositions.Add(item.Position))
+            {
+                return "Một vị trí không được gán cho nhiều hơn một ngựa.";
+            }
+        }
+
+        if (rankings.Count != participants.Count)
+        {
+            return "Bảng xếp hạng phải bao gồm đầy đủ và chỉ những ngựa tham gia cuộc đua này.";
+        }
+
+        if (!seenPositions.SetEquals(Enumerable.Range(1, rankings.Count)))
+        {
+            return "Vị trí xếp hạng phải liên tục từ 1 đến hết, không được có khoảng trống.";
+        }
+
+        canonical = rankings.OrderBy(r => r.Position).ToList();
+        return null;
     }
 
     public async Task<ServiceResult<bool>> UpdateParticipantStatusAsync(Guid raceId, Guid horseId, string status)

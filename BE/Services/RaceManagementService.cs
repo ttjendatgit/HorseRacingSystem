@@ -416,15 +416,19 @@ public class RaceManagementService : IRaceManagementService
             }
 
             // J1: Admin assigns only the horse; jockey selection stays in the owner invitation flow.
+            // O1: Owner consent already happened at Tournament registration (Owner registered ->
+            // Admin approved the TournamentHorseRegistration) — this Admin assignment is the
+            // authoritative RaceEntry creation path, so OwnerConfirmed is true immediately; there is
+            // no second manual Owner "Xác nhận tham gia cuộc đua" step. JockeyConfirmed stays false
+            // until Owner Final Confirm (J3) establishes the official Jockey.
             var entry = new RaceEntry
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
                 HorseId = request.HorseId,
                 JockeyId = null,
-                // Admin-created entries wait for the owner/jockey invitation flow.
                 Status = RegistrationStatus.Approved,
-                OwnerConfirmed = false,
+                OwnerConfirmed = true,
                 JockeyConfirmed = false
             };
 
@@ -520,14 +524,16 @@ public class RaceManagementService : IRaceManagementService
                     continue;
                 }
 
+                // O1: same authoritative-assignment rule as the single-assign path above —
+                // OwnerConfirmed = true immediately, no second manual Owner confirmation step.
                 var entry = new RaceEntry
                 {
                     Id = Guid.NewGuid(),
                     RaceId = raceId,
                     HorseId = horseId,
-                    // Admin-created entries wait for the owner/jockey invitation flow.
+                    JockeyId = null,
                     Status = RegistrationStatus.Approved,
-                    OwnerConfirmed = false,
+                    OwnerConfirmed = true,
                     JockeyConfirmed = false
                 };
                 await _entryRepo.AddAsync(entry);

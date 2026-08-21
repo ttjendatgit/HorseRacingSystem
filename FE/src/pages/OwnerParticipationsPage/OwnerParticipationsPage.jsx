@@ -2,15 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyTournamentRegistrations, getMyRaceEntries } from "../../services/ownerHorseApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
+import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import "../OwnerSharedLayout.css";
 import "./OwnerParticipationsPage.css";
-
-const registrationStatusLabel = (status) => {
-  if (status === "Approved") return "Đã duyệt";
-  if (status === "Rejected") return "Từ chối";
-  if (status === "Withdrawn") return "Đã rút";
-  return "Chờ duyệt";
-};
 
 // Task C1 §3: bucketing is driven ONLY by the Tournament's own lifecycle status (Published /
 // Ongoing / Finished) plus the registration's own status — never by inferring or fabricating a
@@ -54,7 +48,7 @@ function OwnerParticipationsPage() {
               tournamentStartDate: r.tournamentStartDate ?? r.TournamentStartDate,
               tournamentEndDate: r.tournamentEndDate ?? r.TournamentEndDate,
               statusRaw: status,
-              statusLabel: registrationStatusLabel(status),
+              statusLabel: getRegistrationStatusLabel(status),
             };
           }),
         );
@@ -69,7 +63,6 @@ function OwnerParticipationsPage() {
             roundName: e.roundName ?? e.RoundName,
             scheduledAt: e.scheduledAt ?? e.ScheduledAt,
             raceStatus: e.raceStatus ?? e.RaceStatus ?? "",
-            ownerConfirmed: e.ownerConfirmed ?? e.OwnerConfirmed ?? false,
             jockeyName: e.jockeyName ?? e.JockeyName ?? "",
             finishPosition: e.finishPosition ?? e.FinishPosition ?? null,
           })),
@@ -114,10 +107,6 @@ function OwnerParticipationsPage() {
       <div className="op-entry-row">
         <span>Lịch thi đấu</span>
         <strong>{apiToVNDisplay(entry.scheduledAt) || "Chưa xếp lịch"}</strong>
-      </div>
-      <div className="op-entry-row">
-        <span>Chủ ngựa xác nhận</span>
-        <strong>{entry.ownerConfirmed ? "Đã xác nhận" : "Chưa xác nhận"}</strong>
       </div>
       <div className="op-entry-row">
         <span>Kỵ sĩ hiện tại</span>

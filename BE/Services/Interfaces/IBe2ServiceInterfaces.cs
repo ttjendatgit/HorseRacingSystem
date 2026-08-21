@@ -159,7 +159,23 @@ public interface ILiveResultService
 
 public class RaceResultRequest
 {
-    public Guid WinningHorseId { get; set; }
-    public CurrentPositionData[]? Rankings { get; set; }
+    /// <summary>
+    /// R0: optional compatibility field only. The ranking is the single
+    /// source of truth for the winner — if supplied, this must equal
+    /// Rankings[Position == 1].HorseId or the request is rejected (400).
+    /// Never treated as an independently-editable second winner source.
+    /// </summary>
+    public Guid? WinningHorseId { get; set; }
+    public List<RaceResultRankingItemRequest>? Rankings { get; set; }
     public string? Notes { get; set; }
+}
+
+/// <summary>
+/// One entry of a submitted finishing order. R0 deliberately carries only
+/// HorseId + Position — no time/margin/score; see RaceResult.RankingsJson.
+/// </summary>
+public class RaceResultRankingItemRequest
+{
+    public Guid HorseId { get; set; }
+    public int Position { get; set; }
 }

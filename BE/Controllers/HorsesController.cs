@@ -65,7 +65,17 @@ public class HorsesController : ControllerBase
             JockeyConfirmed = e.JockeyConfirmed,
             JockeyName = e.Jockey?.User?.FullName ?? string.Empty,
             GateNumber = e.GateNumber,
-            FinishPosition = e.FinishPosition
+            FinishPosition = e.FinishPosition,
+            // J3: Owner Final Confirm picks one of these — only Accepted invitations for this
+            // exact Horse+Race are eligible. No official Jockey yet means this list drives the UI.
+            AcceptedInvitations = (h.JockeyInvitations ?? new List<JockeyInvitation>())
+                .Where(i => i.RaceId == e.RaceId && i.Status == JockeyInvitationStatus.Accepted)
+                .Select(i => new
+                {
+                    InvitationId = i.Id,
+                    JockeyId = i.JockeyId,
+                    JockeyName = i.Jockey?.User?.FullName ?? string.Empty
+                })
         }));
         return Ok(entries);
     }
@@ -88,6 +98,18 @@ public class HorsesController : ControllerBase
     // Task C1 UI correction: the primary Admin Horse management screen (/admin/horses) needs
     // every Horse — Pending ones especially, since those are exactly what Admin needs to act on —
     // not just already-Approved ones. This is Admin-only and this action's sole FE consumer.
+    //
+    // J3 regression hotfix: this used to return the raw h.Owner/h.RaceEntries/h.JockeyInvitations
+    // navigation entities directly. EF Core's change-tracker fix-up wires those navigations back to
+    // each other across ALL loaded Horses in the same query (Horse -> RaceEntries -> Race ->
+    // Entries (other Horses' entries) -> Horse -> JockeyInvitations -> Jockey -> Invitations ->
+    // Horse -> ...), which fans out into a graph deep/wide enough to exceed System.Text.Json's
+    // MaxDepth even with the app-wide ReferenceHandler.IgnoreCycles already configured (that option
+    // only catches a literal same-instance cycle, not "too deep because too many distinct
+    // horses/races/jockeys/invitations cross-reference each other"). Fixed by projecting only the
+    // bounded, non-cyclical fields the FE (HorseManagementPage.jsx) actually reads — same wire
+    // shape/field names as before (including the raw numeric ApprovalStatus enum the FE filters by
+    // number), just with every nested object flattened to leaf fields instead of full entities.
     [HttpGet("all")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetAllHorses()
@@ -95,6 +117,7 @@ public class HorsesController : ControllerBase
         using var scope = HttpContext.RequestServices.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Data.ApplicationDbContext>();
         var horses = await db.Horses
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(h => h.Owner).ThenInclude(o => o!.User)
             .Include(h => h.JockeyInvitations).ThenInclude(i => i.Jockey).ThenInclude(j => j!.User)
@@ -134,9 +157,43 @@ public class HorsesController : ControllerBase
                 h.ApprovalStatus,
                 h.ApprovalNote,
                 h.IsArchived,
-                h.Owner,
-                h.RaceEntries,
-                h.JockeyInvitations,
+                Owner = h.Owner == null ? null : new
+                {
+                    h.Owner.Id,
+                    h.Owner.UserId,
+                    User = h.Owner.User == null ? null : new
+                    {
+                        h.Owner.User.FullName,
+                        h.Owner.User.Email
+                    }
+                },
+                RaceEntries = h.RaceEntries.Select(e => new
+                {
+                    e.Id,
+                    e.RaceId,
+                    e.JockeyId,
+                    e.Status,
+                    e.OwnerConfirmed,
+                    e.JockeyConfirmed,
+                    Race = e.Race == null ? null : new { e.Race.Id, e.Race.Name, e.Race.ScheduledAt, e.Race.Status },
+                    Jockey = e.Jockey == null ? null : new
+                    {
+                        e.Jockey.Id,
+                        User = e.Jockey.User == null ? null : new { e.Jockey.User.FullName }
+                    }
+                }),
+                JockeyInvitations = h.JockeyInvitations.Select(i => new
+                {
+                    i.Id,
+                    i.RaceId,
+                    i.Status,
+                    i.CreatedAt,
+                    Jockey = i.Jockey == null ? null : new
+                    {
+                        i.Jockey.Id,
+                        User = i.Jockey.User == null ? null : new { i.Jockey.User.FullName }
+                    }
+                }),
                 AssignedJockeyId = jockey?.Id,
                 AssignedJockeyName = jockey?.User?.FullName
             };
@@ -330,6 +387,15 @@ public class HorsesController : ControllerBase
     {
         var ownerId = GetUserId();
         var result = await _horseService.ConfirmOwnerAsync(ownerId, raceId, entryId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
+    // J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+    [HttpPost("{horseId:guid}/races/{raceId:guid}/jockeys/final-confirm")]
+    public async Task<ActionResult> FinalConfirmJockey(Guid horseId, Guid raceId, OwnerFinalConfirmJockeyRequest request)
+    {
+        var ownerId = GetUserId();
+        var result = await _horseService.FinalConfirmJockeyAsync(ownerId, horseId, raceId, request);
         return StatusCode(result.StatusCode, result.Result);
     }
 

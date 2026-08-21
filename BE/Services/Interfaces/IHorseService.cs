@@ -19,4 +19,6 @@ public interface IHorseService
     Task<ServiceResult<object>> InviteJockeyAsync(Guid ownerId, Guid horseId, JockeyInvitationCreateRequest request);
     Task<ServiceResult<string>> RemoveJockeyAsync(Guid ownerId, Guid horseId, Guid raceId, JockeyRemovalRequest request);
     Task<ServiceResult<object>> ConfirmOwnerAsync(Guid ownerId, Guid raceId, Guid entryId);
+    // J3: Owner selects exactly one Accepted invitation as the official Jockey for a RaceEntry.
+    Task<ServiceResult<object>> FinalConfirmJockeyAsync(Guid ownerId, Guid horseId, Guid raceId, OwnerFinalConfirmJockeyRequest request);
 }

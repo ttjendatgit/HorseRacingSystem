@@ -73,7 +73,8 @@ export default function RefereeRaceReportPage() {
   //Submit result states
   const [resultEntries, setResultEntries] = useState([]);
   const [healthChecks, setHealthChecks] = useState([]);
-  const [resultWinningHorseId, setResultWinningHorseId] = useState("");
+  // R0: full finishing order, not a single winner — { [horseId]: position }
+  const [resultPositions, setResultPositions] = useState({});
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
 
@@ -120,6 +121,7 @@ export default function RefereeRaceReportPage() {
 
   //Fetch API to get race entries and health
   useEffect(() => {
+    setResultPositions({});
     if (!selectedRaceId) {
       setResultEntries([]);
       setHealthChecks([]);
@@ -134,18 +136,43 @@ export default function RefereeRaceReportPage() {
     });
   }, [selectedRaceId]);
 
-  //Filter result entries to only include those that are valid (not failed health check)
-  const validResultEntries = useMemo(() => {
-    return resultEntries.filter((entry) => {
-      const horseId = entry.horseId || entry.HorseId;
-      const checks = healthChecks.filter((c) => (c.horseId || c.HorseId) === horseId);
-      if (checks.length === 0) return true;
+  // R0: every participating RaceEntry must appear exactly once in the
+  // submitted ranking — there is no partial/DNS/DNF ranking concept yet, so
+  // unlike the pre-R0 winner-only dropdown, a horse is never excluded here.
+  // A horse whose most recent health check failed is only barred from
+  // Position 1 (see resultPositionOptionsFor below) — it still must receive
+  // some position, since it is still a real participant of this race.
+  const failedHealthCheckHorseIds = useMemo(() => {
+    const byHorse = new Map();
+    healthChecks.forEach((c) => {
+      const horseId = c.horseId || c.HorseId;
+      const list = byHorse.get(horseId) || [];
+      list.push(c);
+      byHorse.set(horseId, list);
+    });
+    const failed = new Set();
+    byHorse.forEach((checks, horseId) => {
       const latest = [...checks].sort(
         (a, b) => new Date(b.createdAt || b.CreatedAt) - new Date(a.createdAt || a.CreatedAt)
       )[0];
-      return (latest.status || latest.Status) !== "Failed";
+      if ((latest.status || latest.Status) === "Failed") failed.add(horseId);
     });
-  }, [resultEntries, healthChecks]);
+    return failed;
+  }, [healthChecks]);
+
+  const resultEntryCount = resultEntries.length;
+
+  // Every position 1..N assigned to exactly one horse — matches the backend
+  // full-ranking validation exactly (see LiveResultService.ValidateAndCanonicalizeRankings).
+  const assignedPositions = Object.values(resultPositions).filter((p) => p !== "" && p != null);
+  const isRankingComplete =
+    resultEntryCount > 0 &&
+    assignedPositions.length === resultEntryCount &&
+    new Set(assignedPositions).size === resultEntryCount;
+
+  const handlePositionChange = (horseId, value) => {
+    setResultPositions((prev) => ({ ...prev, [horseId]: value === "" ? "" : Number(value) }));
+  };
 
   //Chart data
   const [chartData, setChartData] = useState(() => {
@@ -218,16 +245,20 @@ export default function RefereeRaceReportPage() {
   //Handle form submission for submitting race result
   const handleSubmitResult = async (e) => {
     e.preventDefault();
-    if (!resultWinningHorseId) {
-      setResultMsg("Vui lòng chọn ngựa thắng cuộc.");
+    if (!isRankingComplete) {
+      setResultMsg("Vui lòng xếp vị trí cho tất cả các ngựa tham gia, mỗi vị trí chỉ một ngựa.");
       return;
     }
     setResultSubmitting(true);
     setResultMsg("");
     try {
-      await submitRaceResult(selectedRaceId, { winningHorseId: resultWinningHorseId });
+      const rankings = resultEntries.map((entry) => ({
+        horseId: entry.horseId || entry.HorseId,
+        position: resultPositions[entry.horseId || entry.HorseId],
+      }));
+      await submitRaceResult(selectedRaceId, { rankings });
       setResultMsg("✅ Kết quả đã được gửi thành công! Admin sẽ duyệt sau.");
-      setResultWinningHorseId("");
+      setResultPositions({});
     } catch (err) {
       setResultMsg("❌ Lỗi: " + (err.message || ""));
     } finally {
@@ -389,7 +420,7 @@ export default function RefereeRaceReportPage() {
                 </div>
               )}
               <p className="rr-muted" style={{ marginBottom: 12 }}>
-                Chọn ngựa thắng cuộc. Kết quả sẽ được gửi lên admin duyệt.
+                Xếp vị trí về đích cho từng ngựa (vị trí 1 là ngựa thắng cuộc). Kết quả sẽ được gửi lên admin duyệt.
               </p>
               {currentRaceStatus && (
                 <p className="rr-muted" style={{ marginBottom: 4, fontWeight: 600, color: canSubmitResult ? "#166534" : "#b45309" }}>
@@ -403,33 +434,50 @@ export default function RefereeRaceReportPage() {
                   ⚠️ Kết quả trước đã bị từ chối: {currentRejectedReason} — vui lòng nộp lại.
                 </p>
               )}
-              <div className="rr-field">
-                <label>Ngựa thắng cuộc</label>
-                <select
-                  value={resultWinningHorseId}
-                  onChange={(e) => setResultWinningHorseId(e.target.value)}
-                  className="rr-select"
-                  style={{ width: "100%", padding: 10, borderRadius: 8, fontSize: 14 }}
-                  disabled={!canSubmitResult}
-                >
-                  <option value="">-- Chọn ngựa thắng --</option>
-                  {validResultEntries.map((entry) => (
-                    <option key={entry.horseId || entry.HorseId} value={entry.horseId || entry.HorseId}>
-                      🐎 {entry.horseName || entry.HorseName} — Tỉ lệ: {(entry.odds || entry.Odds || 1).toFixed(2)}x
-                    </option>
-                  ))}
-                </select>
-                {validResultEntries.length === 0 && resultEntries.length > 0 && (
-                  <p className="rr-muted" style={{ marginTop: 4, color: "#b45309" }}>
-                    * Toàn bộ ngựa trong giải đều bị đánh Không Đạt sức khỏe.
-                  </p>
-                )}
-              </div>
+              {resultEntries.length === 0 ? (
+                <p className="rr-muted">Chưa có ngựa tham gia cuộc đua này.</p>
+              ) : (
+                <div className="rr-field" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {resultEntries.map((entry) => {
+                    const horseId = entry.horseId || entry.HorseId;
+                    const horseFailedHealthCheck = failedHealthCheckHorseIds.has(horseId);
+                    return (
+                      <div
+                        key={horseId}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                      >
+                        <span style={{ flex: 1, fontSize: 14 }}>
+                          🐎 {entry.horseName || entry.HorseName}
+                          {horseFailedHealthCheck && (
+                            <span style={{ color: "#b45309", fontSize: 12 }}> · Không Đạt sức khỏe (không thể xếp #1)</span>
+                          )}
+                        </span>
+                        <select
+                          value={resultPositions[horseId] ?? ""}
+                          onChange={(e) => handlePositionChange(horseId, e.target.value)}
+                          className="rr-select"
+                          style={{ padding: 8, borderRadius: 8, fontSize: 14, minWidth: 110 }}
+                          disabled={!canSubmitResult}
+                        >
+                          <option value="">-- Vị trí --</option>
+                          {Array.from({ length: resultEntryCount }, (_, i) => i + 1)
+                            .filter((position) => position !== 1 || !horseFailedHealthCheck)
+                            .map((position) => (
+                              <option key={position} value={position}>
+                                #{position}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <button
                 type="submit"
                 className="rr-submit-btn"
-                disabled={resultSubmitting || !resultWinningHorseId || !canSubmitResult}
-                style={{ background: resultWinningHorseId ? "#e6a54a" : undefined }}
+                disabled={resultSubmitting || !isRankingComplete || !canSubmitResult}
+                style={{ background: isRankingComplete ? "#e6a54a" : undefined, marginTop: 12 }}
               >
                 {resultSubmitting ? "Đang gửi..." : "📨 Gửi kết quả"}
               </button>

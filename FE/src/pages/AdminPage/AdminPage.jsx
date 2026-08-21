@@ -32,7 +32,7 @@ import {
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
-import { getTournamentLifecycleLabel } from "../../utils/tournamentRegistration";
+import { canHardDeleteTournament, getTournamentLifecycleLabel } from "../../utils/tournamentRegistration";
 import {
   PrizeManagement,
   ProtestManagement,
@@ -946,7 +946,11 @@ function TournamentManagement() {
                 {t.label}
               </button>
             ))}
-            <button onClick={() => edit(item)}>Sửa</button><button className="admin-danger" onClick={() => remove(id)}>Xóa</button>
+            <button onClick={() => edit(item)}>Sửa</button>
+            {/* T-D1: hard delete only ever allowed for Draft (backend-enforced, 409 otherwise) —
+                once Published/Ongoing/Finished/Cancelled, Tournament history must be preserved; the
+                Cancel action above (nextTransitions) is how Admin retires a Published/Ongoing one. */}
+            {canHardDeleteTournament(item) && <button className="admin-danger" onClick={() => remove(id)}>Xóa</button>}
           </div></article>;
       })}</section>
       {selectedT && (
