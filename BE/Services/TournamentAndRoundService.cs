@@ -24,6 +24,7 @@ public class TournamentService : ITournamentService
     private readonly IJockeyRepository _jockeyRepo;
     private readonly ApplicationDbContext _db;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWalletService _walletService;
 
     public TournamentService(
         ITournamentRepository tournamentRepo,
@@ -36,7 +37,8 @@ public class TournamentService : ITournamentService
         IHorseRepository horseRepo,
         IJockeyRepository jockeyRepo,
         ApplicationDbContext db,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IWalletService walletService)
     {
         _tournamentRepo = tournamentRepo;
         _notificationService = notificationService;
@@ -49,6 +51,7 @@ public class TournamentService : ITournamentService
         _jockeyRepo = jockeyRepo;
         _db = db;
         _unitOfWork = unitOfWork;
+        _walletService = walletService;
     }
 
     public async Task<ServiceResult<TournamentResponse>> CreateTournamentAsync(CreateTournamentRequest request)
@@ -468,6 +471,22 @@ public class TournamentService : ITournamentService
                 tournament.IsActive = false;
 
                 await _tournamentRepo.UpdateAsync(tournament);
+                await _unitOfWork.SaveChangesAsync();
+
+                // B0: refund every Pending Prediction across every Race in this Tournament,
+                // using the same refund convention as the direct Race cancel path
+                // (RaceManagementService.CancelRaceAsync / PredictionRefundHelper) — wallet
+                // credited, Prediction marked Lost as the refund marker. swallowIndividualFailures:
+                // false here (unlike the direct Race cancel path) — a failed wallet credit throws
+                // and is caught by this method's outer try/catch, rolling back this whole
+                // transaction (Tournament status + Race cascade + any already-applied refunds)
+                // instead of leaving some races cancelled with stakes unrecovered.
+                var raceIdsForRefund = await _db.Races
+                    .Where(r => r.TournamentId == id)
+                    .Select(r => r.Id)
+                    .ToListAsync();
+                await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                    _db, _walletService, raceIdsForRefund, $"tournament_cancel_{id}", swallowIndividualFailures: false);
                 await _unitOfWork.SaveChangesAsync();
 
                 // V1.1 §14.2/§15 cascade: every Race not yet Finished cancels; Finished (and

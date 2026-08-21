@@ -776,23 +776,12 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, $"Không thể hủy cuộc đua với trạng thái '{race.Status}'.");
             }
 
-            // Refund all pending predictions
-            var pendingPredictions = await _predictionRepo.GetByRaceAsync(raceId);
-            var refunded = 0;
-            foreach (var p in pendingPredictions.Where(p => p.Status == PredictionStatus.Pending))
-            {
-                try
-                {
-                    await _walletService.AddPointsAsync(p.SpectatorUserId, p.BetAmount, $"refund_{raceId}");
-                    p.Status = PredictionStatus.Lost; // Use Lost as "refunded/cancelled"
-                    p.SettledAt = DateTime.UtcNow;
-                    refunded++;
-                }
-                catch
-                {
-                    // If refund fails, keep prediction as Pending for manual resolution
-                }
-            }
+            // Refund all pending predictions. Shared with the Tournament cancel cascade —
+            // see PredictionRefundHelper. swallowIndividualFailures: true preserves this
+            // method's original behavior of leaving a failed-refund Prediction Pending for
+            // manual resolution instead of blocking the whole Race cancellation.
+            await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                _db, _walletService, new[] { raceId }, "refund", swallowIndividualFailures: true);
 
             race.Status = RaceStatus.Cancelled;
             race.UpdatedAt = DateTime.UtcNow;

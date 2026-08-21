@@ -532,7 +532,10 @@ public class RaceLifecycleTests
         var cancel = await f.RaceManagement.CancelRaceAsync(race.Id);
         Assert.True(cancel.Result.Success);
 
-        var prediction = (await f.PredictionRepo.GetByRaceAsync(race.Id)).Single();
+        // Fresh (AsNoTracking) read: PredictionRefundHelper claims via bulk ExecuteUpdateAsync,
+        // which bypasses the change tracker — a tracked PredictionRepo read would return the
+        // stale in-memory instance from AddPendingPredictionAsync.
+        var prediction = (await f.GetPredictionsFreshAsync(race.Id)).Single();
         Assert.Equal(PredictionStatus.Lost, prediction.Status); // refund marker, per existing convention
         Assert.Equal(walletBefore + 75m, await f.GetWalletBalanceAsync(spectatorId));
     }
@@ -575,6 +578,12 @@ public class RaceLifecycleTests
     {
         private readonly IWalletService _inner;
         public HashSet<Guid> FailForUserIds { get; } = new();
+        /// <summary>
+        /// Unlike FailForUserIds (throws), these users make AddPointsAsync return a Fail
+        /// ServiceResult WITHOUT throwing — proves callers correctly inspect
+        /// walletResult.Result.Success instead of only reacting to exceptions.
+        /// </summary>
+        public HashSet<Guid> FailResultForUserIds { get; } = new();
 
         public FaultInjectingWalletService(IWalletService inner) => _inner = inner;
 
@@ -585,6 +594,8 @@ public class RaceLifecycleTests
         {
             if (FailForUserIds.Contains(userId))
                 throw new InvalidOperationException($"Injected payout failure for user {userId}");
+            if (FailResultForUserIds.Contains(userId))
+                return Task.FromResult(ServiceResult<object>.Fail(400, $"Injected refund failure (no exception) for user {userId}"));
             return _inner.AddPointsAsync(userId, points, reference);
         }
 
@@ -742,7 +753,7 @@ public class RaceLifecycleTests
             RoundRepoPublic = _roundRepo;
             TournamentSvc = new TournamentService(
                 _tournamentRepo, new FakeNotificationService(), _userRepo, RaceRepo, EntryRepo,
-                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork);
+                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork, walletService);
             RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
             RaceSvc = new RaceService(RaceRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
         }
