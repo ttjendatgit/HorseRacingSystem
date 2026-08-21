@@ -44,11 +44,11 @@ public class Phase5StructuralTests
 
     /// <summary>Single-Round Tournament (Round 1 = Final, §12.3) with no Race yet — cheap base for tests focused on a single Race's own checks (Track, MaxParticipants, QualificationSlots, schedule).</summary>
     private static async Task<(Guid tournamentId, Guid roundId, DateTime roundStart, DateTime roundEnd)> BuildDraftSingleFinalRoundAsync(
-        RaceLifecycleTests.LifecycleFixture f, int maxParticipants = 5, int minParticipants = 3)
+        RaceLifecycleTests.LifecycleFixture f, int maxParticipants = 5, int minParticipants = 3, int maxRounds = 1)
     {
         var start = DateTime.UtcNow.AddDays(10);
         var end = start.AddDays(20);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, end, maxParticipants, minParticipants));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, end, maxParticipants, minParticipants, maxRounds));
         Assert.True(create.Result.Success, create.Result.Message);
         var tournamentId = create.Result.Data!.Id;
 
@@ -185,8 +185,11 @@ public class Phase5StructuralTests
     [Fact]
     public async Task Create_GappedRoundNumber_AllowedInDraft()
     {
+        // V0.1: RoundNumber may still gap ahead of existing Rounds during Draft (only Publish
+        // enforces the exact 1..MaxRounds sequence) — but it must stay within the Tournament's
+        // own MaxRounds ceiling, so this Tournament needs MaxRounds >= 3 for R3 to be creatable.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (tournamentId, _, roundStart, roundEnd) = await BuildDraftSingleFinalRoundAsync(f);
+        var (tournamentId, _, roundStart, roundEnd) = await BuildDraftSingleFinalRoundAsync(f, maxRounds: 3);
         var result = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "R3", TournamentId = tournamentId, RoundNumber = 3,
@@ -199,7 +202,7 @@ public class Phase5StructuralTests
     public async Task Update_DuplicateRoundNumber_Rejected()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (tournamentId, round1Id, round1Start, round1End) = await BuildDraftSingleFinalRoundAsync(f);
+        var (tournamentId, round1Id, round1Start, round1End) = await BuildDraftSingleFinalRoundAsync(f, maxRounds: 2);
         var round2 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
@@ -244,13 +247,17 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        // V0.1: MaxRounds=2 so this Round (RoundNumber=2) is actually creatable — otherwise the
+        // new create-time ceiling would reject it outright and the test would never reach the
+        // Publish-time "starts at 2" sequence check it's meant to prove.
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 2));
         var tournamentId = create.Result.Data!.Id;
-        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        var r2 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "R2", TournamentId = tournamentId, RoundNumber = 2,
             ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1), AdvanceCount = 0
         });
+        Assert.True(r2.Result.Success, r2.Result.Message);
 
         var publish = await PublishAsync(f, tournamentId);
         Assert.False(publish.Result.Success);
@@ -1282,9 +1289,11 @@ public class Phase5StructuralTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10));
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidDraftTournamentRequest(start, start.AddDays(20), maxParticipants: 10, maxRounds: 3));
         var tournamentId = create.Result.Data!.Id;
         // Sequence gap (1, 3) AND negative AdvanceCount on Round1 -- two independent failures.
+        // MaxRounds=3 so Round3 stays within the V0.1 create-time ceiling and this test keeps
+        // exercising the intended Publish-time gap detection rather than a Create-time rejection.
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
             Name = "R1", TournamentId = tournamentId, RoundNumber = 1,

@@ -21,7 +21,8 @@ public class TournamentValidationTests
         DateTime? registrationDeadline = null,
         int? minParticipants = 3,
         int? maxParticipants = 10,
-        decimal prizePool = 0)
+        decimal prizePool = 0,
+        int maxRounds = 1)
     {
         var start = startDate ?? DateTime.UtcNow.AddDays(10);
         var end = endDate ?? start.AddDays(5);
@@ -34,7 +35,8 @@ public class TournamentValidationTests
             RegistrationDeadline = deadline,
             MinParticipants = minParticipants,
             MaxParticipants = maxParticipants,
-            PrizePool = prizePool
+            PrizePool = prizePool,
+            MaxRounds = maxRounds
         };
     }
 
@@ -399,15 +401,151 @@ public class TournamentValidationTests
     }
 
     [Fact]
-    public async Task Published_MaxRoundsUpdate_RemainsAllowedForCompatibility()
+    public async Task Published_MaxRoundsUpdate_Rejected()
     {
+        // V0.1: MaxRounds is structural (drives V0 Final identity, RoundNumber == MaxRounds) and
+        // now follows the same Draft-only structural-lock convention as StartDate/EndDate/
+        // MinParticipants/MaxParticipants — superseding the old "remains allowed for
+        // compatibility" behavior this test used to assert.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var id = await SeedPublishedTournamentAsync(f);
+        var before = (await f.TournamentSvc.GetTournamentAsync(id)).Result.Data!.MaxRounds;
 
         var update = await f.TournamentSvc.UpdateTournamentAsync(id, new UpdateTournamentRequest { MaxRounds = 7 });
 
+        Assert.False(update.Result.Success);
+        Assert.Equal(400, update.StatusCode);
+        var reloaded = await f.TournamentSvc.GetTournamentAsync(id);
+        Assert.Equal(before, reloaded.Result.Data!.MaxRounds);
+    }
+
+    [Fact]
+    public async Task Published_MaxRoundsResentUnchanged_Allowed()
+    {
+        // Phase4B convention (shared by every other immutable-after-publish field): resending the
+        // CURRENT value is not a "change" and must not be rejected.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var id = await SeedPublishedTournamentAsync(f);
+        var current = (await f.TournamentSvc.GetTournamentAsync(id)).Result.Data!.MaxRounds;
+
+        var update = await f.TournamentSvc.UpdateTournamentAsync(id, new UpdateTournamentRequest { MaxRounds = current });
+
         Assert.True(update.Result.Success, update.Result.Message);
-        Assert.Equal(7, update.Result.Data!.MaxRounds);
+        Assert.Equal(current, update.Result.Data!.MaxRounds);
+    }
+
+    // ── V0.1: MaxRounds create/edit + Round-ceiling consistency ──────────
+
+    [Fact]
+    public async Task Create_MaxRoundsTwo_PersistsAndReturnsTwo()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest(maxRounds: 2));
+        Assert.True(create.Result.Success, create.Result.Message);
+        Assert.Equal(2, create.Result.Data!.MaxRounds);
+
+        var reloaded = await f.TournamentSvc.GetTournamentAsync(create.Result.Data.Id);
+        Assert.Equal(2, reloaded.Result.Data!.MaxRounds);
+    }
+
+    [Fact]
+    public async Task CreateRound_WithinMaxRounds_Allowed()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest(maxRounds: 2));
+        var tournamentId = create.Result.Data!.Id;
+        var start = create.Result.Data.StartDate;
+
+        var round1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1)
+        });
+        var round2 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2)
+        });
+
+        Assert.True(round1.Result.Success, round1.Result.Message);
+        Assert.True(round2.Result.Success, round2.Result.Message);
+    }
+
+    [Fact]
+    public async Task CreateRound_ExceedsMaxRounds_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest(maxRounds: 2));
+        var tournamentId = create.Result.Data!.Id;
+        var start = create.Result.Data.StartDate;
+
+        var round3 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 3", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1)
+        });
+
+        Assert.False(round3.Result.Success);
+        Assert.Equal(400, round3.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateMaxRounds_BelowExistingRoundNumber_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest(maxRounds: 2));
+        var tournamentId = create.Result.Data!.Id;
+        var start = create.Result.Data.StartDate;
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1)
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2)
+        });
+
+        var update = await f.TournamentSvc.UpdateTournamentAsync(tournamentId, new UpdateTournamentRequest { MaxRounds = 1 });
+
+        Assert.False(update.Result.Success);
+        Assert.Equal(400, update.StatusCode);
+        var reloaded = await f.TournamentSvc.GetTournamentAsync(tournamentId);
+        Assert.Equal(2, reloaded.Result.Data!.MaxRounds); // unchanged
+    }
+
+    [Fact]
+    public async Task UpdateMaxRounds_AboveExistingRoundNumber_Allowed()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var create = await f.TournamentSvc.CreateTournamentAsync(ValidCreateRequest(maxRounds: 2));
+        var tournamentId = create.Result.Data!.Id;
+        var start = create.Result.Data.StartDate;
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1)
+        });
+        await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(1), ScheduledEndDate = start.AddDays(2)
+        });
+
+        var update = await f.TournamentSvc.UpdateTournamentAsync(tournamentId, new UpdateTournamentRequest { MaxRounds = 3 });
+
+        Assert.True(update.Result.Success, update.Result.Message);
+        Assert.Equal(3, update.Result.Data!.MaxRounds);
+
+        // Repairs a previously-broken Draft: Round 3 is now creatable to actually fill the
+        // expanded structure — existing Round1/Round2 rows were never touched/renumbered.
+        var round3 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 3", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = start.AddDays(2), ScheduledEndDate = start.AddDays(3)
+        });
+        Assert.True(round3.Result.Success, round3.Result.Message);
     }
 
     [Theory]

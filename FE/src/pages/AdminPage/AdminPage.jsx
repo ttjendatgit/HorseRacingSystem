@@ -33,7 +33,7 @@ import {
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
-import { canHardDeleteTournament, getTournamentLifecycleLabel } from "../../utils/tournamentRegistration";
+import { canEditTournamentStructure, canHardDeleteTournament, getTournamentLifecycleLabel, isFinalRound } from "../../utils/tournamentRegistration";
 import {
   PrizeManagement,
   ProtestManagement,
@@ -797,7 +797,11 @@ function TournamentManagement() {
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10 });
+  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
+  // V0.1 micro-fix: MaxRounds may only change while Draft — Published/Ongoing/Finished/Cancelled
+  // must ALL lock it, not just Published. Single source of truth for both the field's
+  // disabled state (JSX below) and whether it's included in the update payload (submit below).
+  const isDraft = canEditTournamentStructure(editingStatus);
   const load = () => getAdminTournaments().then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   useEffect(() => {
     load();
@@ -835,12 +839,19 @@ function TournamentManagement() {
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
       }
+      // V0.1 micro-fix: MaxRounds is structural (drives V0 Final identity) and is locked for
+      // EVERY non-Draft status (Published, Ongoing, Finished, Cancelled) — not just Published,
+      // unlike the isPublished-gated fields above (that existing scope is unchanged here).
+      if (isDraft) {
+        payload.maxRounds = Number(form.maxRounds);
+      }
       if (editingId) await updateTournament(editingId, payload);
       else {
         payload.startDate = vnInputToApiUtc(form.startDate);
         payload.endDate = vnInputToApiUtc(form.endDate);
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
+        payload.maxRounds = Number(form.maxRounds);
         await createTournament(payload);
       }
       setMessage(`Giải đấu ${editingId ? "đã cập nhật" : "đã tạo"} thành công.`);
@@ -858,6 +869,7 @@ function TournamentManagement() {
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
       minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
       maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
+      maxRounds: item.maxRounds ?? item.MaxRounds ?? 1,
     });
     setShowForm(true);
   };
@@ -922,6 +934,10 @@ function TournamentManagement() {
         {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
         <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
         <input type="number" placeholder="Số người tham gia tối đa" required min="1" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} disabled={editingStatus === 1} />
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Số vòng đấu *
+          <input type="number" required min="1" step="1" value={form.maxRounds} onChange={(e) => setForm({ ...form, maxRounds: e.target.value })} disabled={!isDraft} />
+        </label>
         <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
           <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} style={{ display: "block", marginTop: 4 }} />
           {uploading ? <span style={{ color: "var(--hr-gold-soft)", fontSize: 12 }}>Đang tải ảnh...</span> : null}
@@ -1373,10 +1389,9 @@ function ScheduleManagement({ type }) {
           // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value and must
           // never be treated as "not set".
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
-          // V0: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount alone —
-          // Draft data may temporarily hold AdvanceCount=0 on a non-final round (see TournamentDetail.jsx).
-          const maxRounds = selectedTournament?.maxRounds ?? selectedTournament?.MaxRounds;
-          const isFinal = maxRounds != null && roundNumber === maxRounds;
+          // V0/V0.1: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount
+          // alone — Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+          const isFinal = isFinalRound(item, selectedTournament);
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>

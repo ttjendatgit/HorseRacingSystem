@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  canEditTournamentStructure,
   canHardDeleteTournament,
   canRegisterTournament,
   getCapacityFullMessage,
   getTournamentLifecycleLabel,
   getTournamentRegistrationState,
+  isFinalRound,
 } from "./tournamentRegistration.js";
 
 describe("tournament registration state", () => {
@@ -137,5 +139,72 @@ describe("tournament hard-delete affordance (T-D1)", () => {
     assert.equal(canHardDeleteTournament({ status: 2 }), false);
     assert.equal(canHardDeleteTournament({ status: 3 }), false);
     assert.equal(canHardDeleteTournament({ status: 4 }), false);
+  });
+});
+
+describe("canEditTournamentStructure (V0.1 micro-fix)", () => {
+  // Required rule: ONLY Draft may change structural fields (MaxRounds etc.) — every other
+  // status must lock them alike, not just Published.
+  test("Draft is editable, every other status is locked", () => {
+    assert.equal(canEditTournamentStructure(0), true); // Draft
+    assert.equal(canEditTournamentStructure(1), false); // Published
+    assert.equal(canEditTournamentStructure(2), false); // Ongoing
+    assert.equal(canEditTournamentStructure(3), false); // Finished
+    assert.equal(canEditTournamentStructure(4), false); // Cancelled
+  });
+
+  test("accepts the status name string form too", () => {
+    assert.equal(canEditTournamentStructure("Draft"), true);
+    assert.equal(canEditTournamentStructure("Published"), false);
+    assert.equal(canEditTournamentStructure("Ongoing"), false);
+    assert.equal(canEditTournamentStructure("Finished"), false);
+    assert.equal(canEditTournamentStructure("Cancelled"), false);
+  });
+
+  test("null/undefined status (no Tournament being edited yet) is locked, not editable", () => {
+    assert.equal(canEditTournamentStructure(null), false);
+    assert.equal(canEditTournamentStructure(undefined), false);
+  });
+});
+
+describe("isFinalRound (V0/V0.1)", () => {
+  // MaxRounds=2: only Round2 (RoundNumber === MaxRounds) is Final — never derived from AdvanceCount.
+  test("MaxRounds 2: Round1 is not Final, Round2 is Final", () => {
+    const tournament = { maxRounds: 2 };
+    assert.equal(isFinalRound({ roundNumber: 1 }, tournament), false);
+    assert.equal(isFinalRound({ roundNumber: 2 }, tournament), true);
+  });
+
+  test("MaxRounds=2 / Round1 AdvanceCount=3 / Round2 AdvanceCount=0 -> Round2 is Final", () => {
+    const tournament = { maxRounds: 2 };
+    assert.equal(isFinalRound({ roundNumber: 1, advanceCount: 3 }, tournament), false);
+    assert.equal(isFinalRound({ roundNumber: 2, advanceCount: 0 }, tournament), true);
+  });
+
+  test("AdvanceCount === 0 on a non-final Round must NOT be treated as Final", () => {
+    // The exact V0.1 regression: MaxRounds silently stayed 1 while Round1+Round2 both exist.
+    // Round1 must never show as Final just because its AdvanceCount happens to be 0.
+    const tournament = { maxRounds: 2 };
+    assert.equal(isFinalRound({ roundNumber: 1, advanceCount: 0 }, tournament), false);
+  });
+
+  test("single-round Tournament: MaxRounds=1, Round1 is Final", () => {
+    assert.equal(isFinalRound({ roundNumber: 1 }, { maxRounds: 1 }), true);
+  });
+
+  test("handles PascalCase API shape (RoundNumber / MaxRounds)", () => {
+    assert.equal(isFinalRound({ RoundNumber: 2 }, { MaxRounds: 2 }), true);
+    assert.equal(isFinalRound({ RoundNumber: 1 }, { MaxRounds: 2 }), false);
+  });
+
+  test("string RoundNumber/MaxRounds (raw form/API state) still compares numerically", () => {
+    assert.equal(isFinalRound({ roundNumber: "2" }, { maxRounds: "2" }), true);
+    assert.equal(isFinalRound({ roundNumber: "1" }, { maxRounds: "2" }), false);
+  });
+
+  test("missing MaxRounds or missing round/tournament never reports Final", () => {
+    assert.equal(isFinalRound({ roundNumber: 1 }, {}), false);
+    assert.equal(isFinalRound({ roundNumber: 1 }, null), false);
+    assert.equal(isFinalRound(null, { maxRounds: 1 }), false);
   });
 });

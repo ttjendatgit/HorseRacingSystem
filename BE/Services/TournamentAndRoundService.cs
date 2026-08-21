@@ -226,6 +226,11 @@ public class TournamentService : ITournamentService
                     immutableFieldErrors.Add("MinParticipants không thể thay đổi sau khi công bố giải đấu.");
                 if (request.MaxParticipants.HasValue && request.MaxParticipants.Value != tournament.MaxParticipants)
                     immutableFieldErrors.Add("MaxParticipants không thể thay đổi sau khi công bố giải đấu.");
+                // V0.1: MaxRounds now follows the same structural-lock convention as the other
+                // Draft-only fields above — Final identity (RoundNumber == MaxRounds) must not
+                // shift under an already-Published Tournament's existing Round structure.
+                if (request.MaxRounds.HasValue && request.MaxRounds.Value != tournament.MaxRounds)
+                    immutableFieldErrors.Add("MaxRounds không thể thay đổi sau khi công bố giải đấu.");
 
                 if (immutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", immutableFieldErrors));
@@ -313,6 +318,23 @@ public class TournamentService : ITournamentService
                             $"Không thể thay đổi thời gian giải đấu vì Vòng {offendingRound.RoundNumber} (\"{offendingRound.Name}\") sẽ nằm ngoài khoảng thời gian mới của giải đấu.");
                     }
                 }
+
+                // V0.1: MaxRounds may be freely raised in Draft (repairs e.g. an existing
+                // MaxRounds=1 Tournament that already has Round 1 and Round 2), but lowering it
+                // below an already-existing RoundNumber would strand that Round — reject before
+                // mutating anything, same convention as the StartDate/EndDate containment check above.
+                if (request.MaxRounds.HasValue)
+                {
+                    var maxExistingRoundNumber = await _db.Rounds
+                        .Where(r => r.TournamentId == tournament.Id)
+                        .Select(r => (int?)r.RoundNumber)
+                        .MaxAsync();
+                    if (maxExistingRoundNumber.HasValue && candidateMaxRounds < maxExistingRoundNumber.Value)
+                    {
+                        return ServiceResult<TournamentResponse>.Fail(400,
+                            $"Không thể giảm MaxRounds xuống {candidateMaxRounds} vì Vòng {maxExistingRoundNumber.Value} đã tồn tại.");
+                    }
+                }
             }
 
             // All validation passed — now apply values to the tracked entity.
@@ -333,6 +355,10 @@ public class TournamentService : ITournamentService
                     tournament.MinParticipants = candidateMinParticipants;
                 if (request.MaxParticipants.HasValue)
                     tournament.MaxParticipants = candidateMaxParticipants;
+                // V0.1: MaxRounds is structural (drives V0 Final identity), Draft-only —
+                // same bucket as StartDate/EndDate/MinParticipants/MaxParticipants above.
+                if (request.MaxRounds.HasValue)
+                    tournament.MaxRounds = candidateMaxRounds;
             }
             // IsActive intentionally not settable here (Phase4B) — server-owned, lifecycle-only.
             if (request.ImageUrl != null)
@@ -348,8 +374,6 @@ public class TournamentService : ITournamentService
             if (request.Category != null)
                 tournament.Category = candidateCategory;
             tournament.SurfaceType = candidateSurfaceType;
-            if (request.MaxRounds.HasValue)
-                tournament.MaxRounds = candidateMaxRounds;
 
             tournament.UpdatedAt = DateTime.UtcNow;
 
@@ -1145,6 +1169,16 @@ public class RoundService : IRoundService
                 return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
             }
 
+            // V0.1: RoundNumber is meaningless once it exceeds the Tournament's own MaxRounds —
+            // Final identity is RoundNumber == MaxRounds, so a Round beyond that can never be
+            // reached by Publish readiness anyway. Reject it up front rather than allowing dead
+            // structural data to accumulate in Draft.
+            if (request.RoundNumber > tournament.MaxRounds)
+            {
+                return ServiceResult<RoundResponse>.Fail(400,
+                    $"RoundNumber ({request.RoundNumber}) không được vượt quá MaxRounds ({tournament.MaxRounds}) của giải đấu.");
+            }
+
             var scheduleErrors = ValidateRoundScheduleWithinTournament(tournament, request.ScheduledStartDate, request.ScheduledEndDate);
             if (scheduleErrors.Count > 0)
             {
@@ -1242,6 +1276,14 @@ public class RoundService : IRoundService
                 if (request.RoundNumber.Value < 1)
                 {
                     return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
+                }
+
+                // V0.1: same MaxRounds ceiling as CreateRoundAsync.
+                var tournamentForRoundNumber = round.Tournament ?? await _tournamentRepo.GetByIdAsync(round.TournamentId);
+                if (tournamentForRoundNumber != null && request.RoundNumber.Value > tournamentForRoundNumber.MaxRounds)
+                {
+                    return ServiceResult<RoundResponse>.Fail(400,
+                        $"RoundNumber ({request.RoundNumber.Value}) không được vượt quá MaxRounds ({tournamentForRoundNumber.MaxRounds}) của giải đấu.");
                 }
 
                 var duplicateRoundNumber = await _db.Rounds.AnyAsync(r =>

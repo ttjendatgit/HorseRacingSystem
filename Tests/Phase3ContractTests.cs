@@ -245,7 +245,7 @@ public class Phase3ContractTests
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
             Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
-            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1), MaxRounds = 2
         })).Result.Data!.Id;
 
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
@@ -269,7 +269,7 @@ public class Phase3ContractTests
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
             Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
-            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1), MaxRounds = 3
         })).Result.Data!.Id;
 
         // RoundNumber == 3 with no Round 2 ever created for this tournament.
