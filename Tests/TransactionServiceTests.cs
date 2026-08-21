@@ -16,8 +16,8 @@ public class TransactionServiceTests
         var userId = Guid.NewGuid();
         var transactions = new List<Transaction>
         {
-            new() { Id = Guid.NewGuid(), UserId = userId, Amount = 100000, Status = "completed", CreatedAt = DateTime.UtcNow.AddMinutes(-5), CompletedAt = DateTime.UtcNow.AddMinutes(-4), Reference = "AAA" },
-            new() { Id = Guid.NewGuid(), UserId = userId, Amount = 50000, Status = "pending", CreatedAt = DateTime.UtcNow.AddMinutes(-1), Reference = "BBB" },
+            new() { Id = Guid.NewGuid(), UserId = userId, Amount = 100000, Status = "completed", CreatedAt = DateTime.UtcNow.AddMinutes(-2), CompletedAt = DateTime.UtcNow.AddMinutes(-1), Reference = "AAA" },
+            new() { Id = Guid.NewGuid(), UserId = userId, Amount = 50000, Status = "pending", CreatedAt = DateTime.UtcNow.AddMinutes(-5), Reference = "BBB" },
             new() { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), Amount = 20000, Status = "completed", CreatedAt = DateTime.UtcNow, Reference = "CCC" },
         };
 
