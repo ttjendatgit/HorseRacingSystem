@@ -265,7 +265,7 @@ function RefereeHealthCheckPage() {
       );
       if (horseChecks.length === 0) return true;
       const isFinalized = horseChecks.some(
-        (c) => c.approvedToRace || c.ApprovedToRace || c.status === "Failed" || c.Status === "Failed"
+        (c) => c.approvedToRace || c.ApprovedToRace
       );
       return !isFinalized;
     });
