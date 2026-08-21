@@ -124,21 +124,25 @@ describe("tournament capacity gate", () => {
 
 describe("tournament hard-delete affordance (T-D1)", () => {
   // Backend (TournamentAndRoundService.DeleteTournamentAsync) is authoritative and rejects with
-  // 409 for anything past Draft — this only governs whether the FE shows the "Xóa" button.
+  // 409 for anything except Draft or Cancelled (T-D2) — this only governs whether the FE shows
+  // the "Xóa" button.
   test("Draft shows the hard-delete affordance", () => {
     assert.equal(canHardDeleteTournament({ status: 0 }), true);
     assert.equal(canHardDeleteTournament({ statusName: "Draft" }), true);
   });
 
-  test("Published/Ongoing/Finished/Cancelled do not show the hard-delete affordance", () => {
+  test("Cancelled shows the hard-delete affordance (T-D2)", () => {
+    assert.equal(canHardDeleteTournament({ status: 4 }), true);
+    assert.equal(canHardDeleteTournament({ statusName: "Cancelled" }), true);
+  });
+
+  test("Published/Ongoing/Finished do not show the hard-delete affordance", () => {
     assert.equal(canHardDeleteTournament({ statusName: "Published" }), false);
     assert.equal(canHardDeleteTournament({ statusName: "Ongoing" }), false);
     assert.equal(canHardDeleteTournament({ statusName: "Finished" }), false);
-    assert.equal(canHardDeleteTournament({ statusName: "Cancelled" }), false);
     assert.equal(canHardDeleteTournament({ status: 1 }), false);
     assert.equal(canHardDeleteTournament({ status: 2 }), false);
     assert.equal(canHardDeleteTournament({ status: 3 }), false);
-    assert.equal(canHardDeleteTournament({ status: 4 }), false);
   });
 });
 

@@ -11,12 +11,14 @@ using Xunit;
 namespace Tests;
 
 /// <summary>
-/// T-D1: hard delete (DELETE /api/tournaments/{id} -> TournamentService.DeleteTournamentAsync)
-/// must only ever succeed for Tournament.Status == Draft. Once a Tournament leaves Draft it is
+/// T-D1/T-D2: hard delete (DELETE /api/tournaments/{id} -> TournamentService.DeleteTournamentAsync)
+/// only ever succeeds for Tournament.Status == Draft or Cancelled. Published/Ongoing/Finished are
 /// historical/auditable data and the destructive delete transaction (RaceDeletionHelper ->
-/// TournamentHorseRegistrations -> Prizes -> Rounds -> Tournament row) must never run for it.
+/// TournamentHorseRegistrations -> Prizes -> Rounds -> Tournament row) must never run for them.
 /// The guard is checked before any query touches the Race/RaceEntry/etc. graph, so a rejected
-/// delete leaves every row exactly as it was — no partial cascade.
+/// delete leaves every row exactly as it was — no partial cascade. T-D2 additionally blocks
+/// deleting a Cancelled Tournament that still has an unresolved (Pending) Prediction/stake, since
+/// RaceDeletionHelper hard-deletes Predictions unconditionally with no refund.
 /// </summary>
 public class TournamentHardDeleteGuardTests
 {
@@ -32,6 +34,65 @@ public class TournamentHardDeleteGuardTests
         Assert.False(await f.Db.Tournaments.AnyAsync(t => t.Id == tournamentId));
         Assert.False(await f.Db.Rounds.AnyAsync(r => r.Id == roundId));
         Assert.False(await f.Db.Races.AnyAsync(r => r.Id == raceId));
+    }
+
+    [Fact]
+    public async Task DeleteTournament_Cancelled_Succeeds_AndRemovesDependentGraph()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, roundId, raceId) = await CreateTournamentWithRaceAsync(f, TournamentStatus.Cancelled);
+
+        var result = await f.TournamentSvc.DeleteTournamentAsync(tournamentId);
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        Assert.False(await f.Db.Tournaments.AnyAsync(t => t.Id == tournamentId));
+        Assert.False(await f.Db.Rounds.AnyAsync(r => r.Id == roundId));
+        Assert.False(await f.Db.Races.AnyAsync(r => r.Id == raceId));
+    }
+
+    [Fact]
+    public async Task DeleteTournament_Cancelled_WithSettledPrediction_StillSucceeds_AndCascadeRemovesIt()
+    {
+        // A non-Pending (already settled/refunded) Prediction carries no unresolved stake, so it
+        // does not block deletion — and is removed by RaceDeletionHelper's existing cascade like
+        // every other Race-scoped row.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, roundId, raceId) = await CreateTournamentWithRaceAsync(f, TournamentStatus.Cancelled);
+        var (spectatorId, _) = await f.CreateSpectatorWithWalletAsync(0m);
+        await f.AddPendingPredictionAsync(raceId, spectatorId, Guid.NewGuid(), betAmount: 50m, odds: 2m);
+        var prediction = await f.Db.Predictions.SingleAsync(p => p.RaceId == raceId);
+        prediction.Status = PredictionStatus.Lost; // refund/settlement already resolved this one
+        await f.Db.SaveChangesAsync();
+
+        var result = await f.TournamentSvc.DeleteTournamentAsync(tournamentId);
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        Assert.False(await f.Db.Tournaments.AnyAsync(t => t.Id == tournamentId));
+        Assert.False(await f.Db.Predictions.AnyAsync(p => p.RaceId == raceId));
+    }
+
+    [Fact]
+    public async Task DeleteTournament_Cancelled_WithPendingPrediction_ReturnsConflict_NothingDeleted()
+    {
+        // T-D2 financial safety: ChangeStatusAsync's Cancelled branch never refunds Predictions
+        // (it only bulk-flips Race.Status), so a Cancelled Tournament can still carry a real
+        // Pending stake. RaceDeletionHelper would hard-delete it unconditionally with no refund —
+        // the delete must be rejected instead of silently destroying that stake.
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, roundId, raceId) = await CreateTournamentWithRaceAsync(f, TournamentStatus.Cancelled);
+        var (spectatorId, walletBefore) = await f.CreateSpectatorWithWalletAsync(0m);
+        await f.AddPendingPredictionAsync(raceId, spectatorId, Guid.NewGuid(), betAmount: 75m, odds: 2m);
+
+        var result = await f.TournamentSvc.DeleteTournamentAsync(tournamentId);
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.True(await f.Db.Tournaments.AnyAsync(t => t.Id == tournamentId));
+        Assert.True(await f.Db.Rounds.AnyAsync(r => r.Id == roundId));
+        Assert.True(await f.Db.Races.AnyAsync(r => r.Id == raceId));
+        var prediction = await f.Db.Predictions.SingleAsync(p => p.RaceId == raceId);
+        Assert.Equal(PredictionStatus.Pending, prediction.Status);
+        Assert.Equal(walletBefore, await f.GetWalletBalanceAsync(spectatorId)); // stake untouched, not silently lost
     }
 
     [Theory]
@@ -77,21 +138,6 @@ public class TournamentHardDeleteGuardTests
         // And it stays queryable through the same read path Jockey Schedule uses.
         var jockeyEntries = await new RaceEntryRepository(f.Db).GetByJockeyAsync(scenario.JockeyId);
         Assert.Contains(jockeyEntries, e => e.Id == scenario.RaceEntryId);
-    }
-
-    [Fact]
-    public async Task DeleteTournament_Cancelled_ReturnsConflict_TournamentRemains()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (tournamentId, roundId, raceId) = await CreateTournamentWithRaceAsync(f, TournamentStatus.Cancelled);
-
-        var result = await f.TournamentSvc.DeleteTournamentAsync(tournamentId);
-
-        Assert.False(result.Result.Success);
-        Assert.Equal(409, result.StatusCode);
-        Assert.True(await f.Db.Tournaments.AnyAsync(t => t.Id == tournamentId));
-        Assert.True(await f.Db.Rounds.AnyAsync(r => r.Id == roundId));
-        Assert.True(await f.Db.Races.AnyAsync(r => r.Id == raceId));
     }
 
     private sealed record HistoricalScenario(

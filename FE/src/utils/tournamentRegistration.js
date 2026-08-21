@@ -102,7 +102,7 @@ export const isFinalRound = (round, tournament) => {
 // This is FE affordance only (hide the "Xóa" button); the backend guard in
 // TournamentAndRoundService.DeleteTournamentAsync remains the authoritative check.
 export const canHardDeleteTournament = (tournament) =>
-  normalizeTournamentStatus(tournament) === "Draft";
+  ["Draft", "Cancelled"].includes(normalizeTournamentStatus(tournament));
 
 // "Giải đấu đã đủ X/Y ngựa tham gia.\nHẹn bạn ở giải đấu tiếp theo." — only meaningful once the
 // Tournament is actually at/over capacity; returns null otherwise so callers don't need to guard.

@@ -396,20 +396,32 @@ public class TournamentService : ITournamentService
             if (tournament == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy giải đấu");
 
-            // T-D1: once a Tournament leaves Draft it is historical/auditable data — hard delete
-            // (Race graph / registrations / rounds / the Tournament row itself) must never run for
-            // it. Checked before any query touches the Race/RaceEntry/etc. graph below, so a
-            // Published/Ongoing/Finished/Cancelled Tournament's history is never partially touched.
-            // Admin uses the existing Cancel flow (ChangeStatusAsync) for Published/Ongoing instead.
-            if (tournament.Status != TournamentStatus.Draft)
+            // T-D1/T-D2: only Draft and Cancelled tournaments may be hard-deleted.
+            // Published, Ongoing, and Finished remain protected historical/auditable states.
+            // A Cancelled tournament may still contain historical race data; deletion is allowed
+            // only under this explicit lifecycle rule, with the Pending-prediction safety guard below.
+            if (tournament.Status != TournamentStatus.Draft && tournament.Status != TournamentStatus.Cancelled)
             {
                 return ServiceResult<bool>.Fail(
                     409,
-                    "Chỉ có thể xóa giải đấu khi đang ở trạng thái Bản nháp. Các giải đấu đã công bố phải được lưu lại để bảo toàn lịch sử.");
+                    "Chỉ có thể xóa giải đấu khi đang ở trạng thái Bản nháp hoặc Đã hủy. Giải đấu Đã công bố, Đang diễn ra hoặc Đã kết thúc không thể xóa.");
             }
 
             // Get all race IDs in this tournament
             var raceIds = (await _raceRepo.GetByTournamentAsync(id)).Select(r => r.Id).ToList();
+
+            // T-D2 defensive financial safety:
+            // Normal Tournament cancellation now refunds Pending predictions atomically (B0).
+            // This guard is retained for legacy/pre-B0 or otherwise inconsistent Cancelled data,
+            // so hard delete can never silently remove an unresolved stake.
+            var hasUnresolvedPredictions = await _db.Predictions
+                .AnyAsync(p => raceIds.Contains(p.RaceId) && p.Status == PredictionStatus.Pending);
+            if (hasUnresolvedPredictions)
+            {
+                return ServiceResult<bool>.Fail(
+                    409,
+                    "Không thể xóa giải đấu vì vẫn còn dự đoán/cược đang chờ xử lý (Pending) chưa được hoàn tiền. Vui lòng giải quyết các dự đoán này trước.");
+            }
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
