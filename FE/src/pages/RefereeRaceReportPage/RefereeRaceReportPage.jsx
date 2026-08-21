@@ -252,11 +252,20 @@ export default function RefereeRaceReportPage() {
     setResultSubmitting(true);
     setResultMsg("");
     try {
+      const winnerHorseId = Object.keys(resultPositions).find(
+        (horseId) => resultPositions[horseId] === 1
+      );
+
       const rankings = resultEntries.map((entry) => ({
         horseId: entry.horseId || entry.HorseId,
         position: resultPositions[entry.horseId || entry.HorseId],
       }));
-      await submitRaceResult(selectedRaceId, { rankings });
+
+      await submitRaceResult(selectedRaceId, { 
+        winningHorseId: winnerHorseId,
+        rankings: rankings 
+      });
+      
       setResultMsg("✅ Kết quả đã được gửi thành công! Admin sẽ duyệt sau.");
       setResultPositions({});
     } catch (err) {
