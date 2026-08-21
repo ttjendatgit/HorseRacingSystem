@@ -42,7 +42,7 @@ const MONTH_FULL = [
   "Tháng 6",
 ];
 
-// Race progress (RaceStatus) — event lifecycle only.
+//Race progress
 const RACE_STATUS_LABEL = {
   Scheduled: "Đã lên lịch",
   RegistrationOpen: "Chuẩn bị",
@@ -52,7 +52,7 @@ const RACE_STATUS_LABEL = {
   Cancelled: "Đã hủy",
 };
 
-// Result status (RaceResultStatus) — separate concern from race progress.
+//Result status
 const RESULT_STATUS_LABEL = {
   Provisional: "Tạm thời (chờ duyệt)",
   Official: "Chính thức",
@@ -68,21 +68,21 @@ export default function RefereeRaceReportPage() {
   const [msg, setMsg] = useState("");
   const [reportType, setReportType] = useState("post-race");
 
-  // Recent reports history (built from submissions during session + loaded)
+  //Recent reports history
   const [recentReports, setRecentReports] = useState([]);
-  // Submit result states
+  //Submit result states
   const [resultEntries, setResultEntries] = useState([]);
   const [healthChecks, setHealthChecks] = useState([]);
   const [resultWinningHorseId, setResultWinningHorseId] = useState("");
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
 
+  //Fetch API to get assignments on component mount
   useEffect(() => {
     getMyAssignments()
       .then((d) => {
         const list = Array.isArray(d) ? d : [];
         console.log("🔍 All assignments:", list);
-        // Filter only confirmed assignments (referee đã chấp nhận lời mời)
         const confirmedAssignments = list.filter((a) => {
           const status = (a.status || a.Status || "").toLowerCase();
           console.log(`Assignment ${a.raceId || a.RaceId}: status=${status}`);
@@ -99,6 +99,7 @@ export default function RefereeRaceReportPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  //Fetch API to get existing report for selected race
   useEffect(() => {
     if (!selectedRaceId) {
       setExistingReport(null);
@@ -117,7 +118,7 @@ export default function RefereeRaceReportPage() {
       .catch(() => setExistingReport(null));
   }, [selectedRaceId]);
 
-  // Load race entries + health checks for result submission
+  //Fetch API to get race entries and health
   useEffect(() => {
     if (!selectedRaceId) {
       setResultEntries([]);
@@ -133,8 +134,7 @@ export default function RefereeRaceReportPage() {
     });
   }, [selectedRaceId]);
 
-  // A horse whose most recent health check failed cannot be declared the
-  // winner — it was never cleared to race in the first place.
+  //Filter result entries to only include those that are valid (not failed health check)
   const validResultEntries = useMemo(() => {
     return resultEntries.filter((entry) => {
       const horseId = entry.horseId || entry.HorseId;
@@ -147,11 +147,10 @@ export default function RefereeRaceReportPage() {
     });
   }, [resultEntries, healthChecks]);
 
-  // Chart data — monthly count (simulated from recent reports)
+  //Chart data
   const [chartData, setChartData] = useState(() => {
     const now = new Date();
     return Array.from({ length: 6 }, (_, i) => {
-      // eslint-disable-next-line no-unused-vars
       const m = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       return {
         month: MONTH_LABELS[i],
@@ -161,7 +160,7 @@ export default function RefereeRaceReportPage() {
     });
   });
 
-  // Update chart when reports change
+  //Update chart when reports change
   useEffect(() => {
     if (recentReports.length === 0) return;
     const counts = [0, 0, 0, 0, 0, 0];
@@ -182,6 +181,7 @@ export default function RefereeRaceReportPage() {
 
   const maxCount = Math.max(...chartData.map((d) => d.count), 1);
 
+  //Handle form submission for creating a new report
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.content.trim()) {
@@ -215,6 +215,7 @@ export default function RefereeRaceReportPage() {
     }
   };
 
+  //Handle form submission for submitting race result
   const handleSubmitResult = async (e) => {
     e.preventDefault();
     if (!resultWinningHorseId) {
@@ -234,6 +235,7 @@ export default function RefereeRaceReportPage() {
     }
   };
 
+  //Get the name of the currently selected race
   const currentRaceName =
     assignments.find(
       (a) => (a.raceId || a.RaceId) === selectedRaceId
@@ -243,6 +245,7 @@ export default function RefereeRaceReportPage() {
     )?.RaceName ||
     "Cuộc đua đã chọn";
 
+  //Get the current assignment and its statuses
   const currentAssignment = assignments.find(
     (a) => (a.raceId || a.RaceId) === selectedRaceId
   );
@@ -252,10 +255,6 @@ export default function RefereeRaceReportPage() {
     currentAssignment?.resultStatus || currentAssignment?.ResultStatus || "";
   const currentRejectedReason =
     currentAssignment?.rejectedReason || currentAssignment?.RejectedReason || "";
-  // Submission only happens after the race has Finished (per the locked
-  // lifecycle, the event concludes before any result is submitted), and only
-  // while no result exists yet or the existing one is still Provisional —
-  // an Official result cannot be resubmitted through this form.
   const canSubmitResult =
     currentRaceStatus === "Finished" && currentResultStatus !== "Official";
 

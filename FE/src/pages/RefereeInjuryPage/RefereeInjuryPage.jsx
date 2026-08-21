@@ -57,6 +57,7 @@ const SEVERITY_BG = {
   Critical: "rgba(239,68,68,0.15)",
 };
 
+//Convert severity string to a numeric value for comparison
 function severityToNumber(s) {
   const map = { Minor: 0, Moderate: 1, Severe: 3, Critical: 4 };
   return map[s] ?? 0;
@@ -83,6 +84,7 @@ function RefereeInjuryPage() {
     treatment: "",
   });
 
+  //Fetch API data for assignments
   useEffect(() => {
     let ignore = false;
     getMyAssignments()
@@ -94,6 +96,7 @@ function RefereeInjuryPage() {
     return () => { ignore = true; };
   }, []);
 
+  //Fetch API data for race entries
   useEffect(() => {
     if (!selectedRaceId) { setEntries([]); return; }
     let ignore = false;
@@ -106,11 +109,13 @@ function RefereeInjuryPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
+  //Derive unique assigned races from assignments
   const assignedRaces = useMemo(
     () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
     [assignments]
   );
 
+  //Fetch API data for injuries
   const loadInjuries = async () => {
     setLoading(true);
     setError("");
@@ -133,6 +138,7 @@ function RefereeInjuryPage() {
     loadInjuries();
   }, []);
 
+  //Count active injuries
   const activeCount = injuries.filter(
     (i) =>
       !i.recoveredAt &&
@@ -140,6 +146,7 @@ function RefereeInjuryPage() {
       i.status !== "ClearedToRace"
   ).length;
 
+  //Count recovered injuries
   const recoveredCount = injuries.filter(
     (i) =>
       i.recoveredAt ||
@@ -147,6 +154,7 @@ function RefereeInjuryPage() {
       i.status === "ClearedToRace"
   ).length;
 
+  //Derive body parts injuries
   const injuredParts = {};
   injuries.forEach((i) => {
     if (i.bodyPart) {
@@ -157,6 +165,7 @@ function RefereeInjuryPage() {
     }
   });
 
+  //Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -191,6 +200,7 @@ function RefereeInjuryPage() {
     }
   };
 
+  //Handle marking an injury as recovered
   const handleRecover = async (id) => {
     if (!window.confirm("Xác nhận chấn thương này đã bình phục?")) return;
     setError("");
@@ -204,29 +214,34 @@ function RefereeInjuryPage() {
     }
   };
 
+  //Handle clicking on a body part in the horse body map
   const handlePartClick = (partName) => {
     setSelectedPart(partName === selectedPart ? null : partName);
     if (!showForm) setShowForm(true);
     setForm((p) => ({ ...p, bodyPart: partName }));
   };
 
+  //Get the status label for an injury
   const getStatusLabel = (inj) => {
     if (inj.recoveredAt || inj.status === "Recovered") return "Đã hồi phục";
     if (inj.status === "ClearedToRace") return "Đủ điều kiện";
     return "Đang điều trị";
   };
 
+  //Get the CSS class for an injury's status
   const getStatusClass = (inj) => {
     if (inj.recoveredAt || inj.status === "Recovered" || inj.status === "ClearedToRace")
       return "recovered";
     return "active";
   };
 
+  //Get the label for a severity value
   const getSeverityLabel = (s) => {
     const opt = SEVERITY_OPTIONS.find((o) => o.value === s);
     return opt ? opt.label : s;
   };
 
+  //Helper function to format a date string into Vietnamese date
   const formatDate = (d) => {
     if (!d) return "-";
     try {

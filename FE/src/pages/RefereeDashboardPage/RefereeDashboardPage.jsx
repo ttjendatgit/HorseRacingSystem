@@ -12,13 +12,13 @@ const STATUS_PILL = {
   Cancelled: "rd-pill--Rejected",
 };
 
-/* ── Helpers ── */
+//Helper function to format date in Vietnamese locale
 function fmtDate(v) {
   if (!v) return "—";
   return new Date(v).toLocaleDateString("vi-VN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-/* ── Inline SVG: Racetrack with horses ── */
+//Racetrack 
 function RacetrackSVG() {
   return (
     <svg viewBox="0 0 320 200" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -73,7 +73,7 @@ function RacetrackSVG() {
   );
 }
 
-/* ── Small arrow icons for sort ── */
+//Sort arrow component
 function SortArrow({ dir }) {
   if (!dir) return <span className="rd-sort-icon">&#8645;</span>;
   return <span className="rd-sort-icon">{dir === "asc" ? "▲" : "▼"}</span>;
@@ -83,7 +83,6 @@ function SortArrow({ dir }) {
    Page Component
    ================================================================== */
 export default function RefereeDashboardPage() {
-  // eslint-disable-next-line no-unused-vars
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +91,7 @@ export default function RefereeDashboardPage() {
   const [sortKey, setSortKey] = useState("assignedAt");
   const [sortDir, setSortDir] = useState("desc");
 
-  /* ── Fetch data ── */
+  //Fetch API data on mount
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -113,7 +112,7 @@ export default function RefereeDashboardPage() {
     return () => { alive = false; };
   }, []);
 
-  /* ── KPI computations ── */
+  //KPI counts derived from assignments
   const {
     totalAssignments,
     confirmedCount,
@@ -138,7 +137,7 @@ export default function RefereeDashboardPage() {
     };
   }, [assignments]);
 
-  /* ── Sort toggle ── */
+  //Sorting handler
   const handleSort = useCallback((key) => {
     setSortKey(prev => {
       if (prev === key) {
@@ -150,7 +149,7 @@ export default function RefereeDashboardPage() {
     });
   }, []);
 
-  /* ── Filtered + sorted list ── */
+  //Filtered and sorted assignments for display
   const displayed = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     let items = term
@@ -177,10 +176,10 @@ export default function RefereeDashboardPage() {
     return items;
   }, [assignments, searchTerm, sortKey, sortDir]);
 
-  /* ── Status pill mapping ── */
+  //Status pill mapping
   const pillClass = (s) => STATUS_PILL[s] || "rd-pill--Pending";
 
-  /* ── Donut segments ── */
+  //Donut segments
   const donutPct = useMemo(() => {
     const total = assignments.length || 1;
     const conf = (confirmedCount / total) * 100;
@@ -197,7 +196,7 @@ export default function RefereeDashboardPage() {
     rgba(0,0,0,0.06) ${(donutPct.conf + donutPct.comp + donutPct.pend) * 3.6}deg 360deg
   )`;
 
-  /* ── Infraction bar chart data ── */
+  //Bar chart data
   const barData = [
     { label: "T1", value: 0 },
     { label: "T2", value: 0 },

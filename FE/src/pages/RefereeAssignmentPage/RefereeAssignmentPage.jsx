@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getMyAssignments, respondToRefereeAssignment } from "../../services/refereeAssignmentApi";
 import "./RefereeAssignmentPage.css";
 
-/* ── Status config ── */
+//Status configuration mapping
 const statusConfig = {
   Assigned: { label: "Chờ xử lý", className: "ra-badge--pending" },
   Pending: { label: "Chờ xử lý", className: "ra-badge--pending" },
@@ -14,7 +14,7 @@ const statusConfig = {
   Cancelled: { label: "Đã từ chối", className: "ra-badge--rejected" },
 };
 
-/* ── Helpers ── */
+//Helper function to format date in Vietnamese locale
 function fmtDate(value) {
   if (!value) return "Chưa xác định";
   try {
@@ -55,7 +55,7 @@ export default function RefereeAssignmentPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
 
-  /* ── Load assignments ── */
+  //Fetch API data on mount
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -84,20 +84,20 @@ export default function RefereeAssignmentPage() {
     };
   }, []);
 
-  /* ── Show toast helper ── */
+  //Show toast message
   const showToast = useCallback((message) => {
     setToast(message);
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  /* ── Respond to assignment ── */
+  //Handle accept/reject action
   const handleRespond = useCallback(
     async (assignmentId, accept) => {
       setActionLoading(assignmentId);
       try {
         const responseStr = accept ? "Accept" : "Reject";
         await respondToRefereeAssignment(assignmentId, responseStr);
-        // Update local state optimistically
+        //Update local state optimistically
         setAssignments((prev) =>
           prev.map((a) =>
             a.id === assignmentId
@@ -115,7 +115,7 @@ export default function RefereeAssignmentPage() {
     [showToast]
   );
 
-  /* ── KPI computations ── */
+  //KPI computations
   const { total, confirmed, pending } = useMemo(() => {
     const t = assignments.length;
     const c = assignments.filter(
@@ -127,7 +127,7 @@ export default function RefereeAssignmentPage() {
     return { total: t, confirmed: c, pending: p };
   }, [assignments]);
 
-  /* ── Render card action buttons ── */
+  //Render card action buttons
   const renderActions = (a) => {
     if (!isActionable(a.status)) return null;
     const busy = actionLoading === a.id;

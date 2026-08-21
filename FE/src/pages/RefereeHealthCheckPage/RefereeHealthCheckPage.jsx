@@ -18,7 +18,7 @@ const STATUS_MAP = {
 
 const STATUS_OPTIONS = ["Passed", "Failed", "RequiresRecheck"];
 
-/* ── SVG: Vet checking a horse (empty state) ── */
+//SVG for the empty state when no race is selected
 function VetHorseSVG() {
   return (
     <svg className="rh-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -49,7 +49,7 @@ function VetHorseSVG() {
   );
 }
 
-/* ── SVG: Empty history ── */
+//SVG for the empty state when no health checks exist for a race
 function EmptyHistorySVG() {
   return (
     <svg className="rh-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -66,7 +66,7 @@ function EmptyHistorySVG() {
   );
 }
 
-/* ── SVG: Body map prompt (when form is hidden) ── */
+//SVG for the body map prompt (when form is hidden)
 function BodyMapPromptSVG() {
   return (
     <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
@@ -104,7 +104,7 @@ function RefereeHealthCheckPage() {
   const [bodyMapData] = useState({});
   const [bodyMapSelected, setBodyMapSelected] = useState(null);
 
-  /* ---------- load assignments on mount ---------- */
+  //Fetch API assignments on mount
   useEffect(() => {
     let ignore = false;
     const fn = async () => {
@@ -127,7 +127,7 @@ function RefereeHealthCheckPage() {
     return () => { ignore = true; };
   }, []);
 
-  /* ---------- load entries when race changes ---------- */
+  //Fetch API race entries when a race is selected
   useEffect(() => {
     if (!selectedRaceId) return;
     let ignore = false;
@@ -150,7 +150,7 @@ function RefereeHealthCheckPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  /* ---------- load health checks for a race ---------- */
+  //Fetch API health checks for a race
   const loadHealthChecks = async (raceId) => {
     setLoading(true);
     setError("");
@@ -171,7 +171,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  /* ---------- select a race ---------- */
+  //Handle race selection
   const handleRaceSelect = (raceId) => {
     setSelectedRaceId(raceId);
     setError("");
@@ -186,7 +186,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  /* ---------- submit new health check ---------- */
+  //Handle form submission to create a new health check
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -215,7 +215,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  /* ---------- approve a horse for racing ---------- */
+  //Handle approval of a horse for racing
   const handleApprove = async (checkId) => {
     setError("");
     setSuccess("");
@@ -228,7 +228,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  /* ---------- reject a horse for racing ---------- */
+  //Reject a horse for racing with a reason
   const handleReject = async (checkId) => {
     const reason = prompt("Nhập lý do từ chối:");
     if (!reason) return;
@@ -243,20 +243,19 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  /* ---------- body map click ---------- */
+  //Body map part selection handler
   const handleBodyPartClick = (part) => {
     setBodyMapSelected(part);
     setForm((prev) => ({ ...prev, bodyPart: part }));
   };
 
-  /* ---------- derived data ---------- */
+  //Derive assigned races from assignments
   const assignedRaces = useMemo(
     () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
     [assignments]
   );
 
-  // A horse is no longer offered for a new check once any prior check for it
-  // was finalized (approved to race, or Failed) — re-checking it is pointless.
+  //Filter horse entries (approved horses should not be available for new checks)
   const availableEntries = useMemo(() => {
     return entries.filter((entry) => {
       const targetHorseId = entry.horseId || entry.HorseId;
@@ -265,8 +264,7 @@ function RefereeHealthCheckPage() {
       );
       if (horseChecks.length === 0) return true;
       const isFinalized = horseChecks.some(
-        (c) => c.approvedToRace || c.ApprovedToRace || c.status === "Failed" || c.Status === "Failed"
-      );
+        (c) => c.approvedToRace || c.ApprovedToRace);
       return !isFinalized;
     });
   }, [entries, healthChecks]);
@@ -279,7 +277,7 @@ function RefereeHealthCheckPage() {
     return { total: t, passed: p, failed: f, recheck: r };
   }, [healthChecks]);
 
-  /* ---------- render ---------- */
+  //Render the main page
   return (
     <div className="rh-wrap">
       <div className="rh-container">

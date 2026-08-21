@@ -35,7 +35,7 @@ function getBadgeKey(typeValue) {
   return found ? found.key : "other";
 }
 
-/* ── SVG: Referee flag + whistle (empty state) ── */
+//SVG: Flag and whistle for empty state
 function FlagWhistleSVG() {
   return (
     <svg className="rv-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -58,7 +58,7 @@ function FlagWhistleSVG() {
   );
 }
 
-/* ── SVG: Empty history ── */
+//SVG: Empty state for no violations
 function EmptyViolationSVG() {
   return (
     <svg className="rv-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -71,7 +71,7 @@ function EmptyViolationSVG() {
   );
 }
 
-/* ── SVG: Prompt when form is hidden ── */
+//SVG: Prompt to add a violation
 function ViolationPromptSVG() {
   return (
     <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
@@ -103,7 +103,7 @@ function RefereeViolationPage() {
     description: "",
   });
 
-  /* ---------- load assignments on mount ---------- */
+  //Fetch API to get assignments on component mount
   useEffect(() => {
     let ignore = false;
     const fn = async () => {
@@ -128,7 +128,7 @@ function RefereeViolationPage() {
     return () => { ignore = true; };
   }, []);
 
-  /* ---------- load entries when race changes ---------- */
+  //Fetch API to get race entries when a race
   useEffect(() => {
     if (!selectedRaceId) return;
     let ignore = false;
@@ -151,7 +151,7 @@ function RefereeViolationPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  /* ---------- load violations ---------- */
+  //Fetch API to get race violations when a race
   const loadViolations = async (raceId) => {
     setLoading(true);
     setError("");
@@ -172,7 +172,7 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- select a race ---------- */
+  //Handle race selection
   const handleRaceSelect = (raceId) => {
     setSelectedRaceId(raceId);
     setError("");
@@ -186,7 +186,7 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- submit violation ---------- */
+  //Handle form submission for recording a new violation
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -220,10 +220,7 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- derived data ---------- */
-  // Violations can only be recorded for the race actually active right now —
-  // restrict the selector to RaceStatus.InProgress only. Not Finished (the
-  // race is over), not Tournament.IsActive, not a ScheduledAt comparison.
+  //Derive the list of assigned races that are currently in progress
   const assignedRaces = useMemo(() => {
     const unique = [...new Map(assignments.map((a) => [a.raceId, a])).values()];
     return unique.filter((a) => {
@@ -239,7 +236,7 @@ function RefereeViolationPage() {
   }).length;
   const pendingCount = totalViolations - resolvedCount;
 
-  /* ---------- render ---------- */
+  //Render the component
   return (
     <div className="rv-wrap">
       <div className="rv-container">
@@ -322,7 +319,7 @@ function RefereeViolationPage() {
           </select>
           {assignedRaces.length === 0 && assignments.length > 0 && (
             <p className="rv-hint">
-              Hiện không có cuộc đua nào đang diễn ra để bắt lỗi.
+              Hiện không có cuộc đua nào đang diễn ra để ghi nhận vi phạm.
             </p>
           )}
         </div>
