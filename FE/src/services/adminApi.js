@@ -72,6 +72,13 @@ export const updateRound = (roundId, payload) =>
     body: JSON.stringify(payload),
   });
 
+// Q1: server derives qualifiers/round-robin/Jockey carry-forward entirely — this call passes
+// only the current Round's identity, nothing else.
+export const generateNextRound = (roundId) =>
+  request(`/api/tournaments/rounds/${roundId}/generate-next`, {
+    method: "POST",
+  });
+
 export const getTournamentRaces = async (tournamentId) =>
   unwrap(await request(`/api/races/management/tournament/${tournamentId}`));
 

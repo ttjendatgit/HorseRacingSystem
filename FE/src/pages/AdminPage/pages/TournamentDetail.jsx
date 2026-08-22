@@ -9,7 +9,7 @@ import {
   rejectTournamentRegistration,
 } from "../../../services/adminApi";
 import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
-import { getTournamentRegistrationState } from "../../../utils/tournamentRegistration";
+import { getTournamentRegistrationState, isFinalRound } from "../../../utils/tournamentRegistration";
 
 // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
 // RegistrationClosed are transitional compatibility values and display as neutral pre-race state.
@@ -187,10 +187,9 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
             const advanceCount = r.advanceCount ?? r.AdvanceCount;
             const raceCount = r.raceCount ?? r.RaceCount ?? 0;
             const scheduledStart = r.scheduledStartDate ?? r.ScheduledStartDate;
-            // Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount alone —
-            // Draft data may temporarily hold AdvanceCount=0 on a non-final round.
-            const maxRounds = t.maxRounds ?? t.MaxRounds;
-            const isFinal = maxRounds != null && roundNumber === maxRounds;
+            // V0/V0.1: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount
+            // alone — Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+            const isFinal = isFinalRound(r, t);
             return (
               <div key={rid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,padding:"10px 14px",borderRadius:10,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)"}}>
                 <div>

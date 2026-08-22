@@ -24,6 +24,7 @@ public class TournamentService : ITournamentService
     private readonly IJockeyRepository _jockeyRepo;
     private readonly ApplicationDbContext _db;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWalletService _walletService;
 
     public TournamentService(
         ITournamentRepository tournamentRepo,
@@ -36,7 +37,8 @@ public class TournamentService : ITournamentService
         IHorseRepository horseRepo,
         IJockeyRepository jockeyRepo,
         ApplicationDbContext db,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IWalletService walletService)
     {
         _tournamentRepo = tournamentRepo;
         _notificationService = notificationService;
@@ -49,6 +51,7 @@ public class TournamentService : ITournamentService
         _jockeyRepo = jockeyRepo;
         _db = db;
         _unitOfWork = unitOfWork;
+        _walletService = walletService;
     }
 
     public async Task<ServiceResult<TournamentResponse>> CreateTournamentAsync(CreateTournamentRequest request)
@@ -223,6 +226,11 @@ public class TournamentService : ITournamentService
                     immutableFieldErrors.Add("MinParticipants không thể thay đổi sau khi công bố giải đấu.");
                 if (request.MaxParticipants.HasValue && request.MaxParticipants.Value != tournament.MaxParticipants)
                     immutableFieldErrors.Add("MaxParticipants không thể thay đổi sau khi công bố giải đấu.");
+                // V0.1: MaxRounds now follows the same structural-lock convention as the other
+                // Draft-only fields above — Final identity (RoundNumber == MaxRounds) must not
+                // shift under an already-Published Tournament's existing Round structure.
+                if (request.MaxRounds.HasValue && request.MaxRounds.Value != tournament.MaxRounds)
+                    immutableFieldErrors.Add("MaxRounds không thể thay đổi sau khi công bố giải đấu.");
 
                 if (immutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", immutableFieldErrors));
@@ -310,6 +318,23 @@ public class TournamentService : ITournamentService
                             $"Không thể thay đổi thời gian giải đấu vì Vòng {offendingRound.RoundNumber} (\"{offendingRound.Name}\") sẽ nằm ngoài khoảng thời gian mới của giải đấu.");
                     }
                 }
+
+                // V0.1: MaxRounds may be freely raised in Draft (repairs e.g. an existing
+                // MaxRounds=1 Tournament that already has Round 1 and Round 2), but lowering it
+                // below an already-existing RoundNumber would strand that Round — reject before
+                // mutating anything, same convention as the StartDate/EndDate containment check above.
+                if (request.MaxRounds.HasValue)
+                {
+                    var maxExistingRoundNumber = await _db.Rounds
+                        .Where(r => r.TournamentId == tournament.Id)
+                        .Select(r => (int?)r.RoundNumber)
+                        .MaxAsync();
+                    if (maxExistingRoundNumber.HasValue && candidateMaxRounds < maxExistingRoundNumber.Value)
+                    {
+                        return ServiceResult<TournamentResponse>.Fail(400,
+                            $"Không thể giảm MaxRounds xuống {candidateMaxRounds} vì Vòng {maxExistingRoundNumber.Value} đã tồn tại.");
+                    }
+                }
             }
 
             // All validation passed — now apply values to the tracked entity.
@@ -330,6 +355,10 @@ public class TournamentService : ITournamentService
                     tournament.MinParticipants = candidateMinParticipants;
                 if (request.MaxParticipants.HasValue)
                     tournament.MaxParticipants = candidateMaxParticipants;
+                // V0.1: MaxRounds is structural (drives V0 Final identity), Draft-only —
+                // same bucket as StartDate/EndDate/MinParticipants/MaxParticipants above.
+                if (request.MaxRounds.HasValue)
+                    tournament.MaxRounds = candidateMaxRounds;
             }
             // IsActive intentionally not settable here (Phase4B) — server-owned, lifecycle-only.
             if (request.ImageUrl != null)
@@ -345,8 +374,6 @@ public class TournamentService : ITournamentService
             if (request.Category != null)
                 tournament.Category = candidateCategory;
             tournament.SurfaceType = candidateSurfaceType;
-            if (request.MaxRounds.HasValue)
-                tournament.MaxRounds = candidateMaxRounds;
 
             tournament.UpdatedAt = DateTime.UtcNow;
 
@@ -369,20 +396,32 @@ public class TournamentService : ITournamentService
             if (tournament == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy giải đấu");
 
-            // T-D1: once a Tournament leaves Draft it is historical/auditable data — hard delete
-            // (Race graph / registrations / rounds / the Tournament row itself) must never run for
-            // it. Checked before any query touches the Race/RaceEntry/etc. graph below, so a
-            // Published/Ongoing/Finished/Cancelled Tournament's history is never partially touched.
-            // Admin uses the existing Cancel flow (ChangeStatusAsync) for Published/Ongoing instead.
-            if (tournament.Status != TournamentStatus.Draft)
+            // T-D1/T-D2: only Draft and Cancelled tournaments may be hard-deleted.
+            // Published, Ongoing, and Finished remain protected historical/auditable states.
+            // A Cancelled tournament may still contain historical race data; deletion is allowed
+            // only under this explicit lifecycle rule, with the Pending-prediction safety guard below.
+            if (tournament.Status != TournamentStatus.Draft && tournament.Status != TournamentStatus.Cancelled)
             {
                 return ServiceResult<bool>.Fail(
                     409,
-                    "Chỉ có thể xóa giải đấu khi đang ở trạng thái Bản nháp. Các giải đấu đã công bố phải được lưu lại để bảo toàn lịch sử.");
+                    "Chỉ có thể xóa giải đấu khi đang ở trạng thái Bản nháp hoặc Đã hủy. Giải đấu Đã công bố, Đang diễn ra hoặc Đã kết thúc không thể xóa.");
             }
 
             // Get all race IDs in this tournament
             var raceIds = (await _raceRepo.GetByTournamentAsync(id)).Select(r => r.Id).ToList();
+
+            // T-D2 defensive financial safety:
+            // Normal Tournament cancellation now refunds Pending predictions atomically (B0).
+            // This guard is retained for legacy/pre-B0 or otherwise inconsistent Cancelled data,
+            // so hard delete can never silently remove an unresolved stake.
+            var hasUnresolvedPredictions = await _db.Predictions
+                .AnyAsync(p => raceIds.Contains(p.RaceId) && p.Status == PredictionStatus.Pending);
+            if (hasUnresolvedPredictions)
+            {
+                return ServiceResult<bool>.Fail(
+                    409,
+                    "Không thể xóa giải đấu vì vẫn còn dự đoán/cược đang chờ xử lý (Pending) chưa được hoàn tiền. Vui lòng giải quyết các dự đoán này trước.");
+            }
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
@@ -468,6 +507,22 @@ public class TournamentService : ITournamentService
                 tournament.IsActive = false;
 
                 await _tournamentRepo.UpdateAsync(tournament);
+                await _unitOfWork.SaveChangesAsync();
+
+                // B0: refund every Pending Prediction across every Race in this Tournament,
+                // using the same refund convention as the direct Race cancel path
+                // (RaceManagementService.CancelRaceAsync / PredictionRefundHelper) — wallet
+                // credited, Prediction marked Lost as the refund marker. swallowIndividualFailures:
+                // false here (unlike the direct Race cancel path) — a failed wallet credit throws
+                // and is caught by this method's outer try/catch, rolling back this whole
+                // transaction (Tournament status + Race cascade + any already-applied refunds)
+                // instead of leaving some races cancelled with stakes unrecovered.
+                var raceIdsForRefund = await _db.Races
+                    .Where(r => r.TournamentId == id)
+                    .Select(r => r.Id)
+                    .ToListAsync();
+                await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                    _db, _walletService, raceIdsForRefund, $"tournament_cancel_{id}", swallowIndividualFailures: false);
                 await _unitOfWork.SaveChangesAsync();
 
                 // V1.1 §14.2/§15 cascade: every Race not yet Finished cancels; Finished (and
@@ -610,12 +665,13 @@ public class TournamentService : ITournamentService
 
     /// <summary>
     /// Phase5 structural readiness (V1.1 §6/§7/§8). Final-Round-dependent checks (race count vs
-    /// final, QualificationSlots exact-zero-vs-required-sum) only run once the sequence AND the
-    /// Final-Round invariant (exactly one AdvanceCount=0, highest RoundNumber) are BOTH independently
-    /// valid — never derived merely from MAX(RoundNumber), per the locked Phase5 decision. Facts that
-    /// don't depend on which Round is Final (RoundNumber sequence, per-Race MaxParticipants, schedule
-    /// containment, Track existence/capacity/overlap) are still validated even when the sequence or
-    /// Final Round is ambiguous, so those errors surface immediately rather than being masked.
+    /// final, QualificationSlots exact-zero-vs-required-sum) only run once the sequence is valid.
+    /// V0: the Final Round is identified purely by RoundNumber == Tournament.MaxRounds — never
+    /// inferred from AdvanceCount == 0, rounds.Count, or any other heuristic. AdvanceCount == 0 is
+    /// a CONSEQUENCE that gets validated against the Final Round once it's known, not the way the
+    /// Final Round is found. Facts that don't depend on which Round is Final (per-Race
+    /// MaxParticipants, schedule containment, Track existence/capacity/overlap) are still validated
+    /// even when the sequence is invalid, so those errors surface immediately rather than being masked.
     /// </summary>
     private async Task<List<string>> ValidateStructuralReadinessAsync(Tournament tournament)
     {
@@ -630,30 +686,21 @@ public class TournamentService : ITournamentService
         if (rounds.Count == 0)
             return errors; // already reported by ValidatePublishTournamentFieldsAsync
 
-        // ── Sequence: unique, gapless, starts at 1 ──
-        var sequenceValid = rounds.Select(r => r.RoundNumber).OrderBy(n => n)
-            .SequenceEqual(Enumerable.Range(1, rounds.Count));
+        // ── Sequence: exactly Tournament.MaxRounds Rounds, numbered uniquely 1..MaxRounds ──
+        // V0: identity is 1..Tournament.MaxRounds, not 1..rounds.Count — a Round set only
+        // satisfies this SequenceEqual when it has neither too few/too many Rounds, no gaps, and
+        // no duplicates, so "count == MaxRounds" and "gapless 1..MaxRounds" are both expressed by
+        // this single check; no separate count comparison is needed.
+        var sequenceValid = tournament.MaxRounds > 0 &&
+            rounds.Select(r => r.RoundNumber).OrderBy(n => n)
+                .SequenceEqual(Enumerable.Range(1, tournament.MaxRounds));
         if (!sequenceValid)
-            errors.Add("Thứ tự Vòng đấu (RoundNumber) phải liên tục, không trùng, và bắt đầu từ 1.");
+            errors.Add($"Giải đấu phải có đúng {tournament.MaxRounds} Vòng đấu (MaxRounds), đánh số liên tục, không trùng, và bắt đầu từ 1.");
 
-        // ── Final Round: exactly one AdvanceCount=0, and it must be the highest RoundNumber ──
-        Round? finalRound = null;
-        if (sequenceValid)
-        {
-            var zeroAdvanceRounds = rounds.Where(r => r.AdvanceCount == 0).ToList();
-            if (zeroAdvanceRounds.Count == 0)
-                errors.Add("Giải đấu phải có đúng 1 Vòng chung kết (AdvanceCount = 0).");
-            else if (zeroAdvanceRounds.Count > 1)
-                errors.Add("Chỉ được có đúng 1 Vòng chung kết (AdvanceCount = 0).");
-            else
-            {
-                var candidate = zeroAdvanceRounds[0];
-                if (candidate.RoundNumber != rounds.Max(r => r.RoundNumber))
-                    errors.Add("Vòng chung kết (AdvanceCount = 0) phải là Vòng đấu cuối cùng (RoundNumber lớn nhất).");
-                else
-                    finalRound = candidate;
-            }
-        }
+        // ── Final Round: source of truth is RoundNumber == Tournament.MaxRounds (V0) ──
+        // Once the sequence is valid, exactly one Round has RoundNumber == MaxRounds by
+        // construction — no separate "search for the AdvanceCount=0 Round" step is needed.
+        Round? finalRound = sequenceValid ? rounds.Single(r => r.RoundNumber == tournament.MaxRounds) : null;
 
         // ── AdvanceCount: universal bounds (non-null, >= 0), for every Round regardless of Final ──
         foreach (var round in rounds)
@@ -1134,6 +1181,16 @@ public class RoundService : IRoundService
                 return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
             }
 
+            // V0.1: RoundNumber is meaningless once it exceeds the Tournament's own MaxRounds —
+            // Final identity is RoundNumber == MaxRounds, so a Round beyond that can never be
+            // reached by Publish readiness anyway. Reject it up front rather than allowing dead
+            // structural data to accumulate in Draft.
+            if (request.RoundNumber > tournament.MaxRounds)
+            {
+                return ServiceResult<RoundResponse>.Fail(400,
+                    $"RoundNumber ({request.RoundNumber}) không được vượt quá MaxRounds ({tournament.MaxRounds}) của giải đấu.");
+            }
+
             var scheduleErrors = ValidateRoundScheduleWithinTournament(tournament, request.ScheduledStartDate, request.ScheduledEndDate);
             if (scheduleErrors.Count > 0)
             {
@@ -1231,6 +1288,14 @@ public class RoundService : IRoundService
                 if (request.RoundNumber.Value < 1)
                 {
                     return ServiceResult<RoundResponse>.Fail(400, "RoundNumber phải lớn hơn hoặc bằng 1.");
+                }
+
+                // V0.1: same MaxRounds ceiling as CreateRoundAsync.
+                var tournamentForRoundNumber = round.Tournament ?? await _tournamentRepo.GetByIdAsync(round.TournamentId);
+                if (tournamentForRoundNumber != null && request.RoundNumber.Value > tournamentForRoundNumber.MaxRounds)
+                {
+                    return ServiceResult<RoundResponse>.Fail(400,
+                        $"RoundNumber ({request.RoundNumber.Value}) không được vượt quá MaxRounds ({tournamentForRoundNumber.MaxRounds}) của giải đấu.");
                 }
 
                 var duplicateRoundNumber = await _db.Rounds.AnyAsync(r =>

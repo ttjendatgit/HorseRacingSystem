@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import { createReport, getRaceReport, getRaceEntries, getRaceHealthChecks, submitRaceResult } from "../../services/refereeApi";
+import { getLatestHealthCheck } from "../../utils/healthCheckDisplay";
 import "./RefereeRaceReportPage.css";
 
 const REPORT_TYPES = [
@@ -152,10 +153,8 @@ export default function RefereeRaceReportPage() {
     });
     const failed = new Set();
     byHorse.forEach((checks, horseId) => {
-      const latest = [...checks].sort(
-        (a, b) => new Date(b.createdAt || b.CreatedAt) - new Date(a.createdAt || a.CreatedAt)
-      )[0];
-      if ((latest.status || latest.Status) === "Failed") failed.add(horseId);
+      const latest = getLatestHealthCheck(checks);
+      if (latest && (latest.status || latest.Status) === "Failed") failed.add(horseId);
     });
     return failed;
   }, [healthChecks]);

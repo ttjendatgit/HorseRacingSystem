@@ -8,6 +8,7 @@ import {
   createTournament,
   deleteTournament,
   endRace,
+  generateNextRound,
   getAdminDashboard,
   getAdminUser,
   getAdminUsers,
@@ -32,7 +33,8 @@ import {
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
-import { canHardDeleteTournament, getTournamentLifecycleLabel } from "../../utils/tournamentRegistration";
+import { canEditTournamentStructure, canHardDeleteTournament, getTournamentLifecycleLabel, isFinalRound } from "../../utils/tournamentRegistration";
+import { getPlacementLabel, getRankedEntries } from "../../utils/raceResultDisplay";
 import {
   PrizeManagement,
   ProtestManagement,
@@ -796,7 +798,11 @@ function TournamentManagement() {
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10 });
+  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
+  // V0.1 micro-fix: MaxRounds may only change while Draft — Published/Ongoing/Finished/Cancelled
+  // must ALL lock it, not just Published. Single source of truth for both the field's
+  // disabled state (JSX below) and whether it's included in the update payload (submit below).
+  const isDraft = canEditTournamentStructure(editingStatus);
   const load = () => getAdminTournaments().then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
   useEffect(() => {
     load();
@@ -834,12 +840,19 @@ function TournamentManagement() {
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
       }
+      // V0.1 micro-fix: MaxRounds is structural (drives V0 Final identity) and is locked for
+      // EVERY non-Draft status (Published, Ongoing, Finished, Cancelled) — not just Published,
+      // unlike the isPublished-gated fields above (that existing scope is unchanged here).
+      if (isDraft) {
+        payload.maxRounds = Number(form.maxRounds);
+      }
       if (editingId) await updateTournament(editingId, payload);
       else {
         payload.startDate = vnInputToApiUtc(form.startDate);
         payload.endDate = vnInputToApiUtc(form.endDate);
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
+        payload.maxRounds = Number(form.maxRounds);
         await createTournament(payload);
       }
       setMessage(`Giải đấu ${editingId ? "đã cập nhật" : "đã tạo"} thành công.`);
@@ -857,6 +870,7 @@ function TournamentManagement() {
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
       minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
       maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
+      maxRounds: item.maxRounds ?? item.MaxRounds ?? 1,
     });
     setShowForm(true);
   };
@@ -921,6 +935,10 @@ function TournamentManagement() {
         {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
         <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
         <input type="number" placeholder="Số người tham gia tối đa" required min="1" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} disabled={editingStatus === 1} />
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Số vòng đấu *
+          <input type="number" required min="1" step="1" value={form.maxRounds} onChange={(e) => setForm({ ...form, maxRounds: e.target.value })} disabled={!isDraft} />
+        </label>
         <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
           <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} style={{ display: "block", marginTop: 4 }} />
           {uploading ? <span style={{ color: "var(--hr-gold-soft)", fontSize: 12 }}>Đang tải ảnh...</span> : null}
@@ -1113,6 +1131,18 @@ function ScheduleManagement({ type }) {
   const cancelEditRound = () => {
     setEditingRoundId("");
     setForm(defaultRoundForm);
+  };
+
+  // Q1: server is the sole source of truth for readiness — this only sends the current Round's
+  // id, never Horse IDs, rankings, or target assignments.
+  const generateNextRoundForRound = async (roundId) => {
+    try {
+      const result = await generateNextRound(roundId);
+      const data = result?.data ?? result?.Data ?? {};
+      const generated = data.generatedEntries ?? data.GeneratedEntries;
+      setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
+      setItems(await getTournamentRounds(selected));
+    } catch (err) { setMessage(err.message); }
   };
 
   const submit = async (event) => {
@@ -1334,20 +1364,41 @@ function ScheduleManagement({ type }) {
           <option value="">Chọn cuộc đua để phân công ngựa</option>
           {items.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}
         </select>
-        <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
-          <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
-          {visibleHorses.map((horse) => {
-            const horseId = horse.id ?? horse.Id;
-            const isInThisRace = assignedHorseIds.has(horseId);
-            const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
-            const isDisabled = isInThisRace || isBusyElsewhere;
-            const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
-            return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
-              {horse.name ?? horse.Name}{label}
-            </option>;
-          })}
-        </select>
-        <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+        {(() => {
+          const selectedRace = items.find((item) => (item.id ?? item.Id) === assignment.raceId);
+          const selectedRoundNumber = selectedRace ? (selectedRace.roundNumber ?? selectedRace.RoundNumber) : null;
+          // Q1-UX: manual Horse->Race assignment is only valid for RoundNumber == 1 — the backend
+          // already rejects it for Round2+ (those RaceEntries can only come from
+          // POST rounds/{roundId}/generate-next). Hide the ENTIRE Horse-selection flow rather than
+          // filtering eliminated horses, so no horse — including a genuine qualifier — is ever
+          // manually assignable to Round2+.
+          if (assignment.raceId && selectedRoundNumber != null && selectedRoundNumber > 1) {
+            return (
+              <p style={{margin:"8px 0",padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)",color:"var(--hr-success)",fontSize:13}}>
+                Ngựa ở vòng này được xác định tự động từ kết quả chính thức của vòng trước.<br />
+                Không thể phân công ngựa thủ công.
+              </p>
+            );
+          }
+          return (
+            <>
+              <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
+                <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
+                {visibleHorses.map((horse) => {
+                  const horseId = horse.id ?? horse.Id;
+                  const isInThisRace = assignedHorseIds.has(horseId);
+                  const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
+                  const isDisabled = isInThisRace || isBusyElsewhere;
+                  const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
+                  return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
+                    {horse.name ?? horse.Name}{label}
+                  </option>;
+                })}
+              </select>
+              <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+            </>
+          );
+        })()}
       </form>}
 
       <section className="admin-card-grid">{items.map((item) => {
@@ -1357,13 +1408,16 @@ function ScheduleManagement({ type }) {
 
         if (type === "round") {
           const roundNumber = item.roundNumber ?? item.RoundNumber;
-          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value (Final Round
-          // hint below) and must never be treated as "not set".
+          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value and must
+          // never be treated as "not set".
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
+          // V0/V0.1: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount
+          // alone — Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+          const isFinal = isFinalRound(item, selectedTournament);
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>
-              {advanceCount === 0 && (
+              {isFinal && (
                 <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>
               )}
               <h3>{item.name ?? item.Name}</h3>
@@ -1375,6 +1429,14 @@ function ScheduleManagement({ type }) {
               {isDraftTournament && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
                   <button onClick={() => startEditRound(item)}>Sửa</button>
+                </div>
+              )}
+              {/* Q1: only offered for a non-final Round of a non-Draft Tournament — the backend
+                  remains authoritative on actual readiness (every source Race Finished with an
+                  Official result); this button just avoids offering it somewhere it can never work. */}
+              {!isDraftTournament && !isFinal && (
+                <div className="admin-actions" style={{ marginTop: 8 }}>
+                  <button onClick={() => generateNextRoundForRound(itemId)}>Tạo vòng tiếp theo</button>
                 </div>
               )}
             </article>
@@ -1547,17 +1609,58 @@ function ScheduleManagement({ type }) {
                 const isOfficial = resultStatusVal === "official";
                 const winnerHorseId = raceResult.winningHorseId ?? raceResult.WinningHorseId;
                 const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
+
+                // Q1-UX: full ranking, sourced from RaceResultResponse.Rankings — the backend's
+                // own parse of the canonical RaceResult.RankingsJson (Q1's qualification
+                // authority), never RaceEntry.FinishPosition. Only rendered once Official —
+                // Provisional keeps the existing winner-only summary below (a full "Đi tiếp/Bị
+                // loại" ranking must never be presented before Admin approval finalizes it).
+                const rankings = raceResult.rankings ?? raceResult.Rankings ?? [];
+                const rankedEntries = isOfficial
+                  ? getRankedEntries(rankings).map((r) => {
+                      const horseId = r.horseId ?? r.HorseId;
+                      const entry = raceEntries.find((e) => (e.horseId ?? e.HorseId) === horseId);
+                      return {
+                        position: r.position ?? r.Position,
+                        horseId,
+                        horseName: r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName,
+                        jockeyName: entry?.jockeyName ?? entry?.JockeyName,
+                      };
+                    })
+                  : [];
+                const isFinal = isFinalRound(item, selectedTournament);
+                const qualificationSlots = item.qualificationSlots ?? item.QualificationSlots;
+
                 return (
                   <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`}}>
                     <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>
                       {isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}
                     </h4>
-                    <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
-                      {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
-                      {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
-                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
-                      {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <span style={{display:"block",fontSize:12,color:"var(--hr-danger)",marginTop:4}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</span> : null}
-                    </p>
+                    {isOfficial && rankedEntries.length > 0 ? (
+                      <div style={{display:"grid",gap:4}}>
+                        {rankedEntries.map((r) => {
+                          const label = getPlacementLabel({ position: r.position, isFinal, qualificationSlots });
+                          const color = label === "Bị loại" ? "var(--hr-danger)" : (label === "Đi tiếp" || isFinal) ? "var(--hr-success)" : "var(--hr-muted)";
+                          const icon = label === "Đi tiếp" ? "✓ " : label === "Bị loại" ? "✕ " : "";
+                          return (
+                            <p key={r.horseId} style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
+                              {r.position === 1 ? "🏆" : `#${r.position}`} <strong>{r.horseName ?? "Chưa xác định"}</strong>
+                              {r.jockeyName ? <span> — Kỵ sĩ: {r.jockeyName}</span> : null}
+                              {label ? <span style={{marginLeft:8,fontWeight:600,color}}>{icon}{label}</span> : null}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      // Legacy safety: Official but no usable Rankings (pre-R0 data), or still
+                      // Provisional — winner-only fallback rather than a blank result.
+                      <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
+                        {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
+                        {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
+                      </p>
+                    )}
+                    {raceResult.notes ?? raceResult.Notes ? <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</p> : null}
+                    {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-danger)"}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</p> : null}
                   </div>
                 );
               })()}

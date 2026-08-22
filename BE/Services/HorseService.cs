@@ -445,18 +445,32 @@ public class HorseService : IHorseService
                 "Không tìm thấy lời mời cần hủy cho ngựa và cuộc đua này");
         }
 
+        // J3.1: official-ness is Tournament-wide and determined from RaceEntry.JockeyId,
+        // never from invitation.Status — an Accepted invitation stays Accepted forever
+        // even after it becomes official (Final Confirm never touches invitation.Status),
+        // so checking Status here would not catch it. Once Owner Final Confirm has
+        // established RaceEntry.JockeyId for this Horse anywhere in the Tournament, this
+        // action must not be able to undo it — regardless of which Race/invitation the
+        // Owner operates on for the same Horse+Tournament.
+        var raceForGuard = await _races.GetByIdAsync(raceId);
+        if (raceForGuard != null)
+        {
+            var officialAssignment = await _raceEntries.GetOfficialAssignmentForHorseInTournamentAsync(horseId, raceForGuard.TournamentId);
+            if (officialAssignment != null && officialAssignment.JockeyId == invitation.JockeyId)
+            {
+                return ServiceResult<string>.Fail(
+                    StatusCodes.Status409Conflict,
+                    "Kỵ sĩ này đã là kỵ sĩ chính thức của ngựa trong giải đấu này và không thể bị hủy qua thao tác này.");
+            }
+        }
+
+        // J3.1: the official-pairing guard above already rejected this call if the invitation
+        // belonged to the official Jockey — so by this point the invitation is necessarily
+        // non-official, and only the invitation itself needs to change. RaceEntry is never
+        // touched here.
         invitation.Status = JockeyInvitationStatus.Declined;
         invitation.ResponseNote = request.Reason.Trim();
         invitation.RespondedAt = DateTime.UtcNow;
-
-        // Only clear the RaceEntry's official jockey if it was actually this invitation's
-        // jockey — never touch a different jockey's official assignment as a side effect.
-        var entry = await _db.RaceEntries.FirstOrDefaultAsync(e => e.HorseId == horseId && e.RaceId == raceId);
-        if (entry != null && entry.JockeyId == invitation.JockeyId)
-        {
-            entry.JockeyId = null;
-            entry.JockeyConfirmed = false;
-        }
 
         await _unitOfWork.SaveChangesAsync();
 

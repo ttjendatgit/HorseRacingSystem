@@ -138,9 +138,16 @@ public class RaceEntryService : IRaceEntryService
         if (selfRegisteredEntries.Count > 0)
             await _unitOfWork.SaveChangesAsync();
 
-        var healthPassed = await _db.HorseHealthChecks
-            .Where(h => h.RaceId == raceId && h.ApprovedToRace && h.Status == HealthCheckStatus.Passed)
-            .Select(h => h.HorseId).Distinct().ToListAsync();
+        // R0.1: the LATEST health check per Horse+Race is authoritative — an
+        // older Passed check no longer clears a horse whose most recent
+        // check is Failed/RequiresRecheck (see report). One query for the
+        // whole race, grouped in-memory, avoids an N+1 per entry.
+        var healthChecksForRace = await _db.HorseHealthChecks
+            .Where(h => h.RaceId == raceId)
+            .ToListAsync();
+        var latestHealthCheckByHorseId = healthChecksForRace
+            .GroupBy(h => h.HorseId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(h => h.CheckedAt).First());
 
         var invalidReasons = new List<string>();
         foreach (var e in entries)
@@ -154,7 +161,11 @@ public class RaceEntryService : IRaceEntryService
             if (e.JockeyId == null) reasons.Add("Chưa chọn kỵ sĩ");
             if (e.ScratchedAt != null) reasons.Add("Ngựa đã bị rút lui (Scratched)");
             if (e.Horse?.ApprovalStatus != ApprovalStatus.Approved) reasons.Add("Hồ sơ ngựa chưa được Admin duyệt");
-            if (!healthPassed.Contains(e.HorseId)) reasons.Add("Chưa có kiểm tra sức khỏe Đạt/Đã phê duyệt");
+
+            var hasValidLatestHealthCheck = latestHealthCheckByHorseId.TryGetValue(e.HorseId, out var latestCheck)
+                && latestCheck.Status == HealthCheckStatus.Passed
+                && latestCheck.ApprovedToRace;
+            if (!hasValidLatestHealthCheck) reasons.Add("Chưa có kiểm tra sức khỏe Đạt/Đã phê duyệt (theo lần kiểm tra gần nhất)");
 
             if (e.JockeyId.HasValue && reasons.Count == 0)
             {

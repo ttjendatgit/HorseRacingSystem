@@ -532,7 +532,10 @@ public class RaceLifecycleTests
         var cancel = await f.RaceManagement.CancelRaceAsync(race.Id);
         Assert.True(cancel.Result.Success);
 
-        var prediction = (await f.PredictionRepo.GetByRaceAsync(race.Id)).Single();
+        // Fresh (AsNoTracking) read: PredictionRefundHelper claims via bulk ExecuteUpdateAsync,
+        // which bypasses the change tracker — a tracked PredictionRepo read would return the
+        // stale in-memory instance from AddPendingPredictionAsync.
+        var prediction = (await f.GetPredictionsFreshAsync(race.Id)).Single();
         Assert.Equal(PredictionStatus.Lost, prediction.Status); // refund marker, per existing convention
         Assert.Equal(walletBefore + 75m, await f.GetWalletBalanceAsync(spectatorId));
     }
@@ -575,6 +578,12 @@ public class RaceLifecycleTests
     {
         private readonly IWalletService _inner;
         public HashSet<Guid> FailForUserIds { get; } = new();
+        /// <summary>
+        /// Unlike FailForUserIds (throws), these users make AddPointsAsync return a Fail
+        /// ServiceResult WITHOUT throwing — proves callers correctly inspect
+        /// walletResult.Result.Success instead of only reacting to exceptions.
+        /// </summary>
+        public HashSet<Guid> FailResultForUserIds { get; } = new();
 
         public FaultInjectingWalletService(IWalletService inner) => _inner = inner;
 
@@ -585,6 +594,8 @@ public class RaceLifecycleTests
         {
             if (FailForUserIds.Contains(userId))
                 throw new InvalidOperationException($"Injected payout failure for user {userId}");
+            if (FailResultForUserIds.Contains(userId))
+                return Task.FromResult(ServiceResult<object>.Fail(400, $"Injected refund failure (no exception) for user {userId}"));
             return _inner.AddPointsAsync(userId, points, reference);
         }
 
@@ -661,6 +672,12 @@ public class RaceLifecycleTests
         public ITournamentRepository TournamentRepo { get; }
         public IRoundRepository RoundRepoPublic { get; }
         public FaultInjectingWalletService FaultWallet { get; private set; } = null!;
+        public IViolationRecordRepository ViolationRepo { get; }
+        public IProtestRepository ProtestRepo { get; }
+        public IHealthCheckRepository HealthCheckRepo { get; }
+        public IViolationRecordService ViolationSvc { get; }
+        public IProtestService ProtestSvc { get; }
+        public IRefereeHealthCheckService HealthCheckSvc { get; }
 
         private readonly IOwnerRepository _ownerRepo;
         private readonly IHorseRepository _horseRepo;
@@ -672,7 +689,11 @@ public class RaceLifecycleTests
         private readonly IRaceReportRepository _reportRepo;
         private readonly IWalletRepository _walletRepo;
         private Guid _refereeId;
+        private Guid _refereeUserId;
         private int _counter;
+
+        public Guid RefereeUserId => _refereeUserId;
+        public Guid RefereeId => _refereeId;
 
         private LifecycleFixture(SqliteConnection connection, ApplicationDbContext db)
         {
@@ -693,6 +714,9 @@ public class RaceLifecycleTests
             _assignmentRepo = new RefereeAssignmentRepository(db);
             _reportRepo = new RaceReportRepository(db);
             _walletRepo = new WalletRepository(db);
+            ViolationRepo = new ViolationRecordRepository(db);
+            ProtestRepo = new ProtestRepository(db);
+            HealthCheckRepo = new HealthCheckRepository(db);
 
             var config = new ConfigurationBuilder().Build();
             FaultWallet = new FaultInjectingWalletService(new WalletService(_walletRepo, _userRepo, UnitOfWork, config));
@@ -714,13 +738,22 @@ public class RaceLifecycleTests
                 _userRepo, new UserRegistrationRepository(db), _horseRepo, _jockeyRepo,
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
-                RaceResultRepo, EntryRepo, _reportRepo, new ViolationRecordRepository(db), UnitOfWork);
+                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, UnitOfWork);
+
+            ViolationSvc = new ViolationRecordService(
+                ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
+                new FakeNotificationService(), _userRepo, UnitOfWork);
+
+            ProtestSvc = new ProtestService(ProtestRepo, RaceRepo, UnitOfWork);
+
+            HealthCheckSvc = new RefereeHealthCheckService(
+                HealthCheckRepo, RaceRepo, _horseRepo, new RefereeRepository(db), UnitOfWork);
 
             TournamentRepo = _tournamentRepo;
             RoundRepoPublic = _roundRepo;
             TournamentSvc = new TournamentService(
                 _tournamentRepo, new FakeNotificationService(), _userRepo, RaceRepo, EntryRepo,
-                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork);
+                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork, walletService);
             RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
             RaceSvc = new RaceService(RaceRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
         }
@@ -758,6 +791,7 @@ public class RaceLifecycleTests
             var refereeUser = new User { Id = Guid.NewGuid(), Email = $"ref{n}@test.com", PasswordHash = "x", FullName = "Referee", Role = UserRole.Referee };
             var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUser.Id, LicenseNumber = $"LIC-{n}", IsActive = true };
             _refereeId = referee.Id;
+            _refereeUserId = refereeUser.Id;
 
             var winnerHorse = new Horse { Id = Guid.NewGuid(), Name = $"Winner{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
             var loserHorse = new Horse { Id = Guid.NewGuid(), Name = $"Loser{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };

@@ -56,6 +56,9 @@ public interface IRaceManagementService
 
     // Horse Release
     Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId);
+
+    // Q1: Qualification — generate Round N+1 RaceEntries from Round N's Official rankings
+    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId);
 }
 
 public interface IRefereeService

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   formatJockeyDate,
   getJockeyInvitations,
+  getJockeyAssignedRaces,
   normalizeInvitationStatus,
   respondJockeyInvitation,
   withdrawJockeyInvitation,
@@ -12,6 +13,7 @@ import "./JockeyInvitationPage.css";
 function JockeyInvitationPage() {
   const location = useLocation();
   const [invitations, setInvitations] = useState([]);
+  const [officialRaceIds, setOfficialRaceIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState(null);
   const [message, setMessage] = useState("");
@@ -19,9 +21,27 @@ function JockeyInvitationPage() {
   const [search, setSearch] = useState("");
 
   const loadInvitations = async () => {
-    try { setLoading(true); const d = await getJockeyInvitations(); setInvitations(d); setMessage(""); }
-    catch (e) { setMessage(e.message || "Không thể tải lời mời."); }
-    finally { setLoading(false); }
+    try {
+      setLoading(true);
+      const d = await getJockeyInvitations();
+      setInvitations(d);
+      setMessage("");
+    } catch (e) {
+      setMessage(e.message || "Không thể tải lời mời.");
+    } finally {
+      setLoading(false);
+    }
+    // J3.1: an Accepted invitation stays Accepted forever even after it becomes the official
+    // pairing (Owner Final Confirm never touches invitation.Status) — so "official" can only be
+    // known by cross-referencing the Jockey's own confirmed RaceEntry list, never from Status.
+    try {
+      const races = await getJockeyAssignedRaces();
+      setOfficialRaceIds(new Set((Array.isArray(races) ? races : [])
+        .filter((r) => r.jockeyConfirmed || r.JockeyConfirmed)
+        .map((r) => r.raceId ?? r.RaceId)));
+    } catch {
+      setOfficialRaceIds(new Set());
+    }
   };
 
   useEffect(() => {
@@ -170,7 +190,7 @@ function JockeyInvitationPage() {
           {filtered.map(inv => {
             const s = statusMeta(inv.status);
             const canRespond = getBucket(inv.status) === "pending";
-            const canWithdraw = getBucket(inv.status) === "accepted";
+            const canWithdraw = getBucket(inv.status) === "accepted" && !officialRaceIds.has(inv.raceId);
             return (
               <div key={inv.id} className={`ji-card ji-card--${s.cls}`}>
                 <div className="ji-card__main">
@@ -188,7 +208,9 @@ function JockeyInvitationPage() {
                     </div>
                   </div>
                   <div className="ji-card__right">
-                    <span className={`ji-badge ji-badge--${s.cls}`}>{s.label}</span>
+                    <span className={`ji-badge ji-badge--${s.cls}`}>
+                      {getBucket(inv.status) === "accepted" && officialRaceIds.has(inv.raceId) ? "Kỵ sĩ chính thức" : s.label}
+                    </span>
                   </div>
                 </div>
                 <div className="ji-card__extra">

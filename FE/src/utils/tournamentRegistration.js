@@ -36,6 +36,13 @@ export const TOURNAMENT_LIFECYCLE_LABELS = {
 export const getTournamentLifecycleLabel = (tournament) =>
   TOURNAMENT_LIFECYCLE_LABELS[normalizeTournamentStatus(tournament)] ?? "Không xác định";
 
+// V0.1: structural Tournament fields (MaxRounds, and per existing rules StartDate/EndDate/
+// MinParticipants/MaxParticipants) may only be edited while Draft — Published, Ongoing,
+// Finished, and Cancelled must all lock them alike, not just Published. Accepts a raw status
+// value (numeric TournamentStatus or its string name) rather than a whole tournament object, so
+// callers holding only the status (e.g. FE edit-form state) don't need to fabricate one.
+export const canEditTournamentStructure = (status) => normalizeTournamentStatus({ status }) === "Draft";
+
 // Tournament capacity gate: Approved TournamentHorseRegistration count vs Tournament.MaxParticipants.
 // Distinct from the deadline-based "closed" state — capacity being full must never be reported as
 // "Đã đóng đăng ký" (the deadline may still be open; capacity is the actual reason).
@@ -80,12 +87,22 @@ export const getTournamentRegistrationState = (tournament, now = new Date()) => 
 export const canRegisterTournament = (tournament, now) =>
   getTournamentRegistrationState(tournament, now).canRegister;
 
+// V0/V0.1: Final Round identity is RoundNumber === Tournament.MaxRounds — NEVER AdvanceCount === 0
+// (Draft data may temporarily hold AdvanceCount=0 on a non-final Round). Number() on both sides
+// guards against API/form state carrying either as a string.
+export const isFinalRound = (round, tournament) => {
+  const roundNumber = round?.roundNumber ?? round?.RoundNumber;
+  const maxRounds = tournament?.maxRounds ?? tournament?.MaxRounds;
+  if (roundNumber === null || roundNumber === undefined || maxRounds === null || maxRounds === undefined) return false;
+  return Number(roundNumber) === Number(maxRounds);
+};
+
 // T-D1: hard delete (DELETE /api/tournaments/{id}) is backend-rejected (409) for anything past
 // Draft — once Published/Ongoing/Finished/Cancelled, a Tournament is historical/auditable data.
 // This is FE affordance only (hide the "Xóa" button); the backend guard in
 // TournamentAndRoundService.DeleteTournamentAsync remains the authoritative check.
 export const canHardDeleteTournament = (tournament) =>
-  normalizeTournamentStatus(tournament) === "Draft";
+  ["Draft", "Cancelled"].includes(normalizeTournamentStatus(tournament));
 
 // "Giải đấu đã đủ X/Y ngựa tham gia.\nHẹn bạn ở giải đấu tiếp theo." — only meaningful once the
 // Tournament is actually at/over capacity; returns null otherwise so callers don't need to guard.

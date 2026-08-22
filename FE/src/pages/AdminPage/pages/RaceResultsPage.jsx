@@ -1,6 +1,8 @@
 ﻿import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
 import { apiToVNDate } from "../../../utils/vnDateTime";
+import { isFinalRound } from "../../../utils/tournamentRegistration";
+import { getPlacementLabel, getRankedEntries } from "../../../utils/raceResultDisplay";
 
 // RaceStatus — event lifecycle only. Retained numeric values (see BE Enums.cs).
 const STATUS_NUM = {
@@ -81,16 +83,48 @@ export default function RaceResultsPage() {
               const resultStatus = (
                 resultData?.resultStatus ?? resultData?.ResultStatus ?? ""
               ).toLowerCase();
+              const isOfficial = resultStatus === "official";
               const winnerHorseId =
                 resultData?.winningHorseId ?? resultData?.WinningHorseId;
               const winnerEntry = entries.find(
                 (e) => (e.horseId ?? e.HorseId) === winnerHorseId,
               );
+
+              // Q1-UX: full ranking, sourced from RaceResultResponse.Rankings — the backend's own
+              // parse of the canonical RaceResult.RankingsJson (Q1's qualification authority),
+              // never RaceEntry.FinishPosition. Only built once Official; Provisional keeps the
+              // existing winner-only summary below.
+              const tournamentId = race.tournamentId ?? race.TournamentId;
+              const tournament = tournamentList.find(
+                (t) => (t.id ?? t.Id) === tournamentId,
+              );
+              const isFinal = isFinalRound(race, tournament);
+              const qualificationSlots = race.qualificationSlots ?? race.QualificationSlots;
+              const rankings = resultData?.rankings ?? resultData?.Rankings ?? [];
+              const rankedEntries = isOfficial
+                ? getRankedEntries(rankings).map((r) => {
+                    const horseId = r.horseId ?? r.HorseId;
+                    const entry = entries.find(
+                      (e) => (e.horseId ?? e.HorseId) === horseId,
+                    );
+                    const position = r.position ?? r.Position;
+                    return {
+                      position,
+                      horseId,
+                      horseName:
+                        r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName,
+                      jockeyName: entry?.jockeyName ?? entry?.JockeyName,
+                      label: getPlacementLabel({ position, isFinal, qualificationSlots }),
+                    };
+                  })
+                : [];
+
               return {
                 race,
                 det: {
                   entries,
                   resultStatus,
+                  rankedEntries,
                   winnerHorseName:
                     winnerEntry?.horseName ??
                     winnerEntry?.HorseName ??
@@ -106,7 +140,7 @@ export default function RaceResultsPage() {
                 },
               };
             } catch {
-              return { race, det: { entries: [], resultStatus: "", winnerHorseName: null } };
+              return { race, det: { entries: [], resultStatus: "", rankedEntries: [], winnerHorseName: null } };
             }
           }),
         );
@@ -169,7 +203,7 @@ export default function RaceResultsPage() {
         Kết quả cuộc đua
       </h1>
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--hr-muted)" }}>
-        Ngựa và kỵ sĩ chiến thắng theo từng giải đấu.
+        Bảng xếp hạng đầy đủ của từng cuộc đua theo giải đấu.
       </p>
 
       {groups.length === 0 ? (
@@ -298,7 +332,34 @@ export default function RaceResultsPage() {
                         paddingTop: 10,
                       }}
                     >
-                      {hasWinner ? (
+                      {det.rankedEntries?.length > 0 ? (
+                        <div style={{ display: "grid", gap: 5 }}>
+                          {det.rankedEntries.map((r) => {
+                            const color =
+                              r.label === "Bị loại"
+                                ? "var(--hr-danger)"
+                                : r.label === "Đi tiếp" || r.label === "Vô địch"
+                                  ? "var(--hr-success)"
+                                  : "var(--hr-text)";
+                            return (
+                              <div key={r.horseId} style={{ fontSize: 12 }}>
+                                <span style={{ color: "var(--hr-paper)", fontWeight: r.position === 1 ? 700 : 600 }}>
+                                  {r.position === 1 ? "🏆 " : `#${r.position} `}
+                                  {r.horseName ?? "Chưa xác định"}
+                                </span>
+                                {r.jockeyName ? (
+                                  <span style={{ color: "var(--hr-muted)" }}> · {r.jockeyName}</span>
+                                ) : null}
+                                {r.label ? (
+                                  <span style={{ marginLeft: 6, fontWeight: 700, color }}>{r.label}</span>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : hasWinner ? (
+                        // Legacy safety: Official but no usable Rankings (pre-R0 data) — winner-only
+                        // fallback rather than a blank result.
                         <>
                           <div style={{ fontSize: 13, color: "var(--hr-success)", fontWeight: 700 }}>
                             🏆 {det.winnerHorseName}

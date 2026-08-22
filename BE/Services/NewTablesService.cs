@@ -54,11 +54,28 @@ public class PrizeService : IPrizeService
 public class ProtestService : IProtestService
 {
     private readonly IProtestRepository _repo;
+    private readonly IRaceRepository _raceRepo;
     private readonly IUnitOfWork _uow;
-    public ProtestService(IProtestRepository repo, IUnitOfWork uow) { _repo = repo; _uow = uow; }
+    public ProtestService(IProtestRepository repo, IRaceRepository raceRepo, IUnitOfWork uow)
+    {
+        _repo = repo;
+        _raceRepo = raceRepo;
+        _uow = uow;
+    }
 
     public async Task<ServiceResult<ProtestResponse>> FileAsync(CreateProtestRequest r, Guid userId)
     {
+        // R0.1: at minimum, an Official result and a Cancelled race must not
+        // accept a new Protest — no evidence in current FE/business supports
+        // a narrower race-status window than that, so nothing more is added.
+        var race = await _raceRepo.GetByIdAsync(r.RaceId);
+        if (race == null)
+            return ServiceResult<ProtestResponse>.Fail(404, "Không tìm thấy cuộc đua");
+        if (race.Result?.Status == RaceResultStatus.Official)
+            return ServiceResult<ProtestResponse>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi khiếu nại.");
+        if (race.Status == RaceStatus.Cancelled)
+            return ServiceResult<ProtestResponse>.Fail(400, "Không thể khiếu nại cuộc đua đã bị hủy.");
+
         var protest = new Protest
         {
             Id = Guid.NewGuid(), RaceId = r.RaceId, FiledByUserId = userId,
@@ -80,6 +97,13 @@ public class ProtestService : IProtestService
     {
         var protest = await _repo.GetByIdAsync(id);
         if (protest == null) return ServiceResult<ProtestResponse>.Fail(404, "Không tìm thấy khiếu nại");
+
+        // R0.1: post-Official immutability — ruling a Protest must not be
+        // able to imply the ranking should change once the Result is
+        // already Official.
+        var race = await _raceRepo.GetByIdAsync(protest.RaceId);
+        if (race?.Result?.Status == RaceResultStatus.Official)
+            return ServiceResult<ProtestResponse>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi khiếu nại.");
 
         protest.Status = r.Ruling.Contains("Upheld", StringComparison.OrdinalIgnoreCase) ? ProtestStatus.Upheld : ProtestStatus.Rejected;
         protest.Ruling = r.Ruling;

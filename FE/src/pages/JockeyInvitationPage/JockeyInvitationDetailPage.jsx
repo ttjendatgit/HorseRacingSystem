@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   formatJockeyDate,
   getJockeyInvitations,
+  getJockeyAssignedRaces,
   normalizeInvitationStatus,
   respondJockeyInvitation,
   withdrawJockeyInvitation,
@@ -28,6 +29,28 @@ function JockeyInvitationDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [isOfficial, setIsOfficial] = useState(false);
+
+  // J3.1: an Accepted invitation stays Accepted forever even after it becomes the official
+  // pairing (Owner Final Confirm never touches invitation.Status) — so "official" can only be
+  // known by cross-referencing the Jockey's own confirmed RaceEntry list, never from Status.
+  useEffect(() => {
+    let cancelled = false;
+    const raceId = invitation?.raceId;
+    if (!raceId) {
+      setIsOfficial(false);
+      return;
+    }
+    getJockeyAssignedRaces()
+      .then((races) => {
+        if (cancelled) return;
+        const official = (Array.isArray(races) ? races : []).some((r) =>
+          (r.raceId ?? r.RaceId) === raceId && (r.jockeyConfirmed || r.JockeyConfirmed));
+        setIsOfficial(official);
+      })
+      .catch(() => { if (!cancelled) setIsOfficial(false); });
+    return () => { cancelled = true; };
+  }, [invitation?.raceId]);
 
   useEffect(() => {
     if (invitation) return;
@@ -227,7 +250,7 @@ function JockeyInvitationDetailPage() {
                       {submitting ? "Đang xử lý..." : "Chấp nhận lời mời"}
                     </button>
                   </div>
-                ) : normalizeInvitationStatus(invitation.status) === "Accepted" ? (
+                ) : normalizeInvitationStatus(invitation.status) === "Accepted" && !isOfficial ? (
                   <div className="jockey-withdraw-form">
                     <textarea
                       value={withdrawReason}
@@ -245,6 +268,10 @@ function JockeyInvitationDetailPage() {
                       {submitting ? "Đang xử lý..." : "Xác nhận xin rút"}
                     </button>
                   </div>
+                ) : normalizeInvitationStatus(invitation.status) === "Accepted" && isOfficial ? (
+                  <span className="jockey-response-completed">
+                    Bạn đã là kỵ sĩ chính thức cho cuộc đua này — không thể xin rút.
+                  </span>
                 ) : (
                   <span className="jockey-response-completed">
                     Lời mời này {statusLabel.toLowerCase()}.

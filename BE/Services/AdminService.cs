@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Transactions;
 using HorseRacing.Dtos;
@@ -30,6 +29,7 @@ public class AdminService : IAdminService
     private readonly IRaceEntryRepository _entryRepo;
     private readonly IRaceReportRepository _reportRepo;
     private readonly IViolationRecordRepository _violationRepo;
+    private readonly IProtestRepository _protestRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public AdminService(
@@ -48,6 +48,7 @@ public class AdminService : IAdminService
         IRaceEntryRepository entryRepo,
         IRaceReportRepository reportRepo,
         IViolationRecordRepository violationRepo,
+        IProtestRepository protestRepo,
         IUnitOfWork unitOfWork)
     {
         _userRepo = userRepo;
@@ -65,6 +66,7 @@ public class AdminService : IAdminService
         _entryRepo = entryRepo;
         _reportRepo = reportRepo;
         _violationRepo = violationRepo;
+        _protestRepo = protestRepo;
         _unitOfWork = unitOfWork;
     }
 
@@ -579,6 +581,23 @@ public class AdminService : IAdminService
             if (!hasReport)
                 return ServiceResult<bool>.Fail(400, "Chưa có báo cáo từ trọng tài. Trọng tài phải nộp báo cáo trước khi duyệt kết quả.");
 
+            // R0.1: Result must not become Official while unresolved race
+            // issues still exist — Official Rankings are the future source
+            // for Betting/Q1/Prize, so any legitimate correction must happen
+            // via a Provisional resubmit BEFORE approval, not after.
+            // Unresolved Violation: current schema has no Status field —
+            // resolution is inferred from Penalty being non-blank (matches
+            // AdminService.ResolveViolationAsync, the only writer of Penalty).
+            var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
+            if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.Penalty)))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
+
+            // Unresolved Protest: Pending/UnderReview are open; Upheld/
+            // Rejected/Withdrawn are terminal and never block approval.
+            var protestsForRace = await _protestRepo.GetByRaceAsync(raceId);
+            if (protestsForRace.Any(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn khiếu nại chưa được giải quyết.");
+
             // R0: defensively re-parse and re-validate the stored ranking
             // before committing anything to Official — a stale/malformed
             // RankingsJson (e.g. entries changed since Provisional submit)
@@ -588,7 +607,7 @@ public class AdminService : IAdminService
             List<RaceResultRankingItemRequest> ranking;
             try
             {
-                ranking = ParseAndValidateStoredRanking(raceResult.RankingsJson, raceResult.WinningHorseId, entries);
+                ranking = RaceResultRankingValidator.ParseAndValidate(raceResult.RankingsJson, raceResult.WinningHorseId, entries);
             }
             catch (InvalidOperationException ex)
             {
@@ -657,65 +676,6 @@ public class AdminService : IAdminService
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi phê duyệt kết quả: {ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// R0: re-derives and re-validates the ranking stored at Provisional
-    /// submission time, immediately before it is committed as Official.
-    /// Guards against the entry set having changed since submission (stale
-    /// RankingsJson) and against any malformed stored JSON — throws
-    /// InvalidOperationException with a clean Vietnamese message on any
-    /// problem, which the caller turns into a 400 rather than a partial
-    /// apply or an unhandled DB exception.
-    /// </summary>
-    private static List<RaceResultRankingItemRequest> ParseAndValidateStoredRanking(
-        string? rankingsJson, Guid winningHorseId, List<RaceEntry> participants)
-    {
-        if (string.IsNullOrWhiteSpace(rankingsJson))
-            throw new InvalidOperationException("Kết quả này không có bảng xếp hạng hợp lệ để duyệt.");
-
-        List<RaceResultRankingItemRequest>? items;
-        try
-        {
-            items = JsonSerializer.Deserialize<List<RaceResultRankingItemRequest>>(rankingsJson);
-        }
-        catch (JsonException)
-        {
-            throw new InvalidOperationException("Bảng xếp hạng đã lưu không hợp lệ và không thể duyệt.");
-        }
-
-        if (items == null || items.Count == 0)
-            throw new InvalidOperationException("Bảng xếp hạng đã lưu không hợp lệ và không thể duyệt.");
-
-        var participantIds = participants.Select(p => p.HorseId).ToHashSet();
-        var seenHorseIds = new HashSet<Guid>();
-        var seenPositions = new HashSet<int>();
-        foreach (var item in items)
-        {
-            if (!participantIds.Contains(item.HorseId) ||
-                item.Position <= 0 ||
-                !seenHorseIds.Add(item.HorseId) ||
-                !seenPositions.Add(item.Position))
-            {
-                throw new InvalidOperationException(
-                    "Bảng xếp hạng đã lưu không còn khớp với danh sách ngựa tham gia cuộc đua này. Trọng tài phải nộp lại kết quả.");
-            }
-        }
-
-        if (items.Count != participants.Count ||
-            !seenPositions.SetEquals(Enumerable.Range(1, items.Count)))
-        {
-            throw new InvalidOperationException(
-                "Bảng xếp hạng đã lưu không còn khớp với danh sách ngựa tham gia cuộc đua này. Trọng tài phải nộp lại kết quả.");
-        }
-
-        var winner = items.Single(i => i.Position == 1);
-        if (winner.HorseId != winningHorseId)
-        {
-            throw new InvalidOperationException("Ngựa thắng cuộc không khớp với vị trí 1 trong bảng xếp hạng đã lưu.");
-        }
-
-        return items;
     }
 
     public async Task<ServiceResult<object>> GetPredictionsAsync()
@@ -806,6 +766,13 @@ public class AdminService : IAdminService
 
             if (!string.IsNullOrWhiteSpace(violation.Penalty))
                 return ServiceResult<bool>.Fail(400, "Vi phạm này đã được xử lý trước đó.");
+
+            // R0.1: post-Official immutability — resolving a Violation must
+            // not be able to imply the ranking should change once the
+            // Result is already Official.
+            var raceForViolation = await _raceRepo.GetByIdAsync(violation.RaceId);
+            if (raceForViolation?.Result?.Status == RaceResultStatus.Official)
+                return ServiceResult<bool>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi xử lý vi phạm.");
 
             violation.Penalty = penalty;
             await _violationRepo.UpdateAsync(violation);
