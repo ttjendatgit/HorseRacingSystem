@@ -34,6 +34,7 @@ import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
 import { canEditTournamentStructure, canHardDeleteTournament, getTournamentLifecycleLabel, isFinalRound } from "../../utils/tournamentRegistration";
+import { getPlacementLabel, getRankedEntries } from "../../utils/raceResultDisplay";
 import {
   PrizeManagement,
   ProtestManagement,
@@ -1363,20 +1364,41 @@ function ScheduleManagement({ type }) {
           <option value="">Chọn cuộc đua để phân công ngựa</option>
           {items.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}
         </select>
-        <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
-          <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
-          {visibleHorses.map((horse) => {
-            const horseId = horse.id ?? horse.Id;
-            const isInThisRace = assignedHorseIds.has(horseId);
-            const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
-            const isDisabled = isInThisRace || isBusyElsewhere;
-            const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
-            return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
-              {horse.name ?? horse.Name}{label}
-            </option>;
-          })}
-        </select>
-        <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+        {(() => {
+          const selectedRace = items.find((item) => (item.id ?? item.Id) === assignment.raceId);
+          const selectedRoundNumber = selectedRace ? (selectedRace.roundNumber ?? selectedRace.RoundNumber) : null;
+          // Q1-UX: manual Horse->Race assignment is only valid for RoundNumber == 1 — the backend
+          // already rejects it for Round2+ (those RaceEntries can only come from
+          // POST rounds/{roundId}/generate-next). Hide the ENTIRE Horse-selection flow rather than
+          // filtering eliminated horses, so no horse — including a genuine qualifier — is ever
+          // manually assignable to Round2+.
+          if (assignment.raceId && selectedRoundNumber != null && selectedRoundNumber > 1) {
+            return (
+              <p style={{margin:"8px 0",padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)",color:"var(--hr-success)",fontSize:13}}>
+                Ngựa ở vòng này được xác định tự động từ kết quả chính thức của vòng trước.<br />
+                Không thể phân công ngựa thủ công.
+              </p>
+            );
+          }
+          return (
+            <>
+              <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
+                <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
+                {visibleHorses.map((horse) => {
+                  const horseId = horse.id ?? horse.Id;
+                  const isInThisRace = assignedHorseIds.has(horseId);
+                  const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
+                  const isDisabled = isInThisRace || isBusyElsewhere;
+                  const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
+                  return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
+                    {horse.name ?? horse.Name}{label}
+                  </option>;
+                })}
+              </select>
+              <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+            </>
+          );
+        })()}
       </form>}
 
       <section className="admin-card-grid">{items.map((item) => {
@@ -1587,17 +1609,58 @@ function ScheduleManagement({ type }) {
                 const isOfficial = resultStatusVal === "official";
                 const winnerHorseId = raceResult.winningHorseId ?? raceResult.WinningHorseId;
                 const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
+
+                // Q1-UX: full ranking, sourced from RaceResultResponse.Rankings — the backend's
+                // own parse of the canonical RaceResult.RankingsJson (Q1's qualification
+                // authority), never RaceEntry.FinishPosition. Only rendered once Official —
+                // Provisional keeps the existing winner-only summary below (a full "Đi tiếp/Bị
+                // loại" ranking must never be presented before Admin approval finalizes it).
+                const rankings = raceResult.rankings ?? raceResult.Rankings ?? [];
+                const rankedEntries = isOfficial
+                  ? getRankedEntries(rankings).map((r) => {
+                      const horseId = r.horseId ?? r.HorseId;
+                      const entry = raceEntries.find((e) => (e.horseId ?? e.HorseId) === horseId);
+                      return {
+                        position: r.position ?? r.Position,
+                        horseId,
+                        horseName: r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName,
+                        jockeyName: entry?.jockeyName ?? entry?.JockeyName,
+                      };
+                    })
+                  : [];
+                const isFinal = isFinalRound(item, selectedTournament);
+                const qualificationSlots = item.qualificationSlots ?? item.QualificationSlots;
+
                 return (
                   <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`}}>
                     <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>
                       {isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}
                     </h4>
-                    <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
-                      {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
-                      {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
-                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
-                      {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <span style={{display:"block",fontSize:12,color:"var(--hr-danger)",marginTop:4}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</span> : null}
-                    </p>
+                    {isOfficial && rankedEntries.length > 0 ? (
+                      <div style={{display:"grid",gap:4}}>
+                        {rankedEntries.map((r) => {
+                          const label = getPlacementLabel({ position: r.position, isFinal, qualificationSlots });
+                          const color = label === "Bị loại" ? "var(--hr-danger)" : (label === "Đi tiếp" || isFinal) ? "var(--hr-success)" : "var(--hr-muted)";
+                          const icon = label === "Đi tiếp" ? "✓ " : label === "Bị loại" ? "✕ " : "";
+                          return (
+                            <p key={r.horseId} style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
+                              {r.position === 1 ? "🏆" : `#${r.position}`} <strong>{r.horseName ?? "Chưa xác định"}</strong>
+                              {r.jockeyName ? <span> — Kỵ sĩ: {r.jockeyName}</span> : null}
+                              {label ? <span style={{marginLeft:8,fontWeight:600,color}}>{icon}{label}</span> : null}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      // Legacy safety: Official but no usable Rankings (pre-R0 data), or still
+                      // Provisional — winner-only fallback rather than a blank result.
+                      <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
+                        {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
+                        {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
+                      </p>
+                    )}
+                    {raceResult.notes ?? raceResult.Notes ? <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</p> : null}
+                    {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-danger)"}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</p> : null}
                   </div>
                 );
               })()}
