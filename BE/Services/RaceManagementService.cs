@@ -686,6 +686,11 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, $"Không thể bắt đầu cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải ở trạng thái chuẩn bị trước khi bắt đầu.");
             }
 
+            if (race.Tournament?.Status != TournamentStatus.Ongoing)
+            {
+                return ServiceResult<bool>.Fail(409, "Giải đấu phải ở trạng thái đang diễn ra trước khi bắt đầu cuộc đua.");
+            }
+
             var entries = await _entryRepo.GetByRaceAsync(raceId);
             if (entries.Count == 0)
             {

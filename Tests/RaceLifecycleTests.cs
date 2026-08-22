@@ -796,6 +796,8 @@ public class RaceLifecycleTests
             var winnerHorse = new Horse { Id = Guid.NewGuid(), Name = $"Winner{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
             var loserHorse = new Horse { Id = Guid.NewGuid(), Name = $"Loser{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
 
+            // CreateRaceAsync requires the Tournament to still be Draft, so it is seeded that way
+            // (the model default) and only flipped to Ongoing afterward — see R1a note below.
             var tournament = new Tournament { Id = Guid.NewGuid(), Name = $"Tournament{n}", StartDate = now, EndDate = now.AddDays(7) };
             var round = new Round { Id = Guid.NewGuid(), Name = "Round 1", TournamentId = tournament.Id, RoundNumber = 1, ScheduledStartDate = now, ScheduledEndDate = now.AddDays(1) };
 
@@ -812,6 +814,11 @@ public class RaceLifecycleTests
                 Distance = 1200
             });
             var raceId = createResult.Result.Data!.Id;
+
+            // R1a: StartRace now requires the parent Tournament to be Ongoing — this helper is
+            // named "ready to start", so the seeded Tournament must already satisfy that gate.
+            tournament.Status = TournamentStatus.Ongoing;
+            tournament.IsActive = true;
 
             var winnerEntry = new RaceEntry
             {
