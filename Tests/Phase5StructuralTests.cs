@@ -42,6 +42,15 @@ public class Phase5StructuralTests
     private static Task<ServiceResult<TournamentResponse>> PublishAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
         => f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
 
+    // S-TEST: publishes then advances Published -> Ongoing (the only valid transition into Ongoing),
+    // so Round/Race mutation guards can be proven for Ongoing specifically, not just Published.
+    private static async Task<ServiceResult<TournamentResponse>> MoveToOngoingAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
+    {
+        var publish = await PublishAsync(f, tournamentId);
+        Assert.True(publish.Result.Success, publish.Result.Message);
+        return await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Ongoing }, Guid.NewGuid());
+    }
+
     /// <summary>Single-Round Tournament (Round 1 = Final, §12.3) with no Race yet — cheap base for tests focused on a single Race's own checks (Track, MaxParticipants, QualificationSlots, schedule).</summary>
     private static async Task<(Guid tournamentId, Guid roundId, DateTime roundStart, DateTime roundEnd)> BuildDraftSingleFinalRoundAsync(
         RaceLifecycleTests.LifecycleFixture f, int maxParticipants = 5, int minParticipants = 3, int maxRounds = 1)
@@ -222,6 +231,35 @@ public class Phase5StructuralTests
         var (tournamentId, round1Id, round2Id, _, _) = await BuildValidPublishableTournamentAsync(f);
         var publish = await PublishAsync(f, tournamentId);
         Assert.True(publish.Result.Success, publish.Result.Message);
+
+        var create = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "X", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = DateTime.UtcNow.AddDays(30), ScheduledEndDate = DateTime.UtcNow.AddDays(31)
+        });
+        Assert.False(create.Result.Success);
+        Assert.Equal(400, create.StatusCode);
+
+        var update = await f.RoundSvc.UpdateRoundAsync(round1Id, new UpdateRoundRequest { Name = "Changed" });
+        Assert.False(update.Result.Success);
+        Assert.Equal(400, update.StatusCode);
+
+        var delete = await f.RoundSvc.DeleteRoundAsync(round1Id);
+        Assert.False(delete.Result.Success);
+        Assert.Equal(400, delete.StatusCode);
+    }
+
+    // S-TEST: same guard code as RoundMutation_Published_Rejected (TournamentAndRoundService.cs
+    // checks `tournament.Status != TournamentStatus.Draft`, not `== Published`), but Ongoing was
+    // previously proven only by reading the guard condition, not by a dedicated test — this closes
+    // that coverage gap without touching production code.
+    [Fact]
+    public async Task RoundMutation_Ongoing_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, round1Id, round2Id, _, _) = await BuildValidPublishableTournamentAsync(f);
+        var ongoing = await MoveToOngoingAsync(f, tournamentId);
+        Assert.True(ongoing.Result.Success, ongoing.Result.Message);
 
         var create = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
         {
@@ -1330,6 +1368,35 @@ public class Phase5StructuralTests
         var create = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
         {
             Name = "Post-publish Race", TournamentId = tournamentId, RoundId = round1Id,
+            ScheduledAt = DateTime.UtcNow.AddDays(30), TrackId = track, MaxParticipants = 5, QualificationSlots = 0
+        });
+        Assert.False(create.Result.Success);
+        Assert.Equal(400, create.StatusCode);
+
+        var update = await f.RaceManagement.UpdateRaceAsync(race1Id, new UpdateRaceRequest { Name = "Changed" });
+        Assert.False(update.Result.Success);
+        Assert.Equal(400, update.StatusCode);
+
+        var delete = await f.RaceManagement.DeleteRaceAsync(race1Id);
+        Assert.False(delete.Result.Success);
+        Assert.Equal(400, delete.StatusCode);
+    }
+
+    // S-TEST: same guard code as RaceMutation_Published_Rejected (RaceManagementService.cs checks
+    // `race.Tournament.Status != TournamentStatus.Draft`, not `== Published`) — proves Ongoing by
+    // dedicated test rather than by reading the guard condition alone.
+    [Fact]
+    public async Task RaceMutation_Ongoing_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (tournamentId, round1Id, _, race1Id, _) = await BuildValidPublishableTournamentAsync(f);
+        var ongoing = await MoveToOngoingAsync(f, tournamentId);
+        Assert.True(ongoing.Result.Success, ongoing.Result.Message);
+
+        var track = await CreateTrackAsync(f, capacity: 5);
+        var create = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
+        {
+            Name = "Post-ongoing Race", TournamentId = tournamentId, RoundId = round1Id,
             ScheduledAt = DateTime.UtcNow.AddDays(30), TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
         Assert.False(create.Result.Success);

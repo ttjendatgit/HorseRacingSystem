@@ -717,12 +717,12 @@ public class HorseService : IHorseService
 
         // BUSINESS PIVOT: one Jockey is paired with one Horse for that Horse's ENTIRE Tournament
         // journey (not just one Race) — Owner Final Confirm establishes this pairing once, and it
-        // is then immutable for the Tournament. Schedule/overlap comparison no longer applies: a
-        // Jockey can never hold two different official Horses in the same Tournament regardless of
-        // Race timing, and can never be official in two different active Tournaments at all, so
-        // there is nothing left to overlap-check. Future Qualification (not implemented here) will
-        // carry HorseId+JockeyId forward into each new-round RaceEntry automatically — Owner never
-        // re-picks a Jockey for a Horse that already has one in this Tournament.
+        // is then immutable for the Tournament. Within the SAME Tournament this stays a pure
+        // identity rule (never Race-timing based, see checks 5/6 below). ACROSS Tournaments
+        // (J-CROSS, check 7) the Jockey may now hold official pairings in multiple Published/
+        // Ongoing Tournaments at once, gated by whether their Race schedules actually overlap.
+        // Q1 carries HorseId+JockeyId forward into each new-round RaceEntry automatically — Owner
+        // never re-picks a Jockey for a Horse that already has one in this Tournament.
         var targetTournamentId = entry.Race.TournamentId;
 
         // 5: does this Horse already have an official Jockey somewhere in this Tournament? Covers
@@ -755,20 +755,57 @@ public class HorseService : IHorseService
                 "Kỵ sĩ này đã được ghép chính thức với một ngựa khác trong giải đấu.");
         }
 
-        // 7: one-active-Tournament-per-Jockey lock. A different Tournament that is still
-        // Published/Ongoing locks the Jockey. A Finished/Cancelled Tournament never locks — its
-        // historical RaceEntry.JockeyId is left untouched by design.
-        var lockedInDifferentTournament = jockeyOfficialAssignments.Any(other =>
-            other.Race != null &&
-            other.Race.TournamentId != targetTournamentId &&
-            other.Race.Tournament != null &&
-            (other.Race.Tournament.Status == TournamentStatus.Published ||
-             other.Race.Tournament.Status == TournamentStatus.Ongoing));
-        if (lockedInDifferentTournament)
+        // 7 (J-CROSS): cross-Tournament SCHEDULE-OVERLAP lock, replacing the old global
+        // one-active-Tournament-per-Jockey lock. A Jockey may now be officially paired in several
+        // Published/Ongoing Tournaments at once, as long as none of their Race schedules overlap.
+        // A Finished/Cancelled Tournament never locks — its historical RaceEntry.JockeyId is left
+        // untouched by design (unchanged from before).
+        //
+        // Do NOT compare only the current Race: official pairing carries forward for the Horse's
+        // entire Tournament journey, and Q1 propagates the same JockeyId into Round2+/Final
+        // RaceEntries automatically without re-running Final Confirm. Round/Race structure for
+        // every round (including Final) already exists before Publish and is backend-immutable
+        // once the Tournament leaves Draft, so comparing the two Tournaments' FULL immutable Race
+        // schedule sets here safely catches a future-round collision even when neither Tournament
+        // has RaceEntries yet for the colliding Race (e.g. two Finals landing on the same day while
+        // each Tournament's Round1 does not overlap).
+        var otherLockedTournamentIds = jockeyOfficialAssignments
+            .Where(other =>
+                other.Race != null &&
+                other.Race.TournamentId != targetTournamentId &&
+                other.Race.Tournament != null &&
+                (other.Race.Tournament.Status == TournamentStatus.Published ||
+                 other.Race.Tournament.Status == TournamentStatus.Ongoing))
+            .Select(other => other.Race!.TournamentId)
+            .Distinct()
+            .ToList();
+
+        if (otherLockedTournamentIds.Count > 0)
         {
-            return ServiceResult<object>.Fail(
-                StatusCodes.Status409Conflict,
-                "Kỵ sĩ này đang được phân công chính thức trong một giải đấu khác.");
+            var scheduleWindows = await _races.GetScheduleWindowsByTournamentsAsync(
+                otherLockedTournamentIds.Append(targetTournamentId));
+
+            var targetSchedule = scheduleWindows.TryGetValue(targetTournamentId, out var targetWindows)
+                ? targetWindows
+                : new List<(DateTime Start, DateTime End)>();
+
+            var hasCrossTournamentScheduleOverlap = otherLockedTournamentIds.Any(otherTournamentId =>
+            {
+                var otherSchedule = scheduleWindows.TryGetValue(otherTournamentId, out var otherWindows)
+                    ? otherWindows
+                    : new List<(DateTime Start, DateTime End)>();
+
+                // Standard overlap formula: existing.Start < candidate.End AND candidate.Start < existing.End.
+                // Back-to-back windows (A ends exactly when B starts) are NOT an overlap.
+                return targetSchedule.Any(t => otherSchedule.Any(o => t.Start < o.End && o.Start < t.End));
+            });
+
+            if (hasCrossTournamentScheduleOverlap)
+            {
+                return ServiceResult<object>.Fail(
+                    StatusCodes.Status409Conflict,
+                    "Kỵ sĩ này đã được phân công ở một giải đấu khác có lịch thi đấu trùng.");
+            }
         }
 
         // 8: only RaceEntry.JockeyId/JockeyConfirmed are mutated — OwnerConfirmed and every other
