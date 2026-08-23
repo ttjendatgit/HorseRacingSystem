@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  approveJockey,
   assignHorseToRace,
   cancelRace,
   createRound,
@@ -23,7 +22,6 @@ import {
   getPendingRaceEntries,
   approveRaceEntry,
   rejectRaceEntry,
-  rejectJockey,
   setUserActive,
   startRace,
   updateOwnerHorseStatus,
@@ -35,6 +33,8 @@ import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
 import { canEditTournamentStructure, canHardDeleteTournament, getTournamentLifecycleLabel, isFinalRound } from "../../utils/tournamentRegistration";
 import { getPlacementLabel, getRankedEntries } from "../../utils/raceResultDisplay";
+import { groupJockeysByApprovalStatus } from "../../utils/jockeyAdminReview";
+import JockeyReviewModal from "../../components/JockeyReviewModal";
 import {
   PrizeManagement,
   ProtestManagement,
@@ -692,9 +692,18 @@ function HorseDetail() {
   );
 }
 
+const JOCKEY_TAB_EMPTY_MESSAGE = {
+  pending: "Không có kỵ sĩ nào đang chờ duyệt.",
+  approved: "Chưa có kỵ sĩ nào được duyệt.",
+  rejected: "Chưa có kỵ sĩ nào bị từ chối.",
+  all: "Không tìm thấy tài khoản kỵ sĩ nào.",
+};
+
 function Roles() {
   const [jockeys, setJockeys] = useState([]);
   const [message, setMessage] = useState("");
+  const [reviewJockeyId, setReviewJockeyId] = useState(null);
+  const [activeTab, setActiveTab] = useState("pending");
 
   const loadJockeys = () =>
     getAvailableJockeys()
@@ -705,33 +714,65 @@ function Roles() {
     loadJockeys();
   }, []);
 
-  const updateJockeyStatus = async (jockey, approved) => {
-    try {
-      if (approved) {
-        await approveJockey(jockey.id);
-      } else {
-        const reason = window.prompt("Lý do từ chối kỵ sĩ này?");
-        if (reason === null) return;
-        await rejectJockey(jockey.id, reason || "Bị từ chối bởi quản trị viên");
-      }
+  // J-ADMIN-REVIEW: Approve/Reject now happen inside JockeyReviewModal, not directly on a table
+  // row — this table is a triage view (who needs a decision, filtered by tab), not the decision
+  // UI itself. Default tab is Pending so the verification queue is what Admin sees first.
+  const groups = groupJockeysByApprovalStatus(jockeys);
+  const TABS = [
+    { key: "pending", label: "Chờ duyệt", list: groups.pending },
+    { key: "approved", label: "Đã duyệt", list: groups.approved },
+    { key: "rejected", label: "Từ chối", list: groups.rejected },
+    { key: "all", label: "Tất cả", list: groups.all },
+  ];
+  const activeList = TABS.find((t) => t.key === activeTab)?.list ?? [];
 
-      setMessage(
-        `${jockey.fullName} ${approved ? "đã phê duyệt" : "đã từ chối"} thành công.`,
-      );
-      loadJockeys();
-    } catch (err) {
-      setMessage(err.message);
-    }
+  const closeReview = () => setReviewJockeyId(null);
+  const onReviewChanged = () => {
+    setMessage("Đã cập nhật trạng thái kỵ sĩ.");
+    loadJockeys();
   };
 
   return (
     <>
       <Notice message={message} />
+
       <section className="admin-panel">
         <div className="admin-panel__heading">
-          <span>Quản lý kỵ sĩ</span>
-          <h2>Phê duyệt kỵ sĩ</h2>
+          <span>Xác minh hồ sơ</span>
+          <h2>Quản lý kỵ sĩ</h2>
         </div>
+
+        <div className="admin-stat-grid">
+          <div className="admin-stat-card">
+            <p>Chờ duyệt</p>
+            <h3>{groups.pending.length}</h3>
+          </div>
+          <div className="admin-stat-card">
+            <p>Đã duyệt</p>
+            <h3>{groups.approved.length}</h3>
+          </div>
+          <div className="admin-stat-card">
+            <p>Từ chối</p>
+            <h3>{groups.rejected.length}</h3>
+          </div>
+        </div>
+
+        <div className="jrx-tabs" role="tablist" aria-label="Lọc kỵ sĩ theo trạng thái phê duyệt">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              className={`jrx-tab${activeTab === tab.key ? " jrx-tab--active" : ""}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+              <span className="jrx-tab__count">{tab.list.length}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
@@ -743,49 +784,41 @@ function Roles() {
               </tr>
             </thead>
             <tbody>
-              {jockeys.map((jockey) => {
+              {activeList.map((jockey) => {
                 const status = jockey.approvalStatusName || "Không xác định";
                 return (
                   <tr key={jockey.id}>
                     <td>
-                      <strong>{jockey.fullName}</strong>
-                      <small>{jockey.email}</small>
+                      <div className="jrx-cell-name">
+                        <strong>{jockey.fullName}</strong>
+                        <small>{jockey.email}</small>
+                      </div>
                     </td>
-                    <td>{jockey.licenseNumber || "-"}</td>
+                    <td>{jockey.licenseNumber || "—"}</td>
                     <td>
-                      <span className={`status status--${status.toLowerCase()}`}>
-                        {status}
-                      </span>
+                      <span className={`status status--${status.toLowerCase()}`}>{status}</span>
                     </td>
                     <td>
                       <div className="admin-actions">
-                        <button
-                          disabled={status === "Approved"}
-                          onClick={() => updateJockeyStatus(jockey, true)}
-                        >
-                          Phê duyệt
-                        </button>
-                        <button
-                          className="admin-danger"
-                          disabled={status === "Rejected"}
-                          onClick={() => updateJockeyStatus(jockey, false)}
-                        >
-                          Từ chối
-                        </button>
+                        <button onClick={() => setReviewJockeyId(jockey.id)}>Xem hồ sơ</button>
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {jockeys.length === 0 ? (
+              {activeList.length === 0 ? (
                 <tr>
-                  <td colSpan="4">Không tìm thấy tài khoản kỵ sĩ nào.</td>
+                  <td colSpan="4">{JOCKEY_TAB_EMPTY_MESSAGE[activeTab]}</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
       </section>
+
+      {reviewJockeyId && (
+        <JockeyReviewModal jockeyId={reviewJockeyId} onClose={closeReview} onChanged={onReviewChanged} />
+      )}
     </>
   );
 }

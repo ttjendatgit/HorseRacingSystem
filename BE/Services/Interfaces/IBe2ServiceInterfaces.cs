@@ -137,7 +137,8 @@ public interface IAdminService
 
     // Jockey Management
     Task<ServiceResult<bool>> ApproveJockeyAsync(Guid jockeyId);
-    Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string reason);
+    Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string? reason);
+    Task<ServiceResult<JockeyAdminDetailResponse>> GetJockeyDetailAsync(Guid jockeyId);
 
     // Operations
     Task<ServiceResult<RefereeAssignmentResponse>> AssignRefereeToRaceAsync(AssignRefereeRequest request);

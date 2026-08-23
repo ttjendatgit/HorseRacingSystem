@@ -481,17 +481,26 @@ public class AdminService : IAdminService
         }
     }
 
-    public async Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string reason)
+    public async Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string? reason)
     {
         try
         {
+            // J-ADMIN-REVIEW: a Jockey rejection must always carry a real reason — mirrors the
+            // existing Horse rejection rule (UpdateOwnerHorseStatusAsync above). Previously the
+            // controller silently substituted "Không có lý do" for a blank reason instead of
+            // rejecting the request; enforced here now so it can't be bypassed by any caller.
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return ServiceResult<bool>.Fail(400, "Vui lòng nhập lý do từ chối hồ sơ kỵ sĩ.");
+            }
+
             var jockey = await _jockeyRepo.GetByIdAsync(jockeyId);
             if (jockey == null)
             {
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy kỵ sĩ");
             }
             jockey.ApprovalStatus = ApprovalStatus.Rejected;
-            jockey.ApprovalNote = reason;
+            jockey.ApprovalNote = reason.Trim();
             await _jockeyRepo.UpdateAsync(jockey);
             await _unitOfWork.SaveChangesAsync();
             return ServiceResult<bool>.Ok(true);
@@ -499,6 +508,46 @@ public class AdminService : IAdminService
         catch (Exception ex)
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi từ chối kỵ sĩ: {ex.Message}");
+        }
+    }
+
+    // J-ADMIN-REVIEW: full verification detail for the Admin review modal — Admin-only (class-level
+    // [Authorize(Roles = "Admin")] on AdminController), distinct from the public/Owner-facing
+    // JockeyListResponse which never exposed Phone/Address/DateOfBirth/Height/Weight/IdCardNumber/
+    // LicenseFile/ApprovalNote/CreatedAt.
+    public async Task<ServiceResult<JockeyAdminDetailResponse>> GetJockeyDetailAsync(Guid jockeyId)
+    {
+        try
+        {
+            var jockey = await _jockeyRepo.GetByIdAsync(jockeyId);
+            if (jockey == null)
+            {
+                return ServiceResult<JockeyAdminDetailResponse>.Fail(404, "Không tìm thấy kỵ sĩ");
+            }
+
+            return ServiceResult<JockeyAdminDetailResponse>.Ok(new JockeyAdminDetailResponse
+            {
+                Id = jockey.Id,
+                UserId = jockey.UserId,
+                FullName = jockey.User?.FullName ?? string.Empty,
+                Email = jockey.User?.Email ?? string.Empty,
+                IsActive = jockey.User?.IsActive ?? false,
+                Phone = jockey.Phone,
+                Address = jockey.Address,
+                DateOfBirth = jockey.DateOfBirth,
+                Height = jockey.Height,
+                Weight = jockey.Weight,
+                IdCardNumber = jockey.IdCardNumber,
+                LicenseNumber = jockey.LicenseNumber,
+                LicenseFile = jockey.LicenseFile,
+                ApprovalStatus = jockey.ApprovalStatus.ToString(),
+                ApprovalNote = jockey.ApprovalNote,
+                CreatedAt = jockey.CreatedAt,
+            });
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<JockeyAdminDetailResponse>.Fail(500, $"Lỗi truy xuất hồ sơ kỵ sĩ: {ex.Message}");
         }
     }
 

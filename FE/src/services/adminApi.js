@@ -28,6 +28,12 @@ export const setUserActive = (id, isActive) =>
     method: "POST",
   });
 
+// J-ADMIN-REVIEW: Admin-only Jockey verification detail (Phone/Address/DateOfBirth/Height/Weight/
+// IdCardNumber/LicenseFile/ApprovalNote/CreatedAt) — distinct from getAvailableJockeys(), which
+// intentionally never exposes those fields to non-Admin callers.
+export const getJockeyAdminDetail = async (id) =>
+  unwrap(await request(`/api/admin/jockeys/${id}`));
+
 export const approveJockey = (id) =>
   request(`/api/admin/jockeys/${id}/approve`, {
     method: "POST",
