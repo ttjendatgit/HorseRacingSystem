@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { updateProfile, changePassword, getProfile } from "../../services/authApi";
 import { getContracts, signContractJockey, getProtests, createProtest } from "../../services/managementApi";
+import { getMyJockeyProfile } from "../../services/jockeyApi";
+import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
 import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary } from "../ProfileCommon";
 import "../ProfilePages.css";
 
@@ -22,6 +24,7 @@ const statusColor = (s) => {
 
 export default function JockeyProfilePage() {
   const [profile, setProfile] = useState(null);
+  const [approval, setApproval] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("info");
   const [msg, setMsg] = useState(null);
@@ -42,6 +45,11 @@ export default function JockeyProfilePage() {
       .then((d) => { const p = d?.data ?? d; setProfile(p); setInfo({ fullName: p.fullName ?? p.FullName ?? "", phoneNumber: p.phoneNumber ?? p.PhoneNumber ?? "" }); })
       .catch(() => { /* empty */ })
       .finally(() => setLoading(false));
+    // /api/auth/profile does not expose Jockey.ApprovalStatus — /api/jockeys/me is the
+    // authoritative source for competitive-approval state (see jockeyApproval.js).
+    getMyJockeyProfile()
+      .then((jockeyProfile) => setApproval(getJockeyApprovalDisplay(jockeyProfile)))
+      .catch(() => setApproval(null));
   }, []);
 
   useEffect(() => {
@@ -112,11 +120,15 @@ export default function JockeyProfilePage() {
           </div>
           {!editMode && (
             <div style={grid2}>
+              <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
               <Detail label="Hạng" value={`#${profile.rank ?? profile.Rank ?? "-"}`} />
               <Detail label="Tỉ lệ thắng" value={`${profile.winRate ?? profile.WinRate ?? 0}%`} />
               <Detail label="Giấy phép" value={profile.licenseNumber ?? profile.LicenseNumber ?? "-"} />
               <Detail label="Quốc tịch" value={profile.nationality ?? profile.Nationality ?? "-"} />
               <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
+              {approval?.isRejected && approval.note && (
+                <Detail label="Lý do từ chối" value={approval.note} />
+              )}
             </div>
           )}
         </section>

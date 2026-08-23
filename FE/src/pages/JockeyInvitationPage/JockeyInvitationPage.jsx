@@ -4,21 +4,33 @@ import {
   formatJockeyDate,
   getJockeyInvitations,
   getJockeyAssignedRaces,
+  getMyJockeyProfile,
   normalizeInvitationStatus,
   respondJockeyInvitation,
   withdrawJockeyInvitation,
 } from "../../services/jockeyApi";
+import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
+import JockeyApprovalBanner from "../../components/JockeyApprovalBanner/JockeyApprovalBanner";
 import "./JockeyInvitationPage.css";
 
 function JockeyInvitationPage() {
   const location = useLocation();
   const [invitations, setInvitations] = useState([]);
   const [officialRaceIds, setOfficialRaceIds] = useState(() => new Set());
+  const [approval, setApproval] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState(null);
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState(location.state?.focusTab ?? "all");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    getMyJockeyProfile()
+      .then((jockeyProfile) => { if (!cancelled) setApproval(getJockeyApprovalDisplay(jockeyProfile)); })
+      .catch(() => { if (!cancelled) setApproval(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   const loadInvitations = async () => {
     try {
@@ -135,6 +147,24 @@ function JockeyInvitationPage() {
           <p className="ji-sub">Theo dõi và phản hồi các lời mời từ chủ ngựa.</p>
         </div>
       </div>
+
+      {/* Competitive approval status — backend already guarantees a Pending/Rejected Jockey
+          cannot receive new invitations or Accept; this only explains why the list may be empty
+          or growing, it never filters the historical list below. */}
+      {approval?.isPending && (
+        <JockeyApprovalBanner
+          tone="pending"
+          title="Chưa thể nhận lời mời thi đấu"
+          description="Hồ sơ kỵ sĩ của bạn đang chờ Admin phê duyệt. Bạn sẽ không xuất hiện trong danh sách kỵ sĩ của chủ ngựa và không thể nhận lời mời mới cho đến khi được phê duyệt."
+        />
+      )}
+      {approval?.isRejected && (
+        <JockeyApprovalBanner
+          tone="rejected"
+          title="Hồ sơ kỵ sĩ đã bị từ chối"
+          description={`Bạn không thể nhận lời mời thi đấu mới với hồ sơ đã bị từ chối.${approval.note ? ` Lý do: ${approval.note}` : ""}`}
+        />
+      )}
 
       {/* Chips */}
       <div className="ji-chips">

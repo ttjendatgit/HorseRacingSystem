@@ -90,7 +90,7 @@ function RegisterJockeyPage() {
           role: apiRole || "jockey",
         })
       );
-      setSuccessMessage("Tài khoản Kỵ sĩ đã được tạo thành công.");
+      setSuccessMessage("Đăng ký thành công. Hồ sơ đang chờ Admin phê duyệt.");
       navigate("/jockey/invitations");
     } catch (error) {
       setErrorMessage(
