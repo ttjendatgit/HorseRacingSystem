@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -41,6 +42,19 @@ public class AuthService : IAuthService
         if (request.Role is not (UserRole.HorseOwner or UserRole.Jockey or UserRole.Spectator))
         {
             return ServiceResult<AuthResponse>.Fail(StatusCodes.Status400BadRequest, "Vai trò không được hỗ trợ");
+        }
+
+        // J-REG-VALIDATION: Jockey-only identity/age rules — checked before any AddAsync so an
+        // invalid Jockey registration never adds a User/Jockey/Owner to the change tracker, let
+        // alone persists one. Deliberately scoped to Role == Jockey only; HorseOwner/Spectator
+        // registration must never require CCCD-shaped IdCardNumber or age > 18.
+        if (request.Role == UserRole.Jockey)
+        {
+            var identityErrors = ValidateJockeyIdentity(request);
+            if (identityErrors.Count > 0)
+            {
+                return ServiceResult<AuthResponse>.Fail(StatusCodes.Status400BadRequest, string.Join("; ", identityErrors));
+            }
         }
 
         var exists = await _users.EmailExistsAsync(request.Email);
@@ -225,6 +239,30 @@ public class AuthService : IAuthService
 
     private static string GenerateOwnerCode() =>
         $"OWN-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+    // J-REG-VALIDATION: collects every Jockey identity/age error at once (not fail-fast on the
+    // first one) so a single rejected submission reports everything wrong with it in one pass.
+    private static List<string> ValidateJockeyIdentity(RegisterRequest request)
+    {
+        var errors = new List<string>();
+
+        if (!JockeyIdentityValidator.IsValidPhone(request.Phone))
+        {
+            errors.Add("Số điện thoại chỉ được chứa chữ số.");
+        }
+
+        if (!JockeyIdentityValidator.IsValidIdCardNumber(request.IdCardNumber))
+        {
+            errors.Add("CCCD/CMND phải gồm 9 hoặc 12 chữ số.");
+        }
+
+        if (request.DateOfBirth is not DateTime dateOfBirth || !JockeyIdentityValidator.IsOlderThan18(dateOfBirth, DateTime.UtcNow))
+        {
+            errors.Add("Kỵ sĩ phải trên 18 tuổi.");
+        }
+
+        return errors;
+    }
 
     public async Task<ServiceResult<object>> ChangePasswordAsync(Guid userId, ChangePasswordRequest request)
     {

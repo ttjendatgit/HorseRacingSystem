@@ -6,6 +6,7 @@ import {
   ROLE_ID_BY_VALUE,
   unwrapResponseData,
 } from "../../services/authRoleUtils";
+import { validateJockeyRegistration } from "../../utils/jockeyRegistrationValidation";
 import "./RegisterJockeyPage.css";
 
 function RegisterJockeyPage() {
@@ -56,6 +57,18 @@ function RegisterJockeyPage() {
 
     if (!agreed) {
       setErrorMessage("Bạn phải xác nhận thông tin chính xác.");
+      return;
+    }
+
+    // J-REG-VALIDATION: FE convenience check only — AuthService.RegisterAsync enforces the exact
+    // same rules server-side, so a direct API call bypassing this form is still rejected.
+    const identityErrors = validateJockeyRegistration(
+      { phone: phone.trim(), idCardNumber: idCardNumber.trim(), dateOfBirth },
+      new Date(),
+    );
+    const identityErrorMessages = Object.values(identityErrors);
+    if (identityErrorMessages.length > 0) {
+      setErrorMessage(identityErrorMessages.join(" "));
       return;
     }
 
@@ -124,7 +137,7 @@ function RegisterJockeyPage() {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="phone" className="label-required">Số điện thoại</label>
-                <input id="phone" type="tel" name="phone" autoComplete="tel" placeholder="Nhập số điện thoại" className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+                <input id="phone" type="tel" inputMode="numeric" name="phone" autoComplete="tel" placeholder="Nhập số điện thoại (chỉ chữ số)" className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} required />
               </div>
               <div className="form-group">
                 <label htmlFor="dob" className="label-required">Ngày sinh</label>
@@ -150,7 +163,7 @@ function RegisterJockeyPage() {
 
             <div className="form-group">
               <label htmlFor="idCard" className="label-required">Số CCCD / CMND</label>
-              <input id="idCard" type="text" name="idCard" placeholder="Nhập số CCCD/CMND của bạn" className="form-input" value={idCardNumber} onChange={(e) => setIdCardNumber(e.target.value)} required />
+              <input id="idCard" type="text" inputMode="numeric" name="idCard" placeholder="9 hoặc 12 chữ số, không dấu cách" className="form-input" value={idCardNumber} onChange={(e) => setIdCardNumber(e.target.value)} required />
             </div>
           </fieldset>
 

@@ -88,6 +88,9 @@ public class JRegFileUploadTests
             FullName = "Test Jockey",
             LicenseNumber = "LIC-0001",
             LicenseFile = "https://res.cloudinary.com/demo/documents/license-abc123.pdf",
+            Phone = "0900000001",
+            IdCardNumber = "079000000001",
+            DateOfBirth = DateTime.UtcNow.AddYears(-25),
         });
 
         Assert.True(result.Result.Success, result.Result.Message);
@@ -119,6 +122,9 @@ public class JRegFileUploadTests
             FullName = "Test Jockey No File",
             LicenseNumber = "LIC-0002",
             LicenseFile = null,
+            Phone = "0900000002",
+            IdCardNumber = "079000000002",
+            DateOfBirth = DateTime.UtcNow.AddYears(-25),
         });
 
         Assert.True(result.Result.Success, result.Result.Message);
@@ -141,6 +147,7 @@ public class JRegFileUploadTests
             Email = email, Password = "Password123!", Role = UserRole.Jockey,
             FullName = "First", LicenseNumber = "LIC-DUP",
             LicenseFile = "https://res.cloudinary.com/demo/documents/dup.pdf",
+            Phone = "0900000003", IdCardNumber = "079000000003", DateOfBirth = DateTime.UtcNow.AddYears(-25),
         });
         Assert.True(first.Result.Success, first.Result.Message);
 
@@ -149,6 +156,7 @@ public class JRegFileUploadTests
             Email = email, Password = "Password123!", Role = UserRole.Jockey,
             FullName = "Second", LicenseNumber = "LIC-DUP-2",
             LicenseFile = "https://res.cloudinary.com/demo/documents/dup2.pdf",
+            Phone = "0900000004", IdCardNumber = "079000000004", DateOfBirth = DateTime.UtcNow.AddYears(-25),
         });
 
         Assert.False(second.Result.Success);
