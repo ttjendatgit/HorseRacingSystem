@@ -97,9 +97,15 @@ public class DtoValidationTests
     [Fact]
     public void PrizeResponse_HasAllFields()
     {
-        var r = new PrizeResponse { Name = "Gold", Amount = 5000, Currency = "USD", Position = 1 };
+        // PRIZE-V1: trimmed to the fields the V1 contract actually exposes — RaceId/Currency/
+        // PercentageOfPool/Description/IsDistributed/DistributedAt were deliberately dropped from
+        // this response (see NewTableDtos.cs), not just left out of this smoke test.
+        var tournamentId = Guid.NewGuid();
+        var r = new PrizeResponse { TournamentId = tournamentId, Name = "Gold", Amount = 5000, Position = 1, SponsorName = "Acme" };
+        Assert.Equal(tournamentId, r.TournamentId);
         Assert.Equal("Gold", r.Name);
         Assert.Equal(5000m, r.Amount);
         Assert.Equal(1, r.Position);
+        Assert.Equal("Acme", r.SponsorName);
     }
 }

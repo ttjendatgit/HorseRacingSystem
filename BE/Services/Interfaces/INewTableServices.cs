@@ -8,6 +8,7 @@ namespace HorseRacing.Services.Interfaces;
 public interface IPrizeService
 {
     Task<ServiceResult<PrizeResponse>> CreateAsync(CreatePrizeRequest request);
+    Task<ServiceResult<PrizeResponse>> UpdateAsync(Guid id, UpdatePrizeRequest request);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByTournamentAsync(Guid tournamentId);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByRaceAsync(Guid raceId);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetAllAsync();

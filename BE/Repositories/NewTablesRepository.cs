@@ -17,14 +17,32 @@ public class PrizeRepository : IPrizeRepository
     public async Task<Prize?> GetByIdAsync(Guid id) =>
         await _context.Prizes.FindAsync(id);
 
+    // PRIZE-V1: ordered by Position ascending — the Admin allocation table and public Tournament-
+    // detail breakdown both render Hạng 1/2/3... in order and rely on this, not a client-side sort.
     public async Task<IEnumerable<Prize>> GetByTournamentAsync(Guid tournamentId) =>
-        await _context.Prizes.Where(p => p.TournamentId == tournamentId).ToListAsync();
+        await _context.Prizes.Where(p => p.TournamentId == tournamentId).OrderBy(p => p.Position).ToListAsync();
 
     public async Task<IEnumerable<Prize>> GetByRaceAsync(Guid raceId) =>
         await _context.Prizes.Where(p => p.RaceId == raceId).ToListAsync();
 
     public async Task<IEnumerable<Prize>> GetAllAsync() =>
         await _context.Prizes.ToListAsync();
+
+    public async Task<bool> ExistsPositionAsync(Guid tournamentId, int position, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId && p.Position == position);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.AnyAsync();
+    }
+
+    public async Task<decimal> GetAllocatedAmountAsync(Guid tournamentId, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.SumAsync(p => (decimal?)p.Amount) ?? 0m;
+    }
 
     public async Task AddAsync(Prize prize) => await _context.Prizes.AddAsync(prize);
     public Task UpdateAsync(Prize prize) { _context.Prizes.Update(prize); return Task.CompletedTask; }

@@ -6,6 +6,7 @@ const unwrap = (r) => r?.data ?? r?.Data ?? r;
 export const getPrizes = async () => unwrap(await request("/api/management/prizes"));
 export const getPrizesByTournament = async (id) => unwrap(await request(`/api/management/prizes/tournament/${id}`));
 export const createPrize = (p) => request("/api/management/prizes", { method: "POST", body: JSON.stringify(p) });
+export const updatePrize = (id, p) => request(`/api/management/prizes/${id}`, { method: "PUT", body: JSON.stringify(p) });
 export const deletePrize = (id) => request(`/api/management/prizes/${id}`, { method: "DELETE" });
 
 // ── Protests ──

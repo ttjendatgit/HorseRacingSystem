@@ -344,6 +344,35 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(p => p.RaceId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // PRIZE-V1: DB-level defense against duplicate ranking-position allocations within one
+        // Tournament. TournamentId stays nullable at the physical-column level (schema debt —
+        // see the PRIZE-V1 report for why a NOT NULL migration was not attempted: no source of
+        // truth in this repo can prove no unknown/unmanaged deployed database has an existing
+        // NULL-TournamentId row, e.g. the legacy Race-scoped Prize shape); TournamentId is instead
+        // enforced as required at the DTO/service layer for every V1 write (PrizeService.CreateAsync).
+        // The filter matches the existing partial-unique-index convention used for
+        // TournamentHorseRegistrations above — NULL TournamentId rows are excluded from the
+        // uniqueness check entirely (Postgres/SQLite already never collide NULL with NULL in a
+        // unique index, but the filter also documents the intent and keeps behavior identical
+        // whether or not the column is ever tightened later).
+        //
+        // DEPLOYMENT PREFLIGHT (FINAL HARDENING Part 2): applying migration
+        // 20260823151908_PrizeTournamentPositionUniqueIndex to an existing database will FAIL if
+        // legacy duplicate (TournamentId, Position) rows already exist (pre-PRIZE-V1 CRUD had no
+        // such constraint). Before applying, run:
+        //   SELECT "TournamentId", "Position", COUNT(*) FROM "Prizes"
+        //   WHERE "TournamentId" IS NOT NULL
+        //   GROUP BY "TournamentId", "Position" HAVING COUNT(*) > 1;
+        // Any rows returned require manual business review (which duplicate wins? merge? renumber?)
+        // before the migration can be applied — this migration deliberately does NOT auto-resolve
+        // duplicates itself, since silently deleting/renumbering historical Prize data is a
+        // business decision, not a schema decision.
+        modelBuilder.Entity<Prize>()
+            .HasIndex(p => new { p.TournamentId, p.Position })
+            .IsUnique()
+            .HasFilter("\"TournamentId\" IS NOT NULL")
+            .HasDatabaseName("IX_Prizes_TournamentId_Position_Active");
+
         // Protest Model
         modelBuilder.Entity<Protest>()
             .HasOne(p => p.Race)

@@ -178,11 +178,14 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         // ── PRIZES ──
+        // PRIZE-V1: tournament-scoped rows must sum exactly to tournament.PrizePool (250,000) so the
+        // seeded Draft tournament is Publish-ready under the new readiness rule; Currency corrected to
+        // VND to match the app's monetary convention. The old orphan RaceId-only/TournamentId-null row
+        // was removed — Prize is tournament-final-ranking allocation only in V1, not race-scoped.
         db.Prizes.AddRange(
-            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "1st Place - Spring Championship", Amount = 150000m, Currency = "USD", Position = 1, PercentageOfPool = 60, SponsorName = "RaceMaster Inc.", CreatedAt = now },
-            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "2nd Place - Spring Championship", Amount = 50000m, Currency = "USD", Position = 2, PercentageOfPool = 20, CreatedAt = now },
-            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "3rd Place - Spring Championship", Amount = 25000m, Currency = "USD", Position = 3, PercentageOfPool = 10, CreatedAt = now },
-            new() { Id = Guid.NewGuid(), RaceId = race1.Id, Name = "Opening Sprint Winner", Amount = 15000m, Currency = "USD", Position = 1, SponsorName = "Equine Insurance Co.", IsDistributed = true, DistributedAt = now.AddDays(-2).AddHours(17), CreatedAt = now }
+            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "1st Place - Spring Championship", Amount = 150000m, Currency = "VND", Position = 1, PercentageOfPool = 60, SponsorName = "RaceMaster Inc.", CreatedAt = now },
+            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "2nd Place - Spring Championship", Amount = 75000m, Currency = "VND", Position = 2, PercentageOfPool = 20, CreatedAt = now },
+            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "3rd Place - Spring Championship", Amount = 25000m, Currency = "VND", Position = 3, PercentageOfPool = 10, CreatedAt = now }
         );
         await db.SaveChangesAsync();
 

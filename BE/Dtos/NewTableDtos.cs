@@ -2,33 +2,43 @@ using System;
 
 namespace HorseRacing.Dtos;
 
-// ── Prize ──
+// ── Prize (PRIZE-V1) ──────────────────────────────────────────────────────────────────────
+// Tournament.PrizePool = total prize budget; Prize rows = allocation of that budget by FINAL
+// Tournament ranking Position. Config/display only — no wallet payout, no recipient, no
+// distribution workflow exists in this contract. RaceId/PercentageOfPool/IsDistributed/
+// DistributedAt remain on the Prize entity (BE/Models/Prize.cs) for backward compatibility but
+// are intentionally NOT part of this V1 contract: RaceId is always null for V1 writes (a Prize
+// row is a Tournament allocation, never Race-specific), and IsDistributed/DistributedAt are
+// never set by this workflow (no payout mechanism exists) and are not exposed to keep the API
+// from implying a distribution feature that doesn't exist.
 public class CreatePrizeRequest
 {
     public Guid? TournamentId { get; set; }
-    public Guid? RaceId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = "USD";
     public int Position { get; set; } = 1;
-    public decimal PercentageOfPool { get; set; }
+    public decimal Amount { get; set; }
+    public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
-    public string? Description { get; set; }
+}
+
+// TournamentId is deliberately absent — immutable after creation (Part 9). To move a Prize row
+// to a different Tournament, delete it while the original Tournament is still Draft and create a
+// new one under the target Tournament.
+public class UpdatePrizeRequest
+{
+    public int Position { get; set; }
+    public decimal Amount { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? SponsorName { get; set; }
 }
 
 public class PrizeResponse
 {
     public Guid Id { get; set; }
     public Guid? TournamentId { get; set; }
-    public Guid? RaceId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = string.Empty;
     public int Position { get; set; }
-    public decimal PercentageOfPool { get; set; }
+    public decimal Amount { get; set; }
+    public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
-    public string? Description { get; set; }
-    public bool IsDistributed { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

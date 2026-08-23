@@ -11,24 +11,111 @@ using Microsoft.AspNetCore.Http;
 
 namespace HorseRacing.Services;
 
+// PRIZE-V1: Tournament.PrizePool is the total prize budget; Prize rows allocate that budget by
+// FINAL Tournament ranking Position (Part 20 — Position means rank in the Tournament's Official
+// Final ranking; this service never reads RaceResult/RankingsJson, it only records the allocation
+// an Admin configures). Config/display only: no wallet credit, no recipient, no distribution
+// workflow — IsDistributed/DistributedAt/RaceId/PercentageOfPool are legacy entity fields this
+// service never sets to anything but their inert defaults (false/null/null/0).
 public class PrizeService : IPrizeService
 {
     private readonly IPrizeRepository _repo;
+    private readonly ITournamentRepository _tournamentRepo;
     private readonly IUnitOfWork _uow;
-    public PrizeService(IPrizeRepository repo, IUnitOfWork uow) { _repo = repo; _uow = uow; }
+    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow)
+    {
+        _repo = repo;
+        _tournamentRepo = tournamentRepo;
+        _uow = uow;
+    }
 
     public async Task<ServiceResult<PrizeResponse>> CreateAsync(CreatePrizeRequest r)
     {
+        if (!r.TournamentId.HasValue)
+            return ServiceResult<PrizeResponse>.Fail(400, "Vui lòng chọn giải đấu cho cơ cấu giải thưởng.");
+
+        var tournament = await _tournamentRepo.GetByIdAsync(r.TournamentId.Value);
+        if (tournament == null)
+            return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải đấu.");
+
+        if (tournament.Status != TournamentStatus.Draft)
+            return ServiceResult<PrizeResponse>.Fail(400, "Cơ cấu giải thưởng chỉ có thể chỉnh sửa khi giải đấu ở trạng thái Nháp.");
+
+        if (r.Position < 1)
+            return ServiceResult<PrizeResponse>.Fail(400, "Hạng thưởng phải lớn hơn hoặc bằng 1.");
+
+        if (r.Amount <= 0)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tiền thưởng phải lớn hơn 0.");
+
+        if (await _repo.ExistsPositionAsync(tournament.Id, r.Position, excludePrizeId: null))
+            return ServiceResult<PrizeResponse>.Fail(409, "Hạng thưởng này đã được cấu hình.");
+
+        var allocatedSoFar = await _repo.GetAllocatedAmountAsync(tournament.Id, excludePrizeId: null);
+        if (allocatedSoFar + r.Amount > tournament.PrizePool)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tiền thưởng không được vượt quá quỹ thưởng của giải đấu.");
+
         var prize = new Prize
         {
-            Id = Guid.NewGuid(), TournamentId = r.TournamentId, RaceId = r.RaceId,
-            Name = r.Name, Amount = r.Amount, Currency = r.Currency, Position = r.Position,
-            PercentageOfPool = r.PercentageOfPool, SponsorName = r.SponsorName, Description = r.Description,
-            CreatedAt = DateTime.UtcNow
+            Id = Guid.NewGuid(),
+            TournamentId = tournament.Id,
+            RaceId = null, // V1: allocation is Tournament-scoped by Final ranking, never Race-specific
+            Name = string.IsNullOrWhiteSpace(r.Name) ? $"Hạng {r.Position}" : r.Name,
+            Amount = r.Amount,
+            // Canonical monetary convention for this product is VND (see PRIZE-V1 report §9) — the
+            // legacy entity default of "USD" is only ever overridden here, never relied upon.
+            Currency = "VND",
+            Position = r.Position,
+            PercentageOfPool = 0,
+            SponsorName = r.SponsorName,
+            Description = null,
+            IsDistributed = false,
+            DistributedAt = null,
+            CreatedAt = DateTime.UtcNow,
         };
         await _repo.AddAsync(prize);
         await _uow.SaveChangesAsync();
         return ServiceResult<PrizeResponse>.Success(Map(prize), 201);
+    }
+
+    public async Task<ServiceResult<PrizeResponse>> UpdateAsync(Guid id, UpdatePrizeRequest r)
+    {
+        var prize = await _repo.GetByIdAsync(id);
+        if (prize == null)
+            return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải thưởng.");
+
+        if (!prize.TournamentId.HasValue)
+            return ServiceResult<PrizeResponse>.Fail(400, "Giải thưởng này không thuộc giải đấu nào và không thể chỉnh sửa qua luồng cơ cấu giải thưởng.");
+
+        var tournament = await _tournamentRepo.GetByIdAsync(prize.TournamentId.Value);
+        if (tournament == null)
+            return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải đấu.");
+
+        if (tournament.Status != TournamentStatus.Draft)
+            return ServiceResult<PrizeResponse>.Fail(400, "Cơ cấu giải thưởng chỉ có thể chỉnh sửa khi giải đấu ở trạng thái Nháp.");
+
+        if (r.Position < 1)
+            return ServiceResult<PrizeResponse>.Fail(400, "Hạng thưởng phải lớn hơn hoặc bằng 1.");
+
+        if (r.Amount <= 0)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tiền thưởng phải lớn hơn 0.");
+
+        if (await _repo.ExistsPositionAsync(tournament.Id, r.Position, excludePrizeId: prize.Id))
+            return ServiceResult<PrizeResponse>.Fail(409, "Hạng thưởng này đã được cấu hình.");
+
+        var allocatedExcludingThis = await _repo.GetAllocatedAmountAsync(tournament.Id, excludePrizeId: prize.Id);
+        if (allocatedExcludingThis + r.Amount > tournament.PrizePool)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tiền thưởng không được vượt quá quỹ thưởng của giải đấu.");
+
+        // TournamentId is immutable after creation (Part 9) — never reassigned here. To move a
+        // Prize to another Tournament, delete it in Draft and create a new one there.
+        prize.Position = r.Position;
+        prize.Amount = r.Amount;
+        prize.Name = string.IsNullOrWhiteSpace(r.Name) ? $"Hạng {r.Position}" : r.Name;
+        prize.SponsorName = r.SponsorName;
+
+        await _repo.UpdateAsync(prize);
+        await _uow.SaveChangesAsync();
+        return ServiceResult<PrizeResponse>.Ok(Map(prize));
     }
 
     public async Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByTournamentAsync(Guid tid) =>
@@ -40,14 +127,28 @@ public class PrizeService : IPrizeService
     public async Task<ServiceResult<IEnumerable<PrizeResponse>>> GetAllAsync() =>
         ServiceResult<IEnumerable<PrizeResponse>>.Ok((await _repo.GetAllAsync()).Select(Map));
 
-    public async Task<ServiceResult<bool>> DeleteAsync(Guid id) { await _repo.DeleteAsync(id); await _uow.SaveChangesAsync(); return ServiceResult<bool>.Ok(true); }
+    public async Task<ServiceResult<bool>> DeleteAsync(Guid id)
+    {
+        var prize = await _repo.GetByIdAsync(id);
+        if (prize == null)
+            return ServiceResult<bool>.Fail(404, "Không tìm thấy giải thưởng.");
+
+        if (prize.TournamentId.HasValue)
+        {
+            var tournament = await _tournamentRepo.GetByIdAsync(prize.TournamentId.Value);
+            if (tournament != null && tournament.Status != TournamentStatus.Draft)
+                return ServiceResult<bool>.Fail(400, "Cơ cấu giải thưởng chỉ có thể chỉnh sửa khi giải đấu ở trạng thái Nháp.");
+        }
+
+        await _repo.DeleteAsync(id);
+        await _uow.SaveChangesAsync();
+        return ServiceResult<bool>.Ok(true);
+    }
 
     private static PrizeResponse Map(Prize p) => new()
     {
-        Id = p.Id, TournamentId = p.TournamentId, RaceId = p.RaceId, Name = p.Name,
-        Amount = p.Amount, Currency = p.Currency, Position = p.Position,
-        PercentageOfPool = p.PercentageOfPool, SponsorName = p.SponsorName, Description = p.Description,
-        IsDistributed = p.IsDistributed, CreatedAt = p.CreatedAt
+        Id = p.Id, TournamentId = p.TournamentId, Position = p.Position, Amount = p.Amount,
+        Name = p.Name, SponsorName = p.SponsorName, CreatedAt = p.CreatedAt,
     };
 }
 

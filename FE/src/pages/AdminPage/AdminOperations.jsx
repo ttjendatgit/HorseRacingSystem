@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  getPrizes, createPrize, deletePrize,
   getPendingProtests, ruleProtest,
   getPendingTransfers, approveTransfer, rejectTransfer,
   getContracts,
   getInjuries,
 } from "../../services/managementApi";
-import { getAdminTournaments } from "../../services/adminApi";
 
 const fDate = (v) => v ? new Date(v).toLocaleDateString("vi-VN", { dateStyle: "medium" }) : "-";
 
@@ -21,42 +19,6 @@ function Modal({ title, children, onClose }) {
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
-  );
-}
-
-// ── Prize Management ──
-export function PrizeManagement() {
-  const [items, setItems] = useState([]);
-  const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({ name: "", amount: 0, position: 1, currency: "USD", tournamentId: "", raceId: "", sponsorName: "" });
-  const [tournaments, setTournaments] = useState([]);
-  const load = () => getPrizes().then((d) => setItems(Array.isArray(d) ? d : [])).catch((e) => setMsg(e.message));
-  useEffect(() => { load(); getAdminTournaments().then((d) => setTournaments(Array.isArray(d) ? d : [])); }, []);
-
-  const submit = async (ev) => { ev.preventDefault(); try { await createPrize({ ...form, amount: Number(form.amount), position: Number(form.position), tournamentId: form.tournamentId || null, raceId: form.raceId || null }); setMsg("Đã tạo giải thưởng."); load(); } catch (e) { setMsg(e.message); } };
-  const remove = async (id) => { if (!confirm("Xóa?")) return; try { await deletePrize(id); load(); } catch (e) { setMsg(e.message); } };
-
-  return (
-    <div>
-      <h2>Tiền thưởng</h2>
-      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Quản lý phân phối tiền thưởng cho giải đấu và cuộc đua.</p>
-      {msg && <p className="admin-notice">{msg}</p>}
-      <form onSubmit={submit} className="admin-form" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        <input placeholder="Tên giải thưởng" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <input type="number" placeholder="Số tiền" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-        <input type="number" placeholder="Vị trí (1,2,3...)" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-        <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })}>
-          <option value="">Giải đấu (tùy chọn)</option>
-          {tournaments.map((t) => <option key={t.id ?? t.Id} value={t.id ?? t.Id}>{t.name ?? t.Name}</option>)}
-        </select>
-        <input placeholder="Nhà tài trợ" value={form.sponsorName} onChange={(e) => setForm({ ...form, sponsorName: e.target.value })} />
-        <button className="primary-button" type="submit">Thêm giải thưởng</button>
-      </form>
-      <div className="admin-table-wrap"><table className="admin-table">
-        <thead><tr><th>Tên</th><th>Số tiền</th><th>Vị trí</th><th>Nhà tài trợ</th><th>Đã phân phối</th><th>Thao tác</th></tr></thead>
-        <tbody>{items.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.amount} {p.currency}</td><td>#{p.position}</td><td>{p.sponsorName || "-"}</td><td>{p.isDistributed ? "Có" : "Không"}</td><td><button onClick={() => remove(p.id)}>Xóa</button></td></tr>)}</tbody>
-      </table></div>
     </div>
   );
 }

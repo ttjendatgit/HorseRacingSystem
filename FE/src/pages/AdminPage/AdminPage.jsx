@@ -36,12 +36,12 @@ import { getPlacementLabel, getRankedEntries } from "../../utils/raceResultDispl
 import { groupJockeysByApprovalStatus } from "../../utils/jockeyAdminReview";
 import JockeyReviewModal from "../../components/JockeyReviewModal";
 import {
-  PrizeManagement,
   ProtestManagement,
   TransferManagement,
   ContractManagement,
   InjuryManagement,
 } from "./AdminOperations";
+import { PrizeManagement } from "./PrizeManagement";
 import { AuditLogViewer, NotificationManager } from "./AdminAudit";
 import TournamentForm from "../../components/TournamentForm";
 import RaceForm from "../../components/RaceForm";

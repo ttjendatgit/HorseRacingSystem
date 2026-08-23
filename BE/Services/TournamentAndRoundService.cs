@@ -231,13 +231,21 @@ public class TournamentService : ITournamentService
                 // shift under an already-Published Tournament's existing Round structure.
                 if (request.MaxRounds.HasValue && request.MaxRounds.Value != tournament.MaxRounds)
                     immutableFieldErrors.Add("MaxRounds không thể thay đổi sau khi công bố giải đấu.");
+                // PRIZE-V1 Part 4: PrizePool now follows the same structural-lock convention as
+                // the other Draft-only fields above — a Prize allocation's SUM(Amount)==PrizePool
+                // invariant (enforced at Publish) must not be able to drift once the Tournament has
+                // left Draft. Previously PrizePool was explicitly kept mutable through Published
+                // (see the removed "Phase4B: Name and PrizePool stay mutable" comment below); that
+                // is intentionally reversed here.
+                if (request.PrizePool.HasValue && request.PrizePool.Value != tournament.PrizePool)
+                    immutableFieldErrors.Add("PrizePool không thể thay đổi sau khi công bố giải đấu.");
 
                 if (immutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", immutableFieldErrors));
 
-                // Phase4B: Name and PrizePool stay mutable after Published, but their own business
-                // invariants must still hold. Validate only the supplied values — do NOT run the
-                // full Draft validator here, since unrelated immutable legacy data (e.g. an old
+                // Phase4B: Name stays mutable after Published, but its own business invariants
+                // must still hold. Validate only the supplied value — do NOT run the full Draft
+                // validator here, since unrelated immutable legacy data (e.g. an old
                 // RegistrationDeadline/StartDate relationship) must not block this edit.
                 var publishedMutableFieldErrors = new List<string>();
                 if (request.Name != null)
@@ -247,8 +255,6 @@ public class TournamentService : ITournamentService
                     else if (request.Name.Length > 200)
                         publishedMutableFieldErrors.Add("Tên giải đấu (Name) không được vượt quá 200 ký tự.");
                 }
-                if (request.PrizePool.HasValue && request.PrizePool.Value < 0)
-                    publishedMutableFieldErrors.Add("PrizePool không được âm.");
 
                 if (publishedMutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", publishedMutableFieldErrors));
@@ -333,6 +339,21 @@ public class TournamentService : ITournamentService
                     {
                         return ServiceResult<TournamentResponse>.Fail(400,
                             $"Không thể giảm MaxRounds xuống {candidateMaxRounds} vì Vòng {maxExistingRoundNumber.Value} đã tồn tại.");
+                    }
+                }
+
+                // PRIZE-V1 Part 4: lowering PrizePool below the sum of already-configured Prize
+                // allocations would create an impossible Draft state (allocated > pool) — reject
+                // before mutating anything, same convention as the checks above.
+                if (request.PrizePool.HasValue)
+                {
+                    var allocatedTotal = await _db.Prizes
+                        .Where(p => p.TournamentId == tournament.Id)
+                        .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+                    if (candidatePrizePool < allocatedTotal)
+                    {
+                        return ServiceResult<TournamentResponse>.Fail(400,
+                            $"Không thể giảm quỹ thưởng xuống {candidatePrizePool:N0} vì đã phân bổ {allocatedTotal:N0}.");
                     }
                 }
             }
@@ -660,6 +681,73 @@ public class TournamentService : ITournamentService
     {
         var errors = await ValidatePublishTournamentFieldsAsync(tournament);
         errors.AddRange(await ValidateStructuralReadinessAsync(tournament));
+        errors.AddRange(await ValidatePrizeReadinessAsync(tournament));
+        return errors;
+    }
+
+    /// <summary>
+    /// PRIZE-V1 Part 5/6: Prize allocation readiness. CASE A (PrizePool == 0): zero Prize rows is
+    /// valid and Publish does NOT require any allocation — a stray positive allocation against a
+    /// zero pool is still rejected via the same "total != PrizePool" check below (0 pool, sum &gt; 0
+    /// naturally fails). CASE B (PrizePool &gt; 0): requires at least one Prize row, every
+    /// Amount &gt; 0, every Position &gt;= 1, Position unique, positions contiguous 1..N, and
+    /// SUM(Amount) == PrizePool exactly. Deliberately does NOT require Position count to equal
+    /// Final-round participant count (out of scope per the task) and never reads RaceResult/
+    /// RankingsJson — Prize.Position is an Admin-configured allocation slot, not derived from an
+    /// actual ranking (Part 20).
+    /// </summary>
+    private async Task<List<string>> ValidatePrizeReadinessAsync(Tournament tournament)
+    {
+        var errors = new List<string>();
+
+        var prizes = await _db.Prizes
+            .Where(p => p.TournamentId == tournament.Id)
+            .OrderBy(p => p.Position)
+            .ToListAsync();
+
+        if (tournament.PrizePool == 0 && prizes.Count == 0)
+            return errors; // CASE A: no budget, no allocation — valid.
+
+        // PRIZE-V1 FINAL HARDENING Part 1: PrizePool == 0 with existing Prize rows is a legacy
+        // state the current Create/Update API can no longer produce (CreateAsync/UpdateAsync both
+        // reject Amount > 0 against a zero-remaining pool), but historical databases may still
+        // contain rows written before this validation existed. Reject explicitly with a clear
+        // message rather than relying on the generic "sum != PrizePool" check below to catch it
+        // incidentally — and never auto-delete the legacy rows.
+        if (tournament.PrizePool == 0 && prizes.Count > 0)
+        {
+            errors.Add("Giải đấu không có quỹ thưởng nhưng vẫn tồn tại cơ cấu giải thưởng.");
+            return errors;
+        }
+
+        if (tournament.PrizePool > 0 && prizes.Count == 0)
+        {
+            errors.Add("Giải đấu có quỹ thưởng nhưng chưa cấu hình cơ cấu giải thưởng.");
+            return errors;
+        }
+
+        foreach (var prize in prizes)
+        {
+            if (prize.Amount <= 0)
+                errors.Add($"Giải thưởng Hạng {prize.Position}: Tiền thưởng phải lớn hơn 0.");
+            if (prize.Position < 1)
+                errors.Add($"Giải thưởng có thứ hạng không hợp lệ ({prize.Position}).");
+        }
+
+        var positions = prizes.Select(p => p.Position).OrderBy(n => n).ToList();
+        if (positions.Count != positions.Distinct().Count())
+        {
+            errors.Add("Thứ hạng giải thưởng bị trùng lặp.");
+        }
+        else if (!positions.SequenceEqual(Enumerable.Range(1, positions.Count)))
+        {
+            errors.Add("Thứ hạng giải thưởng phải liên tục từ 1.");
+        }
+
+        var total = prizes.Sum(p => p.Amount);
+        if (total != tournament.PrizePool)
+            errors.Add("Tổng cơ cấu giải thưởng phải bằng quỹ thưởng của giải đấu.");
+
         return errors;
     }
 

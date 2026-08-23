@@ -11,6 +11,10 @@ public interface IPrizeRepository
     Task<IEnumerable<Prize>> GetByTournamentAsync(Guid tournamentId);
     Task<IEnumerable<Prize>> GetByRaceAsync(Guid raceId);
     Task<IEnumerable<Prize>> GetAllAsync();
+    // PRIZE-V1: single projected existence/SUM queries for validation — avoids loading full Prize
+    // rows just to check a duplicate Position or compute the allocated total.
+    Task<bool> ExistsPositionAsync(Guid tournamentId, int position, Guid? excludePrizeId);
+    Task<decimal> GetAllocatedAmountAsync(Guid tournamentId, Guid? excludePrizeId);
     Task AddAsync(Prize prize);
     Task UpdateAsync(Prize prize);
     Task DeleteAsync(Guid id);

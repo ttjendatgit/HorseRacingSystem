@@ -33,6 +33,11 @@ public class ManagementController : ControllerBase
     public async Task<ActionResult> CreatePrize(CreatePrizeRequest r)
         => OkR(await _prize.CreateAsync(r));
 
+    [HttpPut("prizes/{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> UpdatePrize(Guid id, UpdatePrizeRequest r)
+        => OkR(await _prize.UpdateAsync(id, r));
+
     [HttpGet("prizes")]
     [AllowAnonymous]
     public async Task<ActionResult> GetPrizes()
