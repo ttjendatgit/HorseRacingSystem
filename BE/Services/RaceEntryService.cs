@@ -113,6 +113,12 @@ public class RaceEntryService : IRaceEntryService
         entry.Status = RegistrationStatus.Rejected;
         entry.ScratchedAt = DateTime.UtcNow;
         entry.ScratchReason = string.IsNullOrWhiteSpace(reason) ? "Bị từ chối bởi admin" : reason.Trim();
+        // GATE-V1: a rejected entry is no longer participating (RaceEntryService.
+        // ValidateRaceEntriesForStartAsync excludes it), so its gate frees up for another entry —
+        // this is the only production path that sets ScratchedAt (there is no separate Scratch
+        // endpoint yet), so clearing it here covers both reject and scratch without redesigning
+        // the scratch lifecycle.
+        entry.GateNumber = null;
         await _entries.UpdateAsync(entry);
         await _unitOfWork.SaveChangesAsync();
         return ServiceResult<bool>.Ok(true);

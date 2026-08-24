@@ -143,10 +143,14 @@ public class Q1QualificationTests
         var jockey = new Jockey { Id = Guid.NewGuid(), UserId = jockeyUserId, ApprovalStatus = ApprovalStatus.Approved };
         f.Db.Add(jockey);
 
+        // GATE-V1: StartRace (used by FinishRaceOfficialAsync below) now requires every
+        // participating entry to have a unique, in-range gate — assign the next free one
+        // dynamically so any number of calls for the same race stay collision-free.
+        var nextGate = await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceId) + 1;
         f.Db.Add(new RaceEntry
         {
             Id = Guid.NewGuid(), RaceId = raceId, HorseId = horse.Id, JockeyId = jockey.Id,
-            Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+            Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = nextGate
         });
         f.Db.Add(new HorseHealthCheck
         {

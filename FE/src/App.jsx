@@ -44,6 +44,7 @@ const OwnerRaceConfirmationPage = lazy(() => import("./pages/OwnerRaceConfirmati
 const RefereeDashboardPage = lazy(() => import("./pages/RefereeDashboardPage/RefereeDashboardPage"));
 const RefereeAssignmentPage = lazy(() => import("./pages/RefereeAssignmentPage/RefereeAssignmentPage"));
 const RefereeHealthCheckPage = lazy(() => import("./pages/RefereeHealthCheckPage/RefereeHealthCheckPage"));
+const GateAssignmentPage = lazy(() => import("./pages/GateAssignmentPage/GateAssignmentPage"));
 const RefereeInjuryPage = lazy(() => import("./pages/RefereeInjuryPage/RefereeInjuryPage"));
 const RefereeViolationPage = lazy(() => import("./pages/RefereeViolationPage/RefereeViolationPage"));
 const RefereeRaceReportPage = lazy(() => import("./pages/RefereeRaceReportPage/RefereeRaceReportPage"));
@@ -172,6 +173,7 @@ function AppLayout() {
               <Route path="/referee" element={<RefereeDashboardPage />} />
               <Route path="/referee/assignments" element={<RefereeAssignmentPage />} />
               <Route path="/referee/health-checks" element={<RefereeHealthCheckPage />} />
+              <Route path="/referee/gate-assignment" element={<GateAssignmentPage />} />
               <Route path="/referee/violations" element={<RefereeViolationPage />} />
               <Route path="/referee/reports" element={<RefereeRaceReportPage />} />
               <Route path="/referee/injuries" element={<RefereeInjuryPage />} />

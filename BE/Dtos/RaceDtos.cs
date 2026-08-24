@@ -182,3 +182,8 @@ public class UpdateOddsRequest
 {
     public decimal Odds { get; set; }
 }
+
+public class AssignGateNumberRequest
+{
+    public int GateNumber { get; set; }
+}

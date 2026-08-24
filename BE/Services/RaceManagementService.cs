@@ -708,6 +708,10 @@ public class RaceManagementService : IRaceManagementService
             if (!entryValidation.Result.Success)
                 return ServiceResult<bool>.Fail(entryValidation.StatusCode, entryValidation.Result.Message ?? "Entry chưa hợp lệ");
 
+            var gateValidation = ValidateGateReadinessForStart(entries, race.Track?.Capacity);
+            if (!gateValidation.Result.Success)
+                return ServiceResult<bool>.Fail(gateValidation.StatusCode, gateValidation.Result.Message ?? "Cổng xuất phát chưa hợp lệ");
+
             race.Status = RaceStatus.InProgress;
             race.ActualStartTime = DateTime.UtcNow;
             race.UpdatedAt = DateTime.UtcNow;
@@ -720,6 +724,104 @@ public class RaceManagementService : IRaceManagementService
         {
             return ServiceResult<bool>.Fail(500, "Không thể bắt đầu cuộc đua. Vui lòng thử lại.");
         }
+    }
+
+    /// <summary>
+    /// GATE-V1: StartRace readiness for Referee-assigned starting gates — kept as its own method,
+    /// separate from RaceEntryService.ValidateRaceEntriesForStartAsync (R1a), so R1a's existing
+    /// per-entry reasons/semantics are never touched. Uses the same participation filter as R1a
+    /// (Status != Rejected &amp;&amp; ScratchedAt == null) — Rejected/scratched entries never need a
+    /// gate. FINAL CAPACITY CORRECTION: the gate is a physical Track slot, not a Race participant
+    /// slot — the upper bound is Track.Capacity (Publish readiness already guarantees
+    /// Race.MaxParticipants &lt;= Track.Capacity, see TournamentAndRoundService), never
+    /// Race.MaxParticipants. Range/duplicate checks are defensive: the write endpoint and the DB
+    /// unique index should make these unreachable via normal use, but legacy data predating
+    /// GATE-V1 could still violate them, so StartRace re-checks rather than trusting stored state
+    /// blindly. A null/missing Track.Capacity (should be unreachable post-Publish) is treated as
+    /// "no valid gate can be proven in range" and rejects defensively rather than silently passing.
+    /// </summary>
+    private ServiceResult<bool> ValidateGateReadinessForStart(List<RaceEntry> entries, int? trackCapacity)
+    {
+        var participatingEntries = entries
+            .Where(e => e.Status != RegistrationStatus.Rejected && e.ScratchedAt == null)
+            .ToList();
+
+        if (participatingEntries.Any(e => e.GateNumber == null))
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua khi chưa phân đủ cổng xuất phát.");
+
+        if (!trackCapacity.HasValue || participatingEntries.Any(e => e.GateNumber!.Value < 1 || e.GateNumber.Value > trackCapacity.Value))
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua vì có cổng xuất phát không hợp lệ.");
+
+        var duplicateGate = participatingEntries
+            .GroupBy(e => e.GateNumber!.Value)
+            .Any(g => g.Count() > 1);
+        if (duplicateGate)
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua vì có cổng xuất phát bị trùng lặp.");
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    /// <summary>
+    /// GATE-V1: assigns/updates the starting gate for one participating RaceEntry. Referee
+    /// identity and Confirmed-assignment-to-this-Race authorization are the caller's
+    /// responsibility (RefereesController) — this method validates only the Race/Entry/gate
+    /// business rules: Race exists and is pre-start, entry exists and belongs to this Race, entry
+    /// is participating (Status != Rejected &amp;&amp; ScratchedAt == null), gate is within
+    /// [1, Track.Capacity], and no other entry in the same Race already holds that gate.
+    /// FINAL CAPACITY CORRECTION: GateNumber represents a physical Track starting gate, not a
+    /// Race participant slot — Track.Capacity (not Race.MaxParticipants) is the correct upper
+    /// bound, since Race.MaxParticipants only caps how many RaceEntries the Race holds, while the
+    /// Track physically has Capacity gates available (Publish readiness already guarantees
+    /// Race.MaxParticipants &lt;= Track.Capacity, so this is never a smaller pool). Gates need not
+    /// be contiguous or match the participant count. Re-submitting an entry's own current gate is
+    /// idempotent and always succeeds.
+    /// </summary>
+    public async Task<ServiceResult<bool>> AssignGateNumberAsync(Guid raceId, Guid entryId, int gateNumber)
+    {
+        var race = await _raceRepo.GetByIdAsync(raceId);
+        if (race == null)
+            return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
+
+        var canEditGate =
+            race.Status == RaceStatus.Scheduled ||
+            race.Status == RaceStatus.RegistrationOpen ||
+            race.Status == RaceStatus.RegistrationClosed;
+        if (!canEditGate)
+            return ServiceResult<bool>.Fail(400, $"Không thể chỉnh sửa cổng xuất phát khi cuộc đua đang ở trạng thái '{race.Status}'.");
+
+        var entry = await _entryRepo.GetByIdAsync(entryId);
+        if (entry == null)
+            return ServiceResult<bool>.Fail(404, "Không tìm thấy lượt đăng ký tham gia.");
+
+        if (entry.RaceId != raceId)
+            return ServiceResult<bool>.Fail(400, "Lượt đăng ký này không thuộc cuộc đua đã chọn.");
+
+        var isParticipating = entry.Status != RegistrationStatus.Rejected && entry.ScratchedAt == null;
+        if (!isParticipating)
+            return ServiceResult<bool>.Fail(400, "Không thể gán cổng xuất phát cho lượt đăng ký đã bị từ chối hoặc rút lui.");
+
+        var track = race.Track;
+        if (track == null)
+            return ServiceResult<bool>.Fail(400, "Cuộc đua chưa được gán đường đua (Track), không thể phân cổng xuất phát.");
+        if (!track.Capacity.HasValue || track.Capacity.Value < 1)
+            return ServiceResult<bool>.Fail(400, "Sức chứa (Capacity) của đường đua chưa được thiết lập, không thể phân cổng xuất phát.");
+
+        if (gateNumber < 1 || gateNumber > track.Capacity.Value)
+            return ServiceResult<bool>.Fail(400, $"Cổng xuất phát phải từ 1 đến {track.Capacity.Value}.");
+
+        if (entry.GateNumber != gateNumber)
+        {
+            var raceEntries = await _entryRepo.GetByRaceAsync(raceId);
+            var conflict = raceEntries.Any(e => e.Id != entryId && e.GateNumber == gateNumber);
+            if (conflict)
+                return ServiceResult<bool>.Fail(409, "Cổng xuất phát này đã được sử dụng bởi ngựa khác trong cuộc đua.");
+
+            entry.GateNumber = gateNumber;
+            await _entryRepo.UpdateAsync(entry);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        return ServiceResult<bool>.Ok(true);
     }
 
     /// <summary>

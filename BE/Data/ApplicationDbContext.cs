@@ -485,6 +485,18 @@ public class ApplicationDbContext : DbContext
             .HasIndex(e => new { e.RaceId, e.HorseId })
             .IsUnique();
 
+        // GATE-V1: DB-level defense against two participating entries in the same Race holding
+        // the same starting gate. GateNumber is nullable (an entry has none until a Confirmed
+        // Referee assigns one, and Q1-generated next-round entries always start with
+        // GateNumber == null) — filtered to non-null so any number of ungated entries can coexist
+        // without colliding, matching the same partial-unique-index convention used for
+        // TournamentHorseRegistrations/Prizes above.
+        modelBuilder.Entity<RaceEntry>()
+            .HasIndex(e => new { e.RaceId, e.GateNumber })
+            .IsUnique()
+            .HasFilter("\"GateNumber\" IS NOT NULL")
+            .HasDatabaseName("IX_RaceEntries_RaceId_GateNumber_Active");
+
         // Phase5: Round.RoundNumber must be unique within its Tournament (spec §21.3).
         modelBuilder.Entity<Round>()
             .HasIndex(r => new { r.TournamentId, r.RoundNumber })

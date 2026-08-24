@@ -800,8 +800,12 @@ public class RaceLifecycleTests
             // (the model default) and only flipped to Ongoing afterward — see R1a note below.
             var tournament = new Tournament { Id = Guid.NewGuid(), Name = $"Tournament{n}", StartDate = now, EndDate = now.AddDays(7) };
             var round = new Round { Id = Guid.NewGuid(), Name = "Round 1", TournamentId = tournament.Id, RoundNumber = 1, ScheduledStartDate = now, ScheduledEndDate = now.AddDays(1) };
+            // GATE-V1 FINAL CAPACITY CORRECTION: GateNumber's upper bound is Track.Capacity, not
+            // Race.MaxParticipants — this helper is named "ready to start", so it needs a real
+            // Track with headroom above the base 2 entries for AddExtraApprovedEntryAsync callers.
+            var track = new Track { Id = Guid.NewGuid(), Name = $"Track{n}", Capacity = 20, CreatedAt = now };
 
-            Db.AddRange(ownerUser, owner, jockeyUser, jockey, jockeyUser2, jockey2, refereeUser, referee, winnerHorse, loserHorse, tournament, round);
+            Db.AddRange(ownerUser, owner, jockeyUser, jockey, jockeyUser2, jockey2, refereeUser, referee, winnerHorse, loserHorse, tournament, round, track);
             await Db.SaveChangesAsync();
 
             var createResult = await RaceManagement.CreateRaceAsync(new CreateRaceRequest
@@ -811,6 +815,7 @@ public class RaceLifecycleTests
                 RoundId = round.Id,
                 ScheduledAt = now.AddHours(1),
                 MaxParticipants = 8,
+                TrackId = track.Id,
                 Distance = 1200
             });
             var raceId = createResult.Result.Data!.Id;
@@ -820,15 +825,19 @@ public class RaceLifecycleTests
             tournament.Status = TournamentStatus.Ongoing;
             tournament.IsActive = true;
 
+            // GATE-V1: StartRace now requires every participating entry to have a unique, in-range
+            // GateNumber — this helper is named "ready to start", so the seeded entries must
+            // already satisfy that gate too (gates are otherwise unrelated to what each test here
+            // actually exercises, so any distinct in-range pair works).
             var winnerEntry = new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = winnerHorse.Id, JockeyId = jockey.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = 1
             };
             var loserEntry = new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = loserHorse.Id, JockeyId = jockey2.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = 2
             };
             Db.AddRange(winnerEntry, loserEntry);
 
@@ -871,10 +880,14 @@ public class RaceLifecycleTests
             Db.AddRange(ownerUser, owner, jockeyUser, jockey, horse);
             await Db.SaveChangesAsync();
 
+            // GATE-V1: assign the next free gate dynamically (base race already holds gates 1/2
+            // from CreateReadyToStartRaceAsync) so repeated calls for a 3rd/4th/etc. horse never
+            // collide with each other or with the base pair.
+            var nextGate = await Db.RaceEntries.CountAsync(e => e.RaceId == raceId) + 1;
             Db.Add(new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = horse.Id, JockeyId = jockey.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = nextGate
             });
             Db.Add(new HorseHealthCheck
             {

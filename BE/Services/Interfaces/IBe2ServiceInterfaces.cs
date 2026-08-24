@@ -59,6 +59,11 @@ public interface IRaceManagementService
 
     // Q1: Qualification — generate Round N+1 RaceEntries from Round N's Official rankings
     Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId);
+
+    // GATE-V1: Referee-only starting gate assignment. Caller (RefereesController) is responsible
+    // for identity + Confirmed-assignment-to-this-Race authorization before calling this — this
+    // method validates only the Race/Entry/gate business rules themselves.
+    Task<ServiceResult<bool>> AssignGateNumberAsync(Guid raceId, Guid entryId, int gateNumber);
 }
 
 public interface IRefereeService
