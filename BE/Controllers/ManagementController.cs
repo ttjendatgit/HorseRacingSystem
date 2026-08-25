@@ -2,6 +2,7 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
+using HorseRacing.Models;
 using HorseRacing.Services;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -18,15 +19,25 @@ public class ManagementController : ControllerBase
     private readonly IHorseTransferService _transfer;
     private readonly IContractService _contract;
     private readonly IInjuryRecordService _injury;
+    private readonly ITournamentService _tournament;
 
-    public ManagementController(IPrizeService prize, IProtestService protest, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury)
+    public ManagementController(IPrizeService prize, IProtestService protest, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury, ITournamentService tournament)
     {
-        _prize = prize; _protest = protest; _transfer = transfer; _contract = contract; _injury = injury;
+        _prize = prize; _protest = protest; _transfer = transfer; _contract = contract; _injury = injury; _tournament = tournament;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    // ── Prizes (Admin only) ──
+    private bool IsAdminCaller() => User?.IsInRole("Admin") == true;
+
+    /// <summary>Mirrors TournamentsController.IsDraftTournament — same Draft-hiding semantics,
+    /// checked here too since Prize breakdown is Tournament-scoped and must follow the same
+    /// visibility policy as the Tournament itself (PRIZE-V1.1 Part 6).</summary>
+    private static bool IsDraftTournament(TournamentResponse? tournament) =>
+        tournament?.Status == TournamentStatus.Draft ||
+        string.Equals(tournament?.StatusName, nameof(TournamentStatus.Draft), StringComparison.OrdinalIgnoreCase);
+
+    // ── Prizes (write: Admin only; read: Draft hidden from non-Admin) ──
 
     [HttpPost("prizes")]
     [Authorize(Roles = "Admin")]
@@ -38,15 +49,26 @@ public class ManagementController : ControllerBase
     public async Task<ActionResult> UpdatePrize(Guid id, UpdatePrizeRequest r)
         => OkR(await _prize.UpdateAsync(id, r));
 
+    // Cross-tournament listing has no legitimate anonymous use case (it would otherwise leak Draft
+    // Prize rows for every Tournament at once) and nothing in the current frontend calls it —
+    // Admin-only, matching the write endpoints above.
     [HttpGet("prizes")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetPrizes()
         => OkR(await _prize.GetAllAsync());
 
     [HttpGet("prizes/tournament/{tid:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult> GetPrizesByTournament(Guid tid)
-        => OkR(await _prize.GetByTournamentAsync(tid));
+    {
+        if (!IsAdminCaller())
+        {
+            var tournament = await _tournament.GetTournamentAsync(tid);
+            if (tournament.Result.Success && IsDraftTournament(tournament.Result.Data))
+                return NotFound(ApiResult<object>.Fail("Không tìm thấy giải đấu"));
+        }
+        return OkR(await _prize.GetByTournamentAsync(tid));
+    }
 
     [HttpGet("prizes/race/{rid:guid}")]
     [AllowAnonymous]

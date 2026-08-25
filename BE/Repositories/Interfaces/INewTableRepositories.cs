@@ -15,6 +15,9 @@ public interface IPrizeRepository
     // rows just to check a duplicate Position or compute the allocated total.
     Task<bool> ExistsPositionAsync(Guid tournamentId, int position, Guid? excludePrizeId);
     Task<decimal> GetAllocatedAmountAsync(Guid tournamentId, Guid? excludePrizeId);
+    // PRIZE-V1.2: percentage is now the source-of-truth allocation figure (Amount is derived) —
+    // mirrors GetAllocatedAmountAsync's shape exactly.
+    Task<decimal> GetAllocatedPercentageAsync(Guid tournamentId, Guid? excludePrizeId);
     Task AddAsync(Prize prize);
     Task UpdateAsync(Prize prize);
     Task DeleteAsync(Guid id);

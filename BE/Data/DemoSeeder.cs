@@ -178,14 +178,16 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         // ── PRIZES ──
-        // PRIZE-V1: tournament-scoped rows must sum exactly to tournament.PrizePool (250,000) so the
-        // seeded Draft tournament is Publish-ready under the new readiness rule; Currency corrected to
-        // VND to match the app's monetary convention. The old orphan RaceId-only/TournamentId-null row
-        // was removed — Prize is tournament-final-ranking allocation only in V1, not race-scoped.
+        // PRIZE-V1.2: Amount is now DERIVED from PercentageOfPool * PrizePool / 100 — these seed
+        // values are hand-computed to already be internally consistent (60/25/15 = 100% of
+        // 250,000 = 150,000/62,500/37,500 exactly), matching what PrizeAmountCalculator would
+        // itself produce, so no seed-time recalculation call is needed. Currency is VND to match
+        // the app's monetary convention. The old orphan RaceId-only/TournamentId-null row was
+        // removed — Prize is tournament-final-ranking allocation only in V1, not race-scoped.
         db.Prizes.AddRange(
             new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "1st Place - Spring Championship", Amount = 150000m, Currency = "VND", Position = 1, PercentageOfPool = 60, SponsorName = "RaceMaster Inc.", CreatedAt = now },
-            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "2nd Place - Spring Championship", Amount = 75000m, Currency = "VND", Position = 2, PercentageOfPool = 20, CreatedAt = now },
-            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "3rd Place - Spring Championship", Amount = 25000m, Currency = "VND", Position = 3, PercentageOfPool = 10, CreatedAt = now }
+            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "2nd Place - Spring Championship", Amount = 62500m, Currency = "VND", Position = 2, PercentageOfPool = 25, CreatedAt = now },
+            new() { Id = Guid.NewGuid(), TournamentId = tournament.Id, Name = "3rd Place - Spring Championship", Amount = 37500m, Currency = "VND", Position = 3, PercentageOfPool = 15, CreatedAt = now }
         );
         await db.SaveChangesAsync();
 

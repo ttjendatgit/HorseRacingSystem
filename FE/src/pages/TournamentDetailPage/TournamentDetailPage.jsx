@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { getTournament, getRoundsByTournament, getRaceEntries } from "../../services/spectatorApi";
 import { getTournamentRaces } from "../../services/adminApi";
 import { getPrizesByTournament } from "../../services/managementApi";
-import { sortPrizesByPosition } from "../../utils/prizeAllocation";
+import PrizeBreakdown from "../../components/PrizeBreakdown";
+import "../../components/PrizeBreakdown.css";
 import "./TournamentDetailPage.css";
 
 function TournamentDetailPage() {
@@ -191,32 +192,12 @@ function TournamentDetailPage() {
             )}
           </div>
 
-          {/* Prize breakdown — Position -> Amount allocation only, no payout/recipient/distribution status */}
+          {/* Prize breakdown — Position -> Amount allocation only, no payout/recipient/distribution
+              status. Shared component (PRIZE-V1.1 Part 7) — this page is the one route every
+              authenticated role (Owner/Jockey/Spectator/Referee) reaches for Tournament detail. */}
           {prizes.length > 0 && (
             <div style={{ marginBottom: 32 }}>
-              <h2 style={{ color: "#172033", marginBottom: 16, fontSize: 20 }}>Cơ cấu giải thưởng</h2>
-              <div style={{ display: "grid", gap: 8 }}>
-                {sortPrizesByPosition(prizes).map((p) => {
-                  const pid = p.id ?? p.Id;
-                  const position = p.position ?? p.Position;
-                  const amount = p.amount ?? p.Amount ?? 0;
-                  const sponsorName = p.sponsorName ?? p.SponsorName;
-                  return (
-                    <div key={pid} style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      padding: "12px 16px", borderRadius: 12,
-                      background: "rgba(143,100,32,0.05)", border: "1px solid rgba(143,100,32,0.1)"
-                    }}>
-                      <span style={{ color: "#172033", fontWeight: 600 }}>
-                        Hạng {position}{sponsorName ? ` · ${sponsorName}` : ""}
-                      </span>
-                      <span style={{ color: "#8f6420", fontWeight: 700 }}>
-                        {amount.toLocaleString()} VNĐ
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <PrizeBreakdown prizes={prizes} />
             </div>
           )}
 

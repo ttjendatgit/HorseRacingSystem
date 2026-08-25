@@ -10,18 +10,30 @@ using Microsoft.EntityFrameworkCore;
 namespace Tests;
 
 /// <summary>
-/// PRIZE-V1: Tournament Prize Allocation Management. Prize rows allocate Tournament.PrizePool by
-/// FINAL Tournament ranking Position — Draft-only mutable, read-only once Published/Ongoing/
-/// Finished/Cancelled. Covers Create/Update/Delete rules, PrizePool mutability, Publish readiness,
-/// the DB-level unique (TournamentId, Position) index, and public read access. Reuses
-/// RaceLifecycleTests.LifecycleFixture for a real Sqlite in-memory DB and the production
-/// TournamentService; PrizeService is constructed directly since the shared fixture does not
-/// expose it.
+/// PRIZE-V1 / PRIZE-V1.2: Tournament Prize Allocation Management. Prize rows allocate
+/// Tournament.PrizePool by FINAL Tournament ranking Position via PercentageOfPool — Admin
+/// configures a percentage, Amount is entirely backend-derived (see PrizeAmountCalculator).
+/// Draft-only mutable, read-only once Published/Ongoing/Finished/Cancelled. Covers Create/Update/
+/// Delete rules, PrizePool mutability, Publish readiness, the DB-level unique (TournamentId,
+/// Position) index, and public read access. Reuses RaceLifecycleTests.LifecycleFixture for a real
+/// Sqlite in-memory DB and the production TournamentService; PrizeService is constructed directly
+/// since the shared fixture does not expose it.
+///
+/// PRIZE-V1.2 migration note: tests that submitted a request-level Amount (CreatePrizeRequest/
+/// UpdatePrizeRequest) were converted to submit an equivalent PercentageOfPool instead — Amount
+/// was removed from both write DTOs (Part 6). Tests that seed a Prize ENTITY directly (bypassing
+/// the DTO layer, e.g. DB-constraint/legacy-row tests) are unchanged, since Prize.Amount still
+/// exists on the entity. Two tests whose entire premise became obsolete under the new design
+/// (see PrizeV1_1_2Tests.cs for their percentage-based replacements) were removed rather than
+/// force-fit: CreatePrize_ZeroPrizePool_AnyPositiveAmountRejected (PercentageOfPool validity is
+/// now independent of the current PrizePool value — see PRIZE-V1.2 report) and the two
+/// "lower PrizePool below allocated Amount" tests (PrizePool changes now always succeed and
+/// recalculate Amounts, never reject — Part 5).
 /// </summary>
 public class PrizeV1Tests
 {
     private static PrizeService MakePrizeService(RaceLifecycleTests.LifecycleFixture f)
-        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork);
+        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db);
 
     private static async Task<Guid> CreateDraftTournamentAsync(RaceLifecycleTests.LifecycleFixture f, decimal prizePool)
     {
@@ -58,7 +70,7 @@ public class PrizeV1Tests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = null, Position = 1, Amount = 1000 });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = null, Position = 1, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
     }
@@ -68,7 +80,7 @@ public class PrizeV1Tests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = Guid.NewGuid(), Position = 1, Amount = 1000 });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = Guid.NewGuid(), Position = 1, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(404, result.StatusCode);
     }
@@ -81,7 +93,7 @@ public class PrizeV1Tests
         var tid = await CreateDraftTournamentAsync(f, 10000);
         await PublishStatusOnlyAsync(f, tid, TournamentStatus.Published);
 
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
     }
@@ -93,7 +105,7 @@ public class PrizeV1Tests
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
 
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 0, Amount = 1000 });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 0, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
     }
@@ -105,31 +117,7 @@ public class PrizeV1Tests
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
 
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = -1, Amount = 1000 });
-        Assert.False(result.Result.Success);
-        Assert.Equal(400, result.StatusCode);
-    }
-
-    [Fact]
-    public async Task CreatePrize_AmountZero_Rejected()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var svc = MakePrizeService(f);
-        var tid = await CreateDraftTournamentAsync(f, 10000);
-
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 0 });
-        Assert.False(result.Result.Success);
-        Assert.Equal(400, result.StatusCode);
-    }
-
-    [Fact]
-    public async Task CreatePrize_AmountNegative_Rejected()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var svc = MakePrizeService(f);
-        var tid = await CreateDraftTournamentAsync(f, 10000);
-
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = -500 });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = -1, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(400, result.StatusCode);
     }
@@ -140,10 +128,10 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(first.Result.Success, first.Result.Message);
 
-        var dup = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 2000 });
+        var dup = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 30 });
         Assert.False(dup.Result.Success);
         Assert.Equal(409, dup.StatusCode);
     }
@@ -155,23 +143,24 @@ public class PrizeV1Tests
         var svc = MakePrizeService(f);
         var tid1 = await CreateDraftTournamentAsync(f, 10000);
         var tid2 = await CreateDraftTournamentAsync(f, 10000);
-        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid1, Position = 1, Amount = 1000 });
+        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid1, Position = 1, PercentageOfPool = 50 });
         Assert.True(p1.Result.Success, p1.Result.Message);
 
-        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid2, Position = 1, Amount = 1000 });
+        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid2, Position = 1, PercentageOfPool = 50 });
         Assert.True(p2.Result.Success, p2.Result.Message);
     }
 
     [Fact]
     public async Task CreatePrize_SumExceedsPrizePool_Rejected()
     {
+        // PRIZE-V1.2: "sum" is now a percentage sum (80% + 50% > 100%), not a dollar sum.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 1000);
-        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 800 });
+        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 80 });
         Assert.True(first.Result.Success, first.Result.Message);
 
-        var second = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 500 });
+        var second = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 50 });
         Assert.False(second.Result.Success);
         Assert.Equal(400, second.StatusCode);
     }
@@ -179,42 +168,32 @@ public class PrizeV1Tests
     [Fact]
     public async Task CreatePrize_SumExactlyEqualsPrizePool_Allowed()
     {
+        // PRIZE-V1.2: percentages summing to exactly 100% (not Amounts summing to PrizePool).
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 1000);
-        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 700 });
+        var first = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 70 });
         Assert.True(first.Result.Success, first.Result.Message);
 
-        var second = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 300 });
+        var second = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 30 });
         Assert.True(second.Result.Success, second.Result.Message);
     }
 
     [Fact]
-    public async Task CreatePrize_ZeroPrizePool_AnyPositiveAmountRejected()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var svc = MakePrizeService(f);
-        var tid = await CreateDraftTournamentAsync(f, 0);
-
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1 });
-        Assert.False(result.Result.Success);
-        Assert.Equal(400, result.StatusCode);
-    }
-
-    [Fact]
-    public async Task CreatePrize_ValidRow_SetsInertLegacyFields()
+    public async Task CreatePrize_ValidRow_SetsInertLegacyFieldsAndDerivesAmount()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
 
-        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 5000, SponsorName = "Acme" });
+        var result = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50, SponsorName = "Acme" });
         Assert.True(result.Result.Success, result.Result.Message);
 
         var row = await f.Db.Prizes.FirstAsync(p => p.Id == result.Result.Data!.Id);
         Assert.Null(row.RaceId);
         Assert.Equal("VND", row.Currency);
-        Assert.Equal(0, row.PercentageOfPool);
+        Assert.Equal(50m, row.PercentageOfPool); // PRIZE-V1.2: now Admin-controlled, not hardcoded 0
+        Assert.Equal(5000m, row.Amount); // 50% of 10,000 — backend-derived
         Assert.False(row.IsDistributed);
         Assert.Null(row.DistributedAt);
         Assert.Equal("Acme", row.SponsorName);
@@ -226,11 +205,11 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(p1.Result.Success, p1.Result.Message);
 
         // Position 2 skipped entirely — Draft allows temporary gaps, contiguity is Publish-only.
-        var p3 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, Amount = 1000 });
+        var p3 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, PercentageOfPool = 20 });
         Assert.True(p3.Result.Success, p3.Result.Message);
     }
 
@@ -241,7 +220,7 @@ public class PrizeV1Tests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
-        var result = await svc.UpdateAsync(Guid.NewGuid(), new UpdatePrizeRequest { Position = 1, Amount = 1000 });
+        var result = await svc.UpdateAsync(Guid.NewGuid(), new UpdatePrizeRequest { Position = 1, PercentageOfPool = 50 });
         Assert.False(result.Result.Success);
         Assert.Equal(404, result.StatusCode);
     }
@@ -252,11 +231,11 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
         await PublishStatusOnlyAsync(f, tid, TournamentStatus.Published);
 
-        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, Amount = 2000 });
+        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, PercentageOfPool = 60 });
         Assert.False(update.Result.Success);
         Assert.Equal(400, update.StatusCode);
     }
@@ -267,24 +246,24 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
 
-        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 0, Amount = 1000 });
+        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 0, PercentageOfPool = 50 });
         Assert.False(update.Result.Success);
         Assert.Equal(400, update.StatusCode);
     }
 
     [Fact]
-    public async Task UpdatePrize_AmountInvalid_Rejected()
+    public async Task UpdatePrize_PercentageInvalid_Rejected()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
 
-        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, Amount = 0 });
+        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, PercentageOfPool = 0 });
         Assert.False(update.Result.Success);
         Assert.Equal(400, update.StatusCode);
     }
@@ -295,28 +274,29 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
-        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 1000 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
+        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 20 });
         Assert.True(p2.Result.Success, p2.Result.Message);
 
-        var update = await svc.UpdateAsync(p2.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, Amount = 1000 });
+        var update = await svc.UpdateAsync(p2.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, PercentageOfPool = 20 });
         Assert.False(update.Result.Success);
         Assert.Equal(409, update.StatusCode);
     }
 
     [Fact]
-    public async Task UpdatePrize_ToOwnCurrentPosition_Allowed()
+    public async Task UpdatePrize_ToOwnCurrentPosition_AllowedAndRecalculatesAmount()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
 
-        // Same Position(1), new Amount — must not self-collide with the duplicate-position check.
-        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, Amount = 2000 });
+        // Same Position(1), new PercentageOfPool — must not self-collide with the duplicate-position check.
+        var update = await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, PercentageOfPool = 80 });
         Assert.True(update.Result.Success, update.Result.Message);
-        Assert.Equal(2000m, update.Result.Data!.Amount);
+        Assert.Equal(80m, update.Result.Data!.PercentageOfPool);
+        Assert.Equal(8000m, update.Result.Data!.Amount); // 80% of 10,000, re-derived
     }
 
     [Fact]
@@ -325,12 +305,12 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 1000);
-        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 500 });
-        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 400 });
+        var p1 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
+        var p2 = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 40 });
         Assert.True(p2.Result.Success, p2.Result.Message);
 
-        // 500 (p1) + 700 (p2 new) = 1200 > 1000
-        var update = await svc.UpdateAsync(p2.Result.Data!.Id, new UpdatePrizeRequest { Position = 2, Amount = 700 });
+        // 50% (p1) + 70% (p2 new) = 120% > 100%
+        var update = await svc.UpdateAsync(p2.Result.Data!.Id, new UpdatePrizeRequest { Position = 2, PercentageOfPool = 70 });
         Assert.False(update.Result.Success);
         Assert.Equal(400, update.StatusCode);
     }
@@ -342,12 +322,12 @@ public class PrizeV1Tests
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
         var otherTid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
 
         // UpdatePrizeRequest has no TournamentId field at all — verify the persisted row's
         // TournamentId is untouched by an Update regardless.
-        await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, Amount = 1500 });
+        await svc.UpdateAsync(create.Result.Data!.Id, new UpdatePrizeRequest { Position = 1, PercentageOfPool = 60 });
         var row = await f.Db.Prizes.FirstAsync(p => p.Id == create.Result.Data!.Id);
         Assert.Equal(tid, row.TournamentId);
         Assert.NotEqual(otherTid, row.TournamentId);
@@ -371,7 +351,7 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
 
         var delete = await svc.DeleteAsync(create.Result.Data!.Id);
@@ -385,7 +365,7 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
         await PublishStatusOnlyAsync(f, tid, TournamentStatus.Published);
 
@@ -401,7 +381,7 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 10000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 1000 });
+        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 50 });
         Assert.True(create.Result.Success, create.Result.Message);
         await PublishStatusOnlyAsync(f, tid, TournamentStatus.Ongoing);
 
@@ -435,33 +415,6 @@ public class PrizeV1Tests
         var update = await f.TournamentSvc.UpdateTournamentAsync(tid, new UpdateTournamentRequest { PrizePool = 2000 });
         Assert.True(update.Result.Success, update.Result.Message);
         Assert.Equal(2000m, update.Result.Data!.PrizePool);
-    }
-
-    [Fact]
-    public async Task UpdateTournament_PrizePool_Draft_LowerBelowAllocated_Rejected()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var svc = MakePrizeService(f);
-        var tid = await CreateDraftTournamentAsync(f, 1000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 800 });
-        Assert.True(create.Result.Success, create.Result.Message);
-
-        var update = await f.TournamentSvc.UpdateTournamentAsync(tid, new UpdateTournamentRequest { PrizePool = 500 });
-        Assert.False(update.Result.Success);
-        Assert.Equal(400, update.StatusCode);
-    }
-
-    [Fact]
-    public async Task UpdateTournament_PrizePool_Draft_LowerToExactlyAllocated_Allowed()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var svc = MakePrizeService(f);
-        var tid = await CreateDraftTournamentAsync(f, 1000);
-        var create = await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 800 });
-        Assert.True(create.Result.Success, create.Result.Message);
-
-        var update = await f.TournamentSvc.UpdateTournamentAsync(tid, new UpdateTournamentRequest { PrizePool = 800 });
-        Assert.True(update.Result.Success, update.Result.Message);
     }
 
     [Fact]
@@ -526,8 +479,8 @@ public class PrizeV1Tests
     public async Task Publish_PrizePoolZero_WithExistingPrizeRows_Rejected()
     {
         // FINAL HARDENING Part 1: the current Create/Update API can no longer produce this state
-        // (Amount > 0 against a zero-remaining pool is always rejected), but historical databases
-        // may already contain Prize rows written before that validation existed — seed directly to
+        // (Publish itself requires PrizePool == 0 to have zero rows), but historical databases may
+        // already contain Prize rows written before that validation existed — seed directly to
         // prove Publish still catches this legacy state instead of silently allowing it.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (tid, roundId, roundStart, roundEnd) = await Phase5StructuralTestsHelper.BuildDraftSingleFinalRoundAsync(f, prizePool: 0);
@@ -568,7 +521,7 @@ public class PrizeV1Tests
     }
 
     [Fact]
-    public async Task Publish_PositivePrizePool_SumMismatchBelow_Rejected()
+    public async Task Publish_PositivePrizePool_PercentageSumBelow100_Rejected()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
@@ -580,7 +533,7 @@ public class PrizeV1Tests
             ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
             TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 800 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 80 });
 
         var publish = await f.TournamentSvc.ChangeStatusAsync(tid, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
         Assert.False(publish.Result.Success);
@@ -600,9 +553,9 @@ public class PrizeV1Tests
             ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
             TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
-        // Positions 1 and 3 (gap at 2) — sum still equals PrizePool, isolating the contiguity check.
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 700 });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, Amount = 300 });
+        // Positions 1 and 3 (gap at 2) — percentages still sum to 100%, isolating the contiguity check.
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 70 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, PercentageOfPool = 30 });
 
         var publish = await f.TournamentSvc.ChangeStatusAsync(tid, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
         Assert.False(publish.Result.Success);
@@ -622,9 +575,9 @@ public class PrizeV1Tests
             ScheduledAt = roundStart, ScheduledEndAt = roundStart.AddHours(1),
             TrackId = track, MaxParticipants = 5, QualificationSlots = 0
         });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 600 });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 300 });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, Amount = 100 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 60 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 30 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, PercentageOfPool = 10 });
 
         var publish = await f.TournamentSvc.ChangeStatusAsync(tid, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
         Assert.True(publish.Result.Success, publish.Result.Message);
@@ -667,9 +620,9 @@ public class PrizeV1Tests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var svc = MakePrizeService(f);
         var tid = await CreateDraftTournamentAsync(f, 1000);
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, Amount = 100 });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, Amount = 600 });
-        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, Amount = 300 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 3, PercentageOfPool = 10 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 1, PercentageOfPool = 60 });
+        await svc.CreateAsync(new CreatePrizeRequest { TournamentId = tid, Position = 2, PercentageOfPool = 30 });
 
         var result = await svc.GetByTournamentAsync(tid);
         Assert.True(result.Result.Success, result.Result.Message);
@@ -690,17 +643,18 @@ public class PrizeV1Tests
     }
 
     [Fact]
-    public void PrizeResponse_NeverExposesIsDistributedOrRaceId()
+    public void PrizeResponse_ExposesPercentageAndAmountButNotDistributionFields()
     {
-        // Contract-shape proof: PrizeResponse has no IsDistributed/RaceId/Currency/PercentageOfPool
-        // properties at all (see NewTableDtos.cs), so there is nothing to accidentally leak through
-        // the public read endpoints — verified here via reflection against the actual DTO type.
+        // PRIZE-V1.2 Part 12: PercentageOfPool is now DELIBERATELY public (Owner/Jockey/Spectator
+        // need to see it) — only IsDistributed/DistributedAt/RaceId/Currency stay hidden, since no
+        // payout/distribution mechanism exists in this contract.
         var props = typeof(PrizeResponse).GetProperties().Select(p => p.Name).ToHashSet();
+        Assert.Contains("PercentageOfPool", props);
+        Assert.Contains("Amount", props);
         Assert.DoesNotContain("IsDistributed", props);
         Assert.DoesNotContain("DistributedAt", props);
         Assert.DoesNotContain("RaceId", props);
         Assert.DoesNotContain("Currency", props);
-        Assert.DoesNotContain("PercentageOfPool", props);
     }
 }
 

@@ -824,11 +824,15 @@ function Roles() {
 }
 
 function TournamentManagement() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [editingStatus, setEditingStatus] = useState(null);
   const [message, setMessage] = useState("");
+  // PRIZE-V1.1 PART 12: shown only when Publish fails specifically because of Prize
+  // configuration — detected from the backend's own error text, not a separate API call.
+  const [showPrizeCta, setShowPrizeCta] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
@@ -921,6 +925,7 @@ function TournamentManagement() {
   const CANCELLED_STATUS = 4;
 
   const changeStatus = async (id, newStatus) => {
+    setShowPrizeCta(false);
     try {
       const body = { newStatus };
       if (newStatus === CANCELLED_STATUS) {
@@ -936,13 +941,24 @@ function TournamentManagement() {
       });
       setMessage("Đã cập nhật trạng thái giải đấu.");
       load();
-    } catch (err) { setMessage(err.message); }
+    } catch (err) {
+      setMessage(err.message);
+      // Backend authoritative validation is the only source of truth here — this is purely a
+      // text-match on its own Vietnamese error strings ("giải thưởng" appears in every Prize
+      // readiness message), not a redecided business rule.
+      setShowPrizeCta(typeof err.message === "string" && err.message.includes("giải thưởng"));
+    }
   };
 
   return (
     <>
       <PageTitle eyebrow="Quản lý giải đấu" title="Giải đấu" description="Tạo giải đấu và điều phối vòng đấu, cuộc đua." action={<button className="primary-button" onClick={() => { setEditingId(""); setShowForm(true); }}>Tạo giải đấu</button>} />
       <Notice message={message} />
+      {showPrizeCta && (
+        <button className="ghost-button" style={{ marginBottom: 16 }} onClick={() => navigate("/admin/prizes")}>
+          Đi tới cấu hình giải thưởng
+        </button>
+      )}
       {showForm && !editingId && (
         <TournamentForm
           onClose={() => setShowForm(false)}

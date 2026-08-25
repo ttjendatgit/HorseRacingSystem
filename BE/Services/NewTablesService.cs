@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
@@ -22,12 +23,48 @@ public class PrizeService : IPrizeService
     private readonly IPrizeRepository _repo;
     private readonly ITournamentRepository _tournamentRepo;
     private readonly IUnitOfWork _uow;
-    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow)
+    private readonly ApplicationDbContext _db;
+    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow, ApplicationDbContext db)
     {
         _repo = repo;
         _tournamentRepo = tournamentRepo;
         _uow = uow;
+        _db = db;
     }
+
+    /// <summary>
+    /// PRIZE-V1.1 PART 1: Prize.Position must not exceed the Tournament's structural planned Final
+    /// capacity (see PlannedFinalParticipantsHelper) — never actual registrations/RaceEntry counts.
+    /// If the plan is not yet determinate (e.g. multi-round with no pre-Final Round configured yet),
+    /// rejects rather than allowing an unbounded Position, per "do NOT silently clamp Position."
+    /// </summary>
+    private async Task<string?> ValidatePositionAgainstFinalLimitAsync(Tournament tournament, int position)
+    {
+        var planned = await PlannedFinalParticipantsHelper.ComputeAsync(_db, tournament.Id, tournament.MaxRounds, tournament.MaxParticipants);
+        if (!planned.HasValue)
+            return "Chưa xác định được số người có thể tham gia Vòng chung kết của giải đấu.";
+        if (position > planned.Value)
+            return "Hạng thưởng vượt quá số người có thể tham gia Vòng chung kết.";
+        return null;
+    }
+
+    /// <summary>PRIZE-V1.2 FINAL HARDENING Part 1: PercentageOfPool is stored as decimal(5,2) —
+    /// at most 2 fractional digits. Decimal-safe check (no floating point involved anywhere):
+    /// rounding to 2 places must not change the value. Never silently rounds the submitted value
+    /// — a value with more precision than the column supports is rejected outright, not clamped.
+    /// </summary>
+    private static bool HasMoreThanTwoDecimalPlaces(decimal value) => Math.Round(value, 2) != value;
+
+    /// <summary>PRIZE-V1.2 PART 21: friendlier default when Admin leaves Name blank — never
+    /// overwrites an Admin-entered Name (callers only invoke this when the supplied Name is
+    /// null/whitespace).</summary>
+    private static string DefaultPrizeName(int position) => position switch
+    {
+        1 => "Vô địch",
+        2 => "Á quân",
+        3 => "Quý quân",
+        _ => $"Hạng {position}",
+    };
 
     public async Task<ServiceResult<PrizeResponse>> CreateAsync(CreatePrizeRequest r)
     {
@@ -44,34 +81,58 @@ public class PrizeService : IPrizeService
         if (r.Position < 1)
             return ServiceResult<PrizeResponse>.Fail(400, "Hạng thưởng phải lớn hơn hoặc bằng 1.");
 
-        if (r.Amount <= 0)
-            return ServiceResult<PrizeResponse>.Fail(400, "Tiền thưởng phải lớn hơn 0.");
+        // PRIZE-V1.2 PART 1: PercentageOfPool replaces Amount as the value Admin controls.
+        if (r.PercentageOfPool <= 0)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ phải lớn hơn 0.");
+        if (r.PercentageOfPool > 100)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ không được vượt quá 100%.");
+        // FINAL HARDENING Part 1: precision must be checked before any total-percentage/Amount
+        // calculation runs against this value.
+        if (HasMoreThanTwoDecimalPlaces(r.PercentageOfPool))
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ chỉ được tối đa 2 chữ số thập phân.");
+
+        var finalLimitError = await ValidatePositionAgainstFinalLimitAsync(tournament, r.Position);
+        if (finalLimitError != null)
+            return ServiceResult<PrizeResponse>.Fail(400, finalLimitError);
 
         if (await _repo.ExistsPositionAsync(tournament.Id, r.Position, excludePrizeId: null))
             return ServiceResult<PrizeResponse>.Fail(409, "Hạng thưởng này đã được cấu hình.");
 
-        var allocatedSoFar = await _repo.GetAllocatedAmountAsync(tournament.Id, excludePrizeId: null);
-        if (allocatedSoFar + r.Amount > tournament.PrizePool)
-            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tiền thưởng không được vượt quá quỹ thưởng của giải đấu.");
+        // PRIZE-V1.2 PART 2: percentage total, not Amount total, is the Draft-time completeness
+        // source of truth — SUM(PercentageOfPool) may be <= 100 while Draft (incomplete
+        // allocation allowed), but never exceed it.
+        var allocatedPercentageSoFar = await _repo.GetAllocatedPercentageAsync(tournament.Id, excludePrizeId: null);
+        if (allocatedPercentageSoFar + r.PercentageOfPool > 100)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tỷ lệ phân bổ không được vượt quá 100%.");
 
         var prize = new Prize
         {
             Id = Guid.NewGuid(),
             TournamentId = tournament.Id,
             RaceId = null, // V1: allocation is Tournament-scoped by Final ranking, never Race-specific
-            Name = string.IsNullOrWhiteSpace(r.Name) ? $"Hạng {r.Position}" : r.Name,
-            Amount = r.Amount,
+            Name = string.IsNullOrWhiteSpace(r.Name) ? DefaultPrizeName(r.Position) : r.Name,
+            Amount = 0, // derived below via PrizeAmountCalculator, never client-controlled
             // Canonical monetary convention for this product is VND (see PRIZE-V1 report §9) — the
             // legacy entity default of "USD" is only ever overridden here, never relied upon.
             Currency = "VND",
             Position = r.Position,
-            PercentageOfPool = 0,
+            PercentageOfPool = r.PercentageOfPool,
             SponsorName = r.SponsorName,
             Description = null,
             IsDistributed = false,
             DistributedAt = null,
             CreatedAt = DateTime.UtcNow,
         };
+
+        // PRIZE-V1.2 PART 3/4: recompute every row's Amount for this Tournament together — adding
+        // a row changes the total percentage, which can shift what the "last row" (by Position)
+        // should absorb as its rounding remainder. Existing rows come back from a tracking query
+        // (PrizeRepository.GetByTournamentAsync has no AsNoTracking), so mutating .Amount in
+        // memory is enough for SaveChangesAsync to persist them — no separate Update() call needed.
+        var existingPrizes = (await _repo.GetByTournamentAsync(tournament.Id)).ToList();
+        var allPrizes = existingPrizes.Append(prize);
+        PrizeAmountCalculator.RecalculateAmounts(allPrizes, tournament.PrizePool);
+
         await _repo.AddAsync(prize);
         await _uow.SaveChangesAsync();
         return ServiceResult<PrizeResponse>.Success(Map(prize), 201);
@@ -96,22 +157,35 @@ public class PrizeService : IPrizeService
         if (r.Position < 1)
             return ServiceResult<PrizeResponse>.Fail(400, "Hạng thưởng phải lớn hơn hoặc bằng 1.");
 
-        if (r.Amount <= 0)
-            return ServiceResult<PrizeResponse>.Fail(400, "Tiền thưởng phải lớn hơn 0.");
+        if (r.PercentageOfPool <= 0)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ phải lớn hơn 0.");
+        if (r.PercentageOfPool > 100)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ không được vượt quá 100%.");
+        // FINAL HARDENING Part 1: precision must be checked before any total-percentage/Amount
+        // calculation runs against this value.
+        if (HasMoreThanTwoDecimalPlaces(r.PercentageOfPool))
+            return ServiceResult<PrizeResponse>.Fail(400, "Tỷ lệ phân bổ chỉ được tối đa 2 chữ số thập phân.");
+
+        var finalLimitError = await ValidatePositionAgainstFinalLimitAsync(tournament, r.Position);
+        if (finalLimitError != null)
+            return ServiceResult<PrizeResponse>.Fail(400, finalLimitError);
 
         if (await _repo.ExistsPositionAsync(tournament.Id, r.Position, excludePrizeId: prize.Id))
             return ServiceResult<PrizeResponse>.Fail(409, "Hạng thưởng này đã được cấu hình.");
 
-        var allocatedExcludingThis = await _repo.GetAllocatedAmountAsync(tournament.Id, excludePrizeId: prize.Id);
-        if (allocatedExcludingThis + r.Amount > tournament.PrizePool)
-            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tiền thưởng không được vượt quá quỹ thưởng của giải đấu.");
+        var allocatedPercentageExcludingThis = await _repo.GetAllocatedPercentageAsync(tournament.Id, excludePrizeId: prize.Id);
+        if (allocatedPercentageExcludingThis + r.PercentageOfPool > 100)
+            return ServiceResult<PrizeResponse>.Fail(400, "Tổng tỷ lệ phân bổ không được vượt quá 100%.");
 
         // TournamentId is immutable after creation (Part 9) — never reassigned here. To move a
         // Prize to another Tournament, delete it in Draft and create a new one there.
         prize.Position = r.Position;
-        prize.Amount = r.Amount;
-        prize.Name = string.IsNullOrWhiteSpace(r.Name) ? $"Hạng {r.Position}" : r.Name;
+        prize.PercentageOfPool = r.PercentageOfPool;
+        prize.Name = string.IsNullOrWhiteSpace(r.Name) ? DefaultPrizeName(r.Position) : r.Name;
         prize.SponsorName = r.SponsorName;
+
+        var allPrizesForUpdate = await _repo.GetByTournamentAsync(tournament.Id); // includes `prize` itself (already tracked/mutated above)
+        PrizeAmountCalculator.RecalculateAmounts(allPrizesForUpdate, tournament.PrizePool);
 
         await _repo.UpdateAsync(prize);
         await _uow.SaveChangesAsync();
@@ -133,21 +207,33 @@ public class PrizeService : IPrizeService
         if (prize == null)
             return ServiceResult<bool>.Fail(404, "Không tìm thấy giải thưởng.");
 
+        Tournament? tournamentForRecalc = null;
         if (prize.TournamentId.HasValue)
         {
-            var tournament = await _tournamentRepo.GetByIdAsync(prize.TournamentId.Value);
-            if (tournament != null && tournament.Status != TournamentStatus.Draft)
+            tournamentForRecalc = await _tournamentRepo.GetByIdAsync(prize.TournamentId.Value);
+            if (tournamentForRecalc != null && tournamentForRecalc.Status != TournamentStatus.Draft)
                 return ServiceResult<bool>.Fail(400, "Cơ cấu giải thưởng chỉ có thể chỉnh sửa khi giải đấu ở trạng thái Nháp.");
         }
 
         await _repo.DeleteAsync(id);
+
+        // PRIZE-V1.2 PART 3/4: removing a row changes the total percentage and which row is now
+        // "last" by Position — recompute the remaining rows' Amounts before saving.
+        if (tournamentForRecalc != null)
+        {
+            var remaining = (await _repo.GetByTournamentAsync(tournamentForRecalc.Id))
+                .Where(p => p.Id != id).ToList();
+            PrizeAmountCalculator.RecalculateAmounts(remaining, tournamentForRecalc.PrizePool);
+        }
+
         await _uow.SaveChangesAsync();
         return ServiceResult<bool>.Ok(true);
     }
 
     private static PrizeResponse Map(Prize p) => new()
     {
-        Id = p.Id, TournamentId = p.TournamentId, Position = p.Position, Amount = p.Amount,
+        Id = p.Id, TournamentId = p.TournamentId, Position = p.Position,
+        PercentageOfPool = p.PercentageOfPool, Amount = p.Amount,
         Name = p.Name, SponsorName = p.SponsorName, CreatedAt = p.CreatedAt,
     };
 }

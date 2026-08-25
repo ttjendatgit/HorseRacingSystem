@@ -2,20 +2,26 @@ using System;
 
 namespace HorseRacing.Dtos;
 
-// ── Prize (PRIZE-V1) ──────────────────────────────────────────────────────────────────────
+// ── Prize (PRIZE-V1.2) ────────────────────────────────────────────────────────────────────
 // Tournament.PrizePool = total prize budget; Prize rows = allocation of that budget by FINAL
 // Tournament ranking Position. Config/display only — no wallet payout, no recipient, no
-// distribution workflow exists in this contract. RaceId/PercentageOfPool/IsDistributed/
-// DistributedAt remain on the Prize entity (BE/Models/Prize.cs) for backward compatibility but
-// are intentionally NOT part of this V1 contract: RaceId is always null for V1 writes (a Prize
-// row is a Tournament allocation, never Race-specific), and IsDistributed/DistributedAt are
-// never set by this workflow (no payout mechanism exists) and are not exposed to keep the API
-// from implying a distribution feature that doesn't exist.
+// distribution workflow exists in this contract. RaceId/IsDistributed/DistributedAt remain on
+// the Prize entity (BE/Models/Prize.cs) for backward compatibility but are intentionally NOT
+// part of this contract: RaceId is always null for V1 writes (a Prize row is a Tournament
+// allocation, never Race-specific), and IsDistributed/DistributedAt are never set by this
+// workflow (no payout mechanism exists) and are not exposed to keep the API from implying a
+// distribution feature that doesn't exist.
+//
+// PRIZE-V1.2: Admin configures PercentageOfPool, never Amount directly — Amount is entirely
+// backend-derived (see PrizeAmountCalculator) from PercentageOfPool * Tournament.PrizePool / 100.
+// Amount is deliberately absent from both write DTOs below (not merely ignored-if-present) —
+// there is no compatibility need to keep it, since PRIZE-V1/V1.1 were never committed to a
+// released API consumer outside this same codebase (see PRIZE-V1.2 report §6).
 public class CreatePrizeRequest
 {
     public Guid? TournamentId { get; set; }
     public int Position { get; set; } = 1;
-    public decimal Amount { get; set; }
+    public decimal PercentageOfPool { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
 }
@@ -26,7 +32,7 @@ public class CreatePrizeRequest
 public class UpdatePrizeRequest
 {
     public int Position { get; set; }
-    public decimal Amount { get; set; }
+    public decimal PercentageOfPool { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
 }
@@ -36,6 +42,9 @@ public class PrizeResponse
     public Guid Id { get; set; }
     public Guid? TournamentId { get; set; }
     public int Position { get; set; }
+    public decimal PercentageOfPool { get; set; }
+    /// <summary>Backend-derived (PercentageOfPool * Tournament.PrizePool / 100, VND-rounded) —
+    /// never client-controlled. See PrizeAmountCalculator.</summary>
     public decimal Amount { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }

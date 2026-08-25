@@ -44,6 +44,14 @@ public class PrizeRepository : IPrizeRepository
         return await query.SumAsync(p => (decimal?)p.Amount) ?? 0m;
     }
 
+    public async Task<decimal> GetAllocatedPercentageAsync(Guid tournamentId, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.SumAsync(p => (decimal?)p.PercentageOfPool) ?? 0m;
+    }
+
     public async Task AddAsync(Prize prize) => await _context.Prizes.AddAsync(prize);
     public Task UpdateAsync(Prize prize) { _context.Prizes.Update(prize); return Task.CompletedTask; }
     public async Task DeleteAsync(Guid id) { var p = await _context.Prizes.FindAsync(id); if (p != null) _context.Prizes.Remove(p); }
