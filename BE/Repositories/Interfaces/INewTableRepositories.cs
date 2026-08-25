@@ -27,8 +27,10 @@ public interface IProtestRepository
 {
     Task<Protest?> GetByIdAsync(Guid id);
     Task<IEnumerable<Protest>> GetByRaceAsync(Guid raceId);
+    Task<IEnumerable<Protest>> GetByFiledByUserAsync(Guid filedByUserId);
     Task<IEnumerable<Protest>> GetPendingAsync();
     Task<IEnumerable<Protest>> GetAllAsync();
+    Task<bool> HasActiveByFilerRaceEntryAsync(Guid filedByUserId, Guid raceId, Guid againstEntryId);
     Task AddAsync(Protest protest);
     Task UpdateAsync(Protest protest);
 }

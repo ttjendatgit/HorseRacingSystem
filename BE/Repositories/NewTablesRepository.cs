@@ -67,17 +67,39 @@ public class ProtestRepository : IProtestRepository
             .Include(p => p.AgainstEntry).ThenInclude(e => e!.Horse).FirstOrDefaultAsync(p => p.Id == id);
 
     public async Task<IEnumerable<Protest>> GetByRaceAsync(Guid raceId) =>
-        await _context.Protests.Where(p => p.RaceId == raceId).ToListAsync();
+        await BaseQuery().Where(p => p.RaceId == raceId).ToListAsync();
+
+    public async Task<IEnumerable<Protest>> GetByFiledByUserAsync(Guid filedByUserId) =>
+        await BaseQuery()
+            .Where(p => p.FiledByUserId == filedByUserId)
+            .OrderByDescending(p => p.FiledAt)
+            .ToListAsync();
 
     public async Task<IEnumerable<Protest>> GetPendingAsync() =>
-        await _context.Protests.Where(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview)
-            .Include(p => p.FiledByUser).Include(p => p.Race).ToListAsync();
+        await BaseQuery()
+            .Where(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview)
+            .OrderByDescending(p => p.FiledAt)
+            .ToListAsync();
 
     public async Task<IEnumerable<Protest>> GetAllAsync() =>
-        await _context.Protests.Include(p => p.FiledByUser).Include(p => p.Race).ToListAsync();
+        await BaseQuery().OrderByDescending(p => p.FiledAt).ToListAsync();
+
+    public async Task<bool> HasActiveByFilerRaceEntryAsync(Guid filedByUserId, Guid raceId, Guid againstEntryId) =>
+        await _context.Protests.AnyAsync(p =>
+            p.FiledByUserId == filedByUserId &&
+            p.RaceId == raceId &&
+            p.AgainstEntryId == againstEntryId &&
+            (p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview));
 
     public async Task AddAsync(Protest protest) => await _context.Protests.AddAsync(protest);
     public Task UpdateAsync(Protest protest) { _context.Protests.Update(protest); return Task.CompletedTask; }
+
+    private IQueryable<Protest> BaseQuery() =>
+        _context.Protests
+            .Include(p => p.FiledByUser)
+            .Include(p => p.Race)
+            .Include(p => p.AgainstEntry)
+                .ThenInclude(e => e!.Horse);
 }
 
 public class HorseTransferRepository : IHorseTransferRepository

@@ -88,19 +88,34 @@ public class ManagementController : ControllerBase
         => OkR(await _protest.FileAsync(r, GetUserId()));
 
     [HttpGet("protests")]
-    [Authorize(Roles = "Admin,Referee")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetProtests()
         => OkR(await _protest.GetAllAsync());
 
     [HttpGet("protests/pending")]
-    [Authorize(Roles = "Admin,Referee")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetPendingProtests()
         => OkR(await _protest.GetPendingAsync());
+
+    [HttpGet("protests/mine")]
+    [Authorize(Roles = "HorseOwner,Jockey,Admin")]
+    public async Task<ActionResult> GetMyProtests()
+        => OkR(await _protest.GetByFiledByUserAsync(GetUserId()));
+
+    [HttpPost("protests/{id:guid}/under-review")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> MarkProtestUnderReview(Guid id)
+        => OkR(await _protest.MarkUnderReviewAsync(id, GetUserId()));
 
     [HttpPost("protests/{id:guid}/rule")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> RuleProtest(Guid id, RuleProtestRequest r)
         => OkR(await _protest.RuleAsync(id, r, GetUserId()));
+
+    [HttpPost("protests/{id:guid}/withdraw")]
+    [Authorize(Roles = "HorseOwner,Jockey")]
+    public async Task<ActionResult> WithdrawProtest(Guid id)
+        => OkR(await _protest.WithdrawAsync(id, GetUserId()));
 
     // ── Horse Transfers (Owner creates, Admin approves) ──
 

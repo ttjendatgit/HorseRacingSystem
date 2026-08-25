@@ -157,6 +157,8 @@ export default function RaceResultsPage() {
               const resultStatus = (
                 resultData?.resultStatus ?? resultData?.ResultStatus ?? ""
               ).toLowerCase();
+              const rejectedReason =
+                resultData?.rejectedReason ?? resultData?.RejectedReason ?? "";
               const isOfficial = resultStatus === "official";
               const winnerHorseId =
                 resultData?.winningHorseId ?? resultData?.WinningHorseId;
@@ -194,6 +196,7 @@ export default function RaceResultsPage() {
                 det: {
                   entries,
                   resultStatus,
+                  rejectedReason,
                   rankedEntries,
                   winnerHorseName:
                     winnerEntry?.horseName ??
@@ -361,6 +364,12 @@ export default function RaceResultsPage() {
                       <span>{location || "Đường đua chưa xác định"}</span>
                       <ResultStatusBadge status={det.resultStatus} />
                     </div>
+
+                    {det.resultStatus === "provisional" && det.rejectedReason ? (
+                      <p className="rr-inline-state" style={{ color: "var(--hr-danger)" }}>
+                        Cần chỉnh sửa kết quả: {det.rejectedReason}
+                      </p>
+                    ) : null}
 
                     {det.rankedEntries?.length > 0 ? (
                       <div className="rr-result-list">

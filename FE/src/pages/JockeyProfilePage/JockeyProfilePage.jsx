@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { updateProfile, changePassword, getProfile } from "../../services/authApi";
-import { getContracts, signContractJockey, getProtests, createProtest } from "../../services/managementApi";
-import { getMyJockeyProfile } from "../../services/jockeyApi";
+import { getContracts, signContractJockey, getMyProtests, createProtest, withdrawProtest } from "../../services/managementApi";
+import { getMyJockeyProfile, getJockeyAssignedRaces } from "../../services/jockeyApi";
+import { getRaceEntries } from "../../services/spectatorApi";
 import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
-import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary } from "../ProfileCommon";
+import { getProtestStatusDetails } from "../../utils/protestDisplay";
+import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary, fieldStyle, fieldLabel, inputBase } from "../ProfileCommon";
 import "../ProfilePages.css";
 
 const JOCKEY_TABS = [
@@ -36,7 +38,10 @@ export default function JockeyProfilePage() {
   const [protests, setProtests] = useState([]);
   const [protestsLoading, setProtestsLoading] = useState(false);
   const [showProtestForm, setShowProtestForm] = useState(false);
-  const [protestForm, setProtestForm] = useState({ raceId: "", reason: "", evidence: "" });
+  const [assignedRaces, setAssignedRaces] = useState([]);
+  const [targetEntries, setTargetEntries] = useState([]);
+  const [targetEntriesLoading, setTargetEntriesLoading] = useState(false);
+  const [protestForm, setProtestForm] = useState({ raceId: "", againstEntryId: "", reason: "", evidence: "" });
 
   const showMsg = useCallback((type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); }, []);
 
@@ -61,8 +66,48 @@ export default function JockeyProfilePage() {
   useEffect(() => {
     if (activeTab !== "protests") return;
     setProtestsLoading(true);
-    getProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? [])).catch(() => { /* empty */ }).finally(() => setProtestsLoading(false));
+    Promise.all([
+      getMyProtests(),
+      getJockeyAssignedRaces(),
+    ])
+      .then(([protestData, raceData]) => {
+        setProtests(Array.isArray(protestData) ? protestData : protestData?.data ?? []);
+        const uniqueRaces = [];
+        const seenRaceIds = new Set();
+        (Array.isArray(raceData) ? raceData : []).forEach((race) => {
+          const raceId = race.raceId ?? race.RaceId;
+          if (!raceId || seenRaceIds.has(raceId)) return;
+          seenRaceIds.add(raceId);
+          uniqueRaces.push(race);
+        });
+        setAssignedRaces(uniqueRaces);
+      })
+      .catch(() => { /* empty */ })
+      .finally(() => setProtestsLoading(false));
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "protests" || !protestForm.raceId) {
+      setTargetEntries([]);
+      return;
+    }
+    let ignore = false;
+    setTargetEntriesLoading(true);
+    getRaceEntries(protestForm.raceId)
+      .then((data) => {
+        if (ignore) return;
+        setTargetEntries(Array.isArray(data) ? data : data?.data ?? []);
+      })
+      .catch(() => {
+        if (!ignore) setTargetEntries([]);
+      })
+      .finally(() => {
+        if (!ignore) setTargetEntriesLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [activeTab, protestForm.raceId]);
 
   const saveInfo = async () => {
     try {
@@ -91,6 +136,16 @@ export default function JockeyProfilePage() {
       showMsg("success", "Đã ký hợp đồng!");
       getContracts().then((d) => setContracts(Array.isArray(d) ? d : d?.data ?? []));
     } catch (e) { showMsg("error", e?.message ?? "Lỗi."); }
+  };
+
+  const withdraw = async (id) => {
+    try {
+      await withdrawProtest(id);
+      showMsg("success", "Đã rút khiếu nại.");
+      getMyProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? []));
+    } catch (e) {
+      showMsg("error", e?.message ?? "Rút khiếu nại thất bại.");
+    }
   };
 
   if (loading) return <div className="spectator-page"><p>Đang tải...</p></div>;
@@ -189,18 +244,46 @@ export default function JockeyProfilePage() {
           </div>
           {showProtestForm && (
             <div className="sp-card" style={{ marginBottom: 16 }}>
-              <Field label="Race ID" value={protestForm.raceId} onChange={(e) => setProtestForm((p) => ({ ...p, raceId: e.target.value }))} placeholder="Nhập ID cuộc đua" />
+              <div style={fieldStyle}>
+                <label style={fieldLabel}>Cuộc đua</label>
+                <select
+                  style={{ ...inputBase, appearance: "auto" }}
+                  value={protestForm.raceId}
+                  onChange={(e) => setProtestForm((p) => ({ ...p, raceId: e.target.value, againstEntryId: "" }))}
+                >
+                  <option value="">Chọn cuộc đua</option>
+                  {assignedRaces.map((race) => {
+                    const raceId = race.raceId ?? race.RaceId;
+                    return <option key={raceId} value={raceId}>{race.title || race.raceName || raceId}</option>;
+                  })}
+                </select>
+              </div>
+              <div style={fieldStyle}>
+                <label style={fieldLabel}>Entry bị khiếu nại</label>
+                <select
+                  style={{ ...inputBase, appearance: "auto" }}
+                  value={protestForm.againstEntryId}
+                  disabled={!protestForm.raceId || targetEntriesLoading}
+                  onChange={(e) => setProtestForm((p) => ({ ...p, againstEntryId: e.target.value }))}
+                >
+                  <option value="">{targetEntriesLoading ? "Đang tải entry" : "Chọn entry"}</option>
+                  {targetEntries.map((entry) => {
+                    const entryId = entry.entryId ?? entry.EntryId;
+                    return <option key={entryId} value={entryId}>{entry.horseName ?? entry.HorseName ?? entryId}</option>;
+                  })}
+                </select>
+              </div>
               <Field label="Lý do" value={protestForm.reason} onChange={(e) => setProtestForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Mô tả lý do khiếu nại" />
               <Field label="Bằng chứng" value={protestForm.evidence} onChange={(e) => setProtestForm((p) => ({ ...p, evidence: e.target.value }))} placeholder="Link / mô tả bằng chứng (không bắt buộc)" />
               <div style={{ marginTop: 8 }}>
                 <button style={btnPrimary} onClick={async () => {
-                  if (!protestForm.raceId || !protestForm.reason) { showMsg("error", "Vui lòng nhập Race ID và lý do."); return; }
+                  if (!protestForm.raceId || !protestForm.againstEntryId || !protestForm.reason) { showMsg("error", "Vui lòng chọn cuộc đua, entry và nhập lý do."); return; }
                   try {
-                    await createProtest({ raceId: protestForm.raceId, againstEntryId: null, reason: protestForm.reason, evidence: protestForm.evidence || null });
+                    await createProtest({ raceId: protestForm.raceId, againstEntryId: protestForm.againstEntryId, reason: protestForm.reason, evidence: protestForm.evidence || null });
                     setShowProtestForm(false);
-                    setProtestForm({ raceId: "", reason: "", evidence: "" });
+                    setProtestForm({ raceId: "", againstEntryId: "", reason: "", evidence: "" });
                     showMsg("success", "Đã gửi khiếu nại!");
-                    getProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? []));
+                    getMyProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? []));
                   } catch (e) { showMsg("error", e?.message ?? "Gửi khiếu nại thất bại."); }
                 }}>Gửi khiếu nại</button>
               </div>
@@ -211,17 +294,20 @@ export default function JockeyProfilePage() {
               <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>Chưa có khiếu nại nào.</p>
             ) : (
               <table className="sp-history-table">
-                <thead><tr><th>Ngày</th><th>Lý do</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>Ngày</th><th>Lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                 <tbody>
                   {protests.map((p) => {
                     const id = p.id ?? p.Id;
                     const s = p.status ?? p.Status ?? "";
-                    const colors = statusColor(s);
+                    const status = getProtestStatusDetails(s);
+                    const colors = statusColor(status.status);
+                    const canWithdraw = status.status === "Pending" || status.status === "UnderReview";
                     return (
                       <tr key={id}>
-                        <td>{p.createdAt ?? p.CreatedAt ? new Date(p.createdAt ?? p.CreatedAt).toLocaleDateString() : "-"}</td>
+                        <td>{p.filedAt ?? p.FiledAt ? new Date(p.filedAt ?? p.FiledAt).toLocaleDateString() : "-"}</td>
                         <td>{p.reason ?? p.Reason ?? "-"}</td>
-                        <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{s}</span></td>
+                        <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{status.label}</span></td>
+                        <td>{canWithdraw ? <button style={btnSecondary} onClick={() => withdraw(id)}>Rút</button> : "-"}</td>
                       </tr>
                     );
                   })}

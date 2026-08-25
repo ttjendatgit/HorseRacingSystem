@@ -636,6 +636,32 @@ public class RaceLifecycleTests
             => throw new NotSupportedException();
     }
 
+    private sealed class FakeAuditLogService : IAuditLogService
+    {
+        public Task<ServiceResult<AuditLogDto>> LogActionAsync(CreateAuditLogDto dto)
+            => Task.FromResult(ServiceResult<AuditLogDto>.Ok(new AuditLogDto()));
+        public Task<ServiceResult<AuditLogDetailDto>> GetAuditLogByIdAsync(Guid id)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByAdminAsync(Guid adminId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByEntityAsync(string entityType, Guid entityId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsWithFilterAsync(AuditLogFilterDto filter)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByDateRangeAsync(DateTime fromDate, DateTime toDate)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByUserAsync(Guid userId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<AuditLogStatsDto>> GetAuditStatsAsync()
+            => throw new NotSupportedException();
+        public Task<ServiceResult<bool>> DeleteOldAuditLogsAsync(int daysOlder)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<string>> ExportAuditLogsAsync(AuditExportDto dto)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetLatestLogsAsync(int count)
+            => throw new NotSupportedException();
+    }
+
     private sealed class FakeRefereeService : IRefereeService
     {
         public Task<ServiceResult<RefereeResponse>> CreateRefereeAsync(CreateRefereeRequest request) => throw new NotSupportedException();
@@ -744,7 +770,9 @@ public class RaceLifecycleTests
                 ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
                 new FakeNotificationService(), _userRepo, UnitOfWork);
 
-            ProtestSvc = new ProtestService(ProtestRepo, RaceRepo, UnitOfWork);
+            ProtestSvc = new ProtestService(
+                ProtestRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
+                UnitOfWork, new FakeNotificationService(), new FakeAuditLogService());
 
             HealthCheckSvc = new RefereeHealthCheckService(
                 HealthCheckRepo, RaceRepo, _horseRepo, new RefereeRepository(db), UnitOfWork);

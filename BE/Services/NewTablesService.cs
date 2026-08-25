@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
+using System.Transactions;
 using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -242,12 +244,37 @@ public class ProtestService : IProtestService
 {
     private readonly IProtestRepository _repo;
     private readonly IRaceRepository _raceRepo;
+    private readonly IRaceResultRepository _raceResultRepo;
+    private readonly IRaceEntryRepository _entryRepo;
+    private readonly IOwnerRepository _ownerRepo;
+    private readonly IJockeyRepository _jockeyRepo;
+    private readonly IUserRepository _userRepo;
     private readonly IUnitOfWork _uow;
-    public ProtestService(IProtestRepository repo, IRaceRepository raceRepo, IUnitOfWork uow)
+    private readonly INotificationService? _notifications;
+    private readonly IAuditLogService? _auditLogs;
+
+    public ProtestService(
+        IProtestRepository repo,
+        IRaceRepository raceRepo,
+        IRaceResultRepository raceResultRepo,
+        IRaceEntryRepository entryRepo,
+        IOwnerRepository ownerRepo,
+        IJockeyRepository jockeyRepo,
+        IUserRepository userRepo,
+        IUnitOfWork uow,
+        INotificationService? notifications = null,
+        IAuditLogService? auditLogs = null)
     {
         _repo = repo;
         _raceRepo = raceRepo;
+        _raceResultRepo = raceResultRepo;
+        _entryRepo = entryRepo;
+        _ownerRepo = ownerRepo;
+        _jockeyRepo = jockeyRepo;
+        _userRepo = userRepo;
         _uow = uow;
+        _notifications = notifications;
+        _auditLogs = auditLogs;
     }
 
     public async Task<ServiceResult<ProtestResponse>> FileAsync(CreateProtestRequest r, Guid userId)
@@ -263,14 +290,35 @@ public class ProtestService : IProtestService
         if (race.Status == RaceStatus.Cancelled)
             return ServiceResult<ProtestResponse>.Fail(400, "Không thể khiếu nại cuộc đua đã bị hủy.");
 
+        if (r.AgainstEntryId == Guid.Empty)
+            return ServiceResult<ProtestResponse>.Fail(400, "AgainstEntryId is required.");
+        if (string.IsNullOrWhiteSpace(r.Reason))
+            return ServiceResult<ProtestResponse>.Fail(400, "Reason is required.");
+
+        var againstEntry = await _entryRepo.GetByIdWithHorseAsync(r.AgainstEntryId, r.RaceId);
+        if (againstEntry == null)
+            return ServiceResult<ProtestResponse>.Fail(400, "AgainstEntry must belong to the protested race.");
+
+        var user = await _userRepo.GetByIdAsync(userId);
+        if (user == null)
+            return ServiceResult<ProtestResponse>.Fail(403, "Only a known race participant can file a protest.");
+
+        if (!await HasFilingStandingAsync(user, r.RaceId))
+            return ServiceResult<ProtestResponse>.Fail(403, "You do not have standing to file a protest for this race.");
+
+        if (await _repo.HasActiveByFilerRaceEntryAsync(userId, r.RaceId, r.AgainstEntryId))
+            return ServiceResult<ProtestResponse>.Fail(409, "An active protest already exists for this race entry.");
+
         var protest = new Protest
         {
             Id = Guid.NewGuid(), RaceId = r.RaceId, FiledByUserId = userId,
-            AgainstEntryId = r.AgainstEntryId, Reason = r.Reason, Evidence = r.Evidence,
-            Status = ProtestStatus.Pending, FiledAt = DateTime.UtcNow
+            AgainstEntryId = r.AgainstEntryId, Reason = r.Reason.Trim(), Evidence = r.Evidence,
+            Status = ProtestStatus.Pending, FiledAt = DateTime.UtcNow,
+            Race = race, FiledByUser = user, AgainstEntry = againstEntry
         };
         await _repo.AddAsync(protest);
         await _uow.SaveChangesAsync();
+        await NotifyFilerAsync(protest, "Protest filed", "Your race result protest has been filed.");
         return ServiceResult<ProtestResponse>.Success(Map(protest), 201);
     }
 
@@ -279,6 +327,29 @@ public class ProtestService : IProtestService
 
     public async Task<ServiceResult<IEnumerable<ProtestResponse>>> GetAllAsync() =>
         ServiceResult<IEnumerable<ProtestResponse>>.Ok((await _repo.GetAllAsync()).Select(Map));
+
+    public async Task<ServiceResult<IEnumerable<ProtestResponse>>> GetByFiledByUserAsync(Guid filedByUserId) =>
+        ServiceResult<IEnumerable<ProtestResponse>>.Ok((await _repo.GetByFiledByUserAsync(filedByUserId)).Select(Map));
+
+    public async Task<ServiceResult<ProtestResponse>> MarkUnderReviewAsync(Guid id, Guid reviewedByUserId)
+    {
+        var protest = await _repo.GetByIdAsync(id);
+        if (protest == null) return ServiceResult<ProtestResponse>.Fail(404, "KhÃ´ng tÃ¬m tháº¥y khiáº¿u náº¡i");
+
+        var officialGuard = await EnsureRaceIsNotOfficialAsync(protest.RaceId);
+        if (officialGuard != null) return officialGuard;
+
+        if (protest.Status != ProtestStatus.Pending)
+            return ServiceResult<ProtestResponse>.Fail(400, "Only a pending protest can be marked under review.");
+
+        var oldStatus = protest.Status;
+        protest.Status = ProtestStatus.UnderReview;
+        await _repo.UpdateAsync(protest);
+        await _uow.SaveChangesAsync();
+        await AuditAdminActionAsync(protest, reviewedByUserId, AuditAction.Update, oldStatus, protest.Status, "Protest marked under review.");
+        await NotifyFilerAsync(protest, "Protest under review", "An admin has started reviewing your protest.");
+        return ServiceResult<ProtestResponse>.Ok(Map(protest));
+    }
 
     public async Task<ServiceResult<ProtestResponse>> RuleAsync(Guid id, RuleProtestRequest r, Guid ruledByUserId)
     {
@@ -292,14 +363,134 @@ public class ProtestService : IProtestService
         if (race?.Result?.Status == RaceResultStatus.Official)
             return ServiceResult<ProtestResponse>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi khiếu nại.");
 
-        protest.Status = r.Ruling.Contains("Upheld", StringComparison.OrdinalIgnoreCase) ? ProtestStatus.Upheld : ProtestStatus.Rejected;
-        protest.Ruling = r.Ruling;
-        protest.Resolution = r.Resolution;
-        protest.RuledByUserId = ruledByUserId;
-        protest.RuledAt = DateTime.UtcNow;
+        if (protest.Status != ProtestStatus.Pending && protest.Status != ProtestStatus.UnderReview)
+            return ServiceResult<ProtestResponse>.Fail(400, "Terminal protests cannot be changed.");
+        if (r.Outcome is not ProtestStatus.Upheld and not ProtestStatus.Rejected)
+            return ServiceResult<ProtestResponse>.Fail(400, "Outcome must be Upheld or Rejected.");
+
+        var oldStatus = protest.Status;
+        using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+        {
+            protest.Status = r.Outcome.Value;
+            protest.Ruling = r.Ruling;
+            protest.Resolution = r.Resolution;
+            protest.AdminNotes = r.AdminNotes;
+            protest.RuledByUserId = ruledByUserId;
+            protest.RuledAt = DateTime.UtcNow;
+            protest.ResolvedAt = protest.RuledAt;
+            await _repo.UpdateAsync(protest);
+
+            if (protest.Status == ProtestStatus.Upheld)
+            {
+                var raceResult = await _raceResultRepo.GetByRaceIdAsync(protest.RaceId);
+                if (raceResult?.Status == RaceResultStatus.Provisional)
+                {
+                    raceResult.RejectedReason = RaceResultCorrectionMessages.UpheldProtestRequiresCorrection;
+                    await _raceResultRepo.UpdateAsync(raceResult);
+                }
+            }
+
+            await _uow.SaveChangesAsync();
+            scope.Complete();
+        }
+        await AuditAdminActionAsync(
+            protest,
+            ruledByUserId,
+            protest.Status == ProtestStatus.Upheld ? AuditAction.Approve : AuditAction.Reject,
+            oldStatus,
+            protest.Status,
+            $"Protest ruled {protest.Status}.");
+        await NotifyFilerAsync(protest, $"Protest {protest.Status}", "An admin has issued a final protest decision.");
+        return ServiceResult<ProtestResponse>.Ok(Map(protest));
+    }
+
+    public async Task<ServiceResult<ProtestResponse>> WithdrawAsync(Guid id, Guid requestingUserId)
+    {
+        var protest = await _repo.GetByIdAsync(id);
+        if (protest == null) return ServiceResult<ProtestResponse>.Fail(404, "Protest not found.");
+        if (protest.FiledByUserId != requestingUserId)
+            return ServiceResult<ProtestResponse>.Fail(403, "Only the original filer can withdraw this protest.");
+
+        var officialGuard = await EnsureRaceIsNotOfficialAsync(protest.RaceId);
+        if (officialGuard != null) return officialGuard;
+
+        if (protest.Status != ProtestStatus.Pending && protest.Status != ProtestStatus.UnderReview)
+            return ServiceResult<ProtestResponse>.Fail(400, "Terminal protests cannot be withdrawn.");
+
+        protest.Status = ProtestStatus.Withdrawn;
+        protest.ResolvedAt = DateTime.UtcNow;
         await _repo.UpdateAsync(protest);
         await _uow.SaveChangesAsync();
+        await NotifyFilerAsync(protest, "Protest withdrawn", "Your protest has been withdrawn.");
         return ServiceResult<ProtestResponse>.Ok(Map(protest));
+    }
+
+    private async Task<ServiceResult<ProtestResponse>?> EnsureRaceIsNotOfficialAsync(Guid raceId)
+    {
+        var race = await _raceRepo.GetByIdAsync(raceId);
+        return race?.Result?.Status == RaceResultStatus.Official
+            ? ServiceResult<ProtestResponse>.Fail(409, "Race result is official and protests can no longer be changed.")
+            : null;
+    }
+
+    private async Task<bool> HasFilingStandingAsync(User user, Guid raceId)
+    {
+        if (user.Role == UserRole.Admin)
+            return true;
+
+        if (user.Role == UserRole.HorseOwner)
+        {
+            var owner = await _ownerRepo.GetByUserIdAsync(user.Id);
+            return owner != null && await _entryRepo.OwnerHasHorseInRaceAsync(raceId, owner.Id);
+        }
+
+        if (user.Role == UserRole.Jockey)
+        {
+            var jockey = await _jockeyRepo.GetByUserIdAsync(user.Id);
+            if (jockey == null) return false;
+            var entries = await _entryRepo.GetByRaceAsync(raceId);
+            return entries.Any(e => e.JockeyId == jockey.Id);
+        }
+
+        return false;
+    }
+
+    private async Task NotifyFilerAsync(Protest protest, string title, string message)
+    {
+        if (_notifications == null || protest.FiledByUserId == Guid.Empty) return;
+        await _notifications.CreateNotificationAsync(new CreateNotificationDto
+        {
+            UserId = protest.FiledByUserId,
+            Title = title,
+            Message = message,
+            Type = NotificationType.InApp,
+            Category = NotificationCategory.Other,
+            RelatedEntityId = protest.Id,
+            RelatedEntityType = nameof(Protest),
+            ActionUrl = "/profile"
+        });
+    }
+
+    private async Task AuditAdminActionAsync(
+        Protest protest,
+        Guid adminUserId,
+        AuditAction action,
+        ProtestStatus oldStatus,
+        ProtestStatus newStatus,
+        string description)
+    {
+        if (_auditLogs == null) return;
+        await _auditLogs.LogActionAsync(new CreateAuditLogDto
+        {
+            AdminId = adminUserId,
+            EntityType = nameof(Protest),
+            EntityId = protest.Id,
+            Action = action,
+            OldValues = JsonSerializer.Serialize(new { Status = oldStatus.ToString() }),
+            NewValues = JsonSerializer.Serialize(new { Status = newStatus.ToString() }),
+            Description = description,
+            UserId = protest.FiledByUserId
+        });
     }
 
     private static ProtestResponse Map(Protest p) => new()
@@ -307,8 +498,8 @@ public class ProtestService : IProtestService
         Id = p.Id, RaceId = p.RaceId, RaceName = p.Race?.Name, FiledByUserId = p.FiledByUserId,
         FiledByName = p.FiledByUser?.FullName, AgainstEntryId = p.AgainstEntryId,
         AgainstHorseName = p.AgainstEntry?.Horse?.Name, Reason = p.Reason, Evidence = p.Evidence,
-        Status = p.Status.ToString(), Ruling = p.Ruling, Resolution = p.Resolution,
-        RuledByUserId = p.RuledByUserId, FiledAt = p.FiledAt, RuledAt = p.RuledAt
+        Status = p.Status.ToString(), Ruling = p.Ruling, Resolution = p.Resolution, AdminNotes = p.AdminNotes,
+        RuledByUserId = p.RuledByUserId, FiledAt = p.FiledAt, RuledAt = p.RuledAt, ResolvedAt = p.ResolvedAt
     };
 }
 

@@ -1,4 +1,6 @@
 using System;
+using System.Text.Json.Serialization;
+using HorseRacing.Models;
 
 namespace HorseRacing.Dtos;
 
@@ -62,6 +64,8 @@ public class CreateProtestRequest
 
 public class RuleProtestRequest
 {
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ProtestStatus? Outcome { get; set; }
     public string Ruling { get; set; } = string.Empty;
     public string? Resolution { get; set; }
     public string? AdminNotes { get; set; }
@@ -82,8 +86,10 @@ public class ProtestResponse
     public string? Ruling { get; set; }
     public Guid? RuledByUserId { get; set; }
     public string? Resolution { get; set; }
+    public string? AdminNotes { get; set; }
     public DateTime FiledAt { get; set; }
     public DateTime? RuledAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
 }
 
 // ── HorseTransfer ──

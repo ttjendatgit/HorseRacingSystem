@@ -12,8 +12,11 @@ export const deletePrize = (id) => request(`/api/management/prizes/${id}`, { met
 // ── Protests ──
 export const getProtests = async () => unwrap(await request("/api/management/protests"));
 export const getPendingProtests = async () => unwrap(await request("/api/management/protests/pending"));
+export const getMyProtests = async () => unwrap(await request("/api/management/protests/mine"));
 export const createProtest = (p) => request("/api/management/protests", { method: "POST", body: JSON.stringify(p) });
+export const markProtestUnderReview = (id) => request(`/api/management/protests/${id}/under-review`, { method: "POST" });
 export const ruleProtest = (id, p) => request(`/api/management/protests/${id}/rule`, { method: "POST", body: JSON.stringify(p) });
+export const withdrawProtest = (id) => request(`/api/management/protests/${id}/withdraw`, { method: "POST" });
 
 // ── Horse Transfers ──
 export const getTransfers = async () => unwrap(await request("/api/management/transfers"));

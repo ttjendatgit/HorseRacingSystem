@@ -623,7 +623,12 @@ public class AdminService : IAdminService
                 return ServiceResult<bool>.Fail(400, "Kết quả không ở trạng thái chờ duyệt (Provisional)");
 
             if (!string.IsNullOrWhiteSpace(raceResult.RejectedReason))
+            {
+                if (raceResult.RejectedReason == RaceResultCorrectionMessages.UpheldProtestRequiresCorrection)
+                    return ServiceResult<bool>.Fail(400, RaceResultCorrectionMessages.UpheldProtestApprovalBlocked);
+
                 return ServiceResult<bool>.Fail(400, "Kết quả này đã bị từ chối trước đó. Trọng tài phải nộp lại kết quả trước khi có thể duyệt.");
+            }
 
             // Check if there is at least one referee report (V1.1 mandatory-report gate)
             var hasReport = await _reportRepo.GetByRaceAsync(raceId) != null;

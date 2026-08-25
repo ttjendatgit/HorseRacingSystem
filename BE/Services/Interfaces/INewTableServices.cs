@@ -20,7 +20,10 @@ public interface IProtestService
     Task<ServiceResult<ProtestResponse>> FileAsync(CreateProtestRequest request, Guid filedByUserId);
     Task<ServiceResult<IEnumerable<ProtestResponse>>> GetPendingAsync();
     Task<ServiceResult<IEnumerable<ProtestResponse>>> GetAllAsync();
+    Task<ServiceResult<IEnumerable<ProtestResponse>>> GetByFiledByUserAsync(Guid filedByUserId);
+    Task<ServiceResult<ProtestResponse>> MarkUnderReviewAsync(Guid id, Guid reviewedByUserId);
     Task<ServiceResult<ProtestResponse>> RuleAsync(Guid id, RuleProtestRequest request, Guid ruledByUserId);
+    Task<ServiceResult<ProtestResponse>> WithdrawAsync(Guid id, Guid requestingUserId);
 }
 
 public interface IHorseTransferService

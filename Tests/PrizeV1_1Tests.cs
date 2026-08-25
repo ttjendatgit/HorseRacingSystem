@@ -250,7 +250,10 @@ public class PrizeV1_1Tests
         public Task<ServiceResult<ProtestResponse>> FileAsync(CreateProtestRequest request, Guid filedByUserId) => throw new NotSupportedException();
         public Task<ServiceResult<System.Collections.Generic.IEnumerable<ProtestResponse>>> GetPendingAsync() => throw new NotSupportedException();
         public Task<ServiceResult<System.Collections.Generic.IEnumerable<ProtestResponse>>> GetAllAsync() => throw new NotSupportedException();
+        public Task<ServiceResult<System.Collections.Generic.IEnumerable<ProtestResponse>>> GetByFiledByUserAsync(Guid filedByUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<ProtestResponse>> MarkUnderReviewAsync(Guid id, Guid reviewedByUserId) => throw new NotSupportedException();
         public Task<ServiceResult<ProtestResponse>> RuleAsync(Guid id, RuleProtestRequest request, Guid ruledByUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<ProtestResponse>> WithdrawAsync(Guid id, Guid requestingUserId) => throw new NotSupportedException();
     }
 
     private sealed class ThrowingTransferService : IHorseTransferService
