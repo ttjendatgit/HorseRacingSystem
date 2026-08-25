@@ -102,6 +102,65 @@ public class ProtestRepository : IProtestRepository
                 .ThenInclude(e => e!.Horse);
 }
 
+public class RaceComplaintRepository : IRaceComplaintRepository
+{
+    private readonly ApplicationDbContext _context;
+    public RaceComplaintRepository(ApplicationDbContext context) => _context = context;
+
+    public async Task<RaceComplaint?> GetByIdAsync(Guid id) =>
+        await BaseQuery().FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<IEnumerable<RaceComplaint>> GetByRaceAsync(Guid raceId) =>
+        await BaseQuery().Where(c => c.RaceId == raceId).ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetByFiledByUserAsync(Guid filedByUserId) =>
+        await BaseQuery()
+            .Where(c => c.FiledByUserId == filedByUserId)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetByAssignedRefereeUserAsync(Guid refereeUserId) =>
+        await BaseQuery()
+            .Where(c =>
+                c.AssignedRefereeAssignment != null &&
+                c.AssignedRefereeAssignment.Referee != null &&
+                c.AssignedRefereeAssignment.Referee.UserId == refereeUserId)
+            .OrderByDescending(c => c.ResponseRequestedAt ?? c.CreatedAt)
+            .ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetAllAsync() =>
+        await BaseQuery().OrderByDescending(c => c.CreatedAt).ToListAsync();
+
+    public async Task<bool> HasActiveByFilerRaceTypeAsync(Guid filedByUserId, Guid raceId, RaceComplaintType type) =>
+        await _context.RaceComplaints.AnyAsync(c =>
+            c.FiledByUserId == filedByUserId &&
+            c.RaceId == raceId &&
+            c.Type == type &&
+            (c.Status == RaceComplaintStatus.Pending ||
+             c.Status == RaceComplaintStatus.AwaitingRefereeResponse ||
+             c.Status == RaceComplaintStatus.UnderReview));
+
+    public async Task AddAsync(RaceComplaint complaint) => await _context.RaceComplaints.AddAsync(complaint);
+    public Task UpdateAsync(RaceComplaint complaint) { _context.RaceComplaints.Update(complaint); return Task.CompletedTask; }
+
+    private IQueryable<RaceComplaint> BaseQuery() =>
+        _context.RaceComplaints
+            .Include(c => c.FiledByUser)
+            .Include(c => c.RuledByUser)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.Tournament)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.Result)
+                    .ThenInclude(rr => rr!.WinningHorse)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.RefereeAssignments)
+                    .ThenInclude(a => a.Referee)
+                        .ThenInclude(r => r!.User)
+            .Include(c => c.AssignedRefereeAssignment)
+                .ThenInclude(a => a!.Referee)
+                    .ThenInclude(r => r!.User);
+}
+
 public class HorseTransferRepository : IHorseTransferRepository
 {
     private readonly ApplicationDbContext _context;

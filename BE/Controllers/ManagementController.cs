@@ -16,14 +16,15 @@ public class ManagementController : ControllerBase
 {
     private readonly IPrizeService _prize;
     private readonly IProtestService _protest;
+    private readonly IRaceComplaintService _raceComplaint;
     private readonly IHorseTransferService _transfer;
     private readonly IContractService _contract;
     private readonly IInjuryRecordService _injury;
     private readonly ITournamentService _tournament;
 
-    public ManagementController(IPrizeService prize, IProtestService protest, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury, ITournamentService tournament)
+    public ManagementController(IPrizeService prize, IProtestService protest, IRaceComplaintService raceComplaint, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury, ITournamentService tournament)
     {
-        _prize = prize; _protest = protest; _transfer = transfer; _contract = contract; _injury = injury; _tournament = tournament;
+        _prize = prize; _protest = protest; _raceComplaint = raceComplaint; _transfer = transfer; _contract = contract; _injury = injury; _tournament = tournament;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -116,6 +117,53 @@ public class ManagementController : ControllerBase
     [Authorize(Roles = "HorseOwner,Jockey")]
     public async Task<ActionResult> WithdrawProtest(Guid id)
         => OkR(await _protest.WithdrawAsync(id, GetUserId()));
+
+    // ── Race Complaints (Owner/Jockey file, Admin routes/rules, Referee explains) ──
+
+    [HttpPost("race-complaints")]
+    [Authorize(Roles = "HorseOwner,Jockey")]
+    public async Task<ActionResult> FileRaceComplaint(CreateRaceComplaintRequest r)
+        => OkR(await _raceComplaint.FileAsync(r, GetUserId()));
+
+    [HttpGet("race-complaints")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> GetRaceComplaints([FromQuery] RaceComplaintStatus? status)
+        => OkR(await _raceComplaint.GetAllAsync(status));
+
+    [HttpGet("race-complaints/mine")]
+    [Authorize(Roles = "HorseOwner,Jockey")]
+    public async Task<ActionResult> GetMyRaceComplaints()
+        => OkR(await _raceComplaint.GetByFiledByUserAsync(GetUserId()));
+
+    [HttpGet("race-complaints/referee")]
+    [Authorize(Roles = "Referee")]
+    public async Task<ActionResult> GetRefereeRaceComplaints()
+        => OkR(await _raceComplaint.GetForRefereeAsync(GetUserId()));
+
+    [HttpGet("race-complaints/eligible-races")]
+    [Authorize(Roles = "HorseOwner,Jockey")]
+    public async Task<ActionResult> GetEligibleRaceComplaintRaces()
+        => OkR(await _raceComplaint.GetEligibleRacesAsync(GetUserId()));
+
+    [HttpPost("race-complaints/{id:guid}/route")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> RouteRaceComplaint(Guid id, RouteRaceComplaintRequest r)
+        => OkR(await _raceComplaint.RouteAsync(id, r, GetUserId()));
+
+    [HttpPost("race-complaints/{id:guid}/respond")]
+    [Authorize(Roles = "Referee")]
+    public async Task<ActionResult> RespondRaceComplaint(Guid id, RespondRaceComplaintRequest r)
+        => OkR(await _raceComplaint.RespondAsync(id, r, GetUserId()));
+
+    [HttpPost("race-complaints/{id:guid}/rule")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> RuleRaceComplaint(Guid id, RuleRaceComplaintRequest r)
+        => OkR(await _raceComplaint.RuleAsync(id, r, GetUserId()));
+
+    [HttpPost("race-complaints/{id:guid}/withdraw")]
+    [Authorize(Roles = "HorseOwner,Jockey")]
+    public async Task<ActionResult> WithdrawRaceComplaint(Guid id)
+        => OkR(await _raceComplaint.WithdrawAsync(id, GetUserId()));
 
     // ── Horse Transfers (Owner creates, Admin approves) ──
 

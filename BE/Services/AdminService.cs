@@ -30,6 +30,7 @@ public class AdminService : IAdminService
     private readonly IRaceReportRepository _reportRepo;
     private readonly IViolationRecordRepository _violationRepo;
     private readonly IProtestRepository _protestRepo;
+    private readonly IRaceComplaintRepository _raceComplaintRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public AdminService(
@@ -49,6 +50,7 @@ public class AdminService : IAdminService
         IRaceReportRepository reportRepo,
         IViolationRecordRepository violationRepo,
         IProtestRepository protestRepo,
+        IRaceComplaintRepository raceComplaintRepo,
         IUnitOfWork unitOfWork)
     {
         _userRepo = userRepo;
@@ -67,6 +69,7 @@ public class AdminService : IAdminService
         _reportRepo = reportRepo;
         _violationRepo = violationRepo;
         _protestRepo = protestRepo;
+        _raceComplaintRepo = raceComplaintRepo;
         _unitOfWork = unitOfWork;
     }
 
@@ -626,6 +629,8 @@ public class AdminService : IAdminService
             {
                 if (raceResult.RejectedReason == RaceResultCorrectionMessages.UpheldProtestRequiresCorrection)
                     return ServiceResult<bool>.Fail(400, RaceResultCorrectionMessages.UpheldProtestApprovalBlocked);
+                if (raceResult.RejectedReason == RaceResultCorrectionMessages.UpheldRaceComplaintRequiresCorrection)
+                    return ServiceResult<bool>.Fail(400, RaceResultCorrectionMessages.UpheldRaceComplaintApprovalBlocked);
 
                 return ServiceResult<bool>.Fail(400, "Kết quả này đã bị từ chối trước đó. Trọng tài phải nộp lại kết quả trước khi có thể duyệt.");
             }
@@ -651,6 +656,13 @@ public class AdminService : IAdminService
             var protestsForRace = await _protestRepo.GetByRaceAsync(raceId);
             if (protestsForRace.Any(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview))
                 return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn khiếu nại chưa được giải quyết.");
+
+            var complaintsForRace = await _raceComplaintRepo.GetByRaceAsync(raceId);
+            if (complaintsForRace.Any(c =>
+                    c.Status == RaceComplaintStatus.Pending ||
+                    c.Status == RaceComplaintStatus.AwaitingRefereeResponse ||
+                    c.Status == RaceComplaintStatus.UnderReview))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn khiếu nại cuộc đua chưa được giải quyết.");
 
             // R0: defensively re-parse and re-validate the stored ranking
             // before committing anything to Official — a stale/malformed

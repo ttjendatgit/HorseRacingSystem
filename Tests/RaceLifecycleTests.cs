@@ -700,9 +700,11 @@ public class RaceLifecycleTests
         public FaultInjectingWalletService FaultWallet { get; private set; } = null!;
         public IViolationRecordRepository ViolationRepo { get; }
         public IProtestRepository ProtestRepo { get; }
+        public IRaceComplaintRepository RaceComplaintRepo { get; }
         public IHealthCheckRepository HealthCheckRepo { get; }
         public IViolationRecordService ViolationSvc { get; }
         public IProtestService ProtestSvc { get; }
+        public IRaceComplaintService RaceComplaintSvc { get; }
         public IRefereeHealthCheckService HealthCheckSvc { get; }
 
         private readonly IOwnerRepository _ownerRepo;
@@ -742,6 +744,7 @@ public class RaceLifecycleTests
             _walletRepo = new WalletRepository(db);
             ViolationRepo = new ViolationRecordRepository(db);
             ProtestRepo = new ProtestRepository(db);
+            RaceComplaintRepo = new RaceComplaintRepository(db);
             HealthCheckRepo = new HealthCheckRepository(db);
 
             var config = new ConfigurationBuilder().Build();
@@ -764,7 +767,7 @@ public class RaceLifecycleTests
                 _userRepo, new UserRegistrationRepository(db), _horseRepo, _jockeyRepo,
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
-                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, UnitOfWork);
+                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, RaceComplaintRepo, UnitOfWork);
 
             ViolationSvc = new ViolationRecordService(
                 ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
@@ -773,6 +776,10 @@ public class RaceLifecycleTests
             ProtestSvc = new ProtestService(
                 ProtestRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
                 UnitOfWork, new FakeNotificationService(), new FakeAuditLogService());
+
+            RaceComplaintSvc = new RaceComplaintService(
+                RaceComplaintRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
+                _assignmentRepo, UnitOfWork, db, new FakeNotificationService(), new FakeAuditLogService());
 
             HealthCheckSvc = new RefereeHealthCheckService(
                 HealthCheckRepo, RaceRepo, _horseRepo, new RefereeRepository(db), UnitOfWork);

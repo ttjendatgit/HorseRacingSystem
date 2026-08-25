@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using HorseRacing.Models;
 
@@ -93,6 +94,101 @@ public class ProtestResponse
 }
 
 // ── HorseTransfer ──
+public class CreateRaceComplaintRequest
+{
+    public Guid RaceId { get; set; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RaceComplaintType Type { get; set; }
+
+    public string Reason { get; set; } = string.Empty;
+    public string? EvidenceDescription { get; set; }
+}
+
+public class RouteRaceComplaintRequest
+{
+    public Guid RefereeAssignmentId { get; set; }
+}
+
+public class RespondRaceComplaintRequest
+{
+    public string Response { get; set; } = string.Empty;
+}
+
+public class RuleRaceComplaintRequest
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RaceComplaintStatus? Outcome { get; set; }
+
+    public string Ruling { get; set; } = string.Empty;
+    public bool? AffectsResult { get; set; }
+}
+
+public class RaceComplaintAssignmentOption
+{
+    public Guid Id { get; set; }
+    public Guid RefereeId { get; set; }
+    public string? RefereeName { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+}
+
+public class RaceComplaintEligibleRaceResponse
+{
+    public Guid RaceId { get; set; }
+    public string RaceName { get; set; } = string.Empty;
+    public Guid? EntryId { get; set; }
+    public Guid? HorseId { get; set; }
+    public string? HorseName { get; set; }
+    public string? TournamentName { get; set; }
+    public DateTime ScheduledAt { get; set; }
+    public string RaceStatus { get; set; } = string.Empty;
+    public string? ResultStatus { get; set; }
+}
+
+public class RaceComplaintResultSummary
+{
+    public Guid RaceId { get; set; }
+    public string? ResultStatus { get; set; }
+    public Guid? WinningHorseId { get; set; }
+    public string? WinningHorseName { get; set; }
+    public string? RankingsJson { get; set; }
+    public string? RejectedReason { get; set; }
+}
+
+public class RaceComplaintResponse
+{
+    public Guid Id { get; set; }
+    public Guid RaceId { get; set; }
+    public string? RaceName { get; set; }
+    public string? TournamentName { get; set; }
+    public DateTime? ScheduledAt { get; set; }
+    public Guid FiledByUserId { get; set; }
+    public string? FiledByName { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string? EvidenceDescription { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public Guid? AssignedRefereeAssignmentId { get; set; }
+    public Guid? AssignedRefereeId { get; set; }
+    public string? AssignedRefereeName { get; set; }
+    public string? AssignedRefereeRole { get; set; }
+    public DateTime? ResponseRequestedAt { get; set; }
+    public string? RefereeResponse { get; set; }
+    public DateTime? RefereeRespondedAt { get; set; }
+    public Guid? RuledByUserId { get; set; }
+    public string? RuledByName { get; set; }
+    public string? Ruling { get; set; }
+    public bool? AffectsResult { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public RaceComplaintResultSummary? CurrentResult { get; set; }
+    public List<RaceComplaintAssignmentOption> ConfirmedRefereeAssignments { get; set; } = new();
+}
+
 public class CreateHorseTransferRequest
 {
     public Guid HorseId { get; set; }

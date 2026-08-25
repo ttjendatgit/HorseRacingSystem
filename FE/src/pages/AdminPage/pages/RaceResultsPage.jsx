@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
 import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
 import { isFinalRound } from "../../../utils/tournamentRegistration";
-import { getPlacementLabel, getRankedEntries } from "../../../utils/raceResultDisplay";
+import { buildRankingDisplayList, getPlacementLabel } from "../../../utils/raceResultDisplay";
 
 const STATUS_NUM = {
   1: "scheduled",
@@ -173,23 +173,14 @@ export default function RaceResultsPage() {
               const isFinal = isFinalRound(race, tournament);
               const qualificationSlots = race.qualificationSlots ?? race.QualificationSlots;
               const rankings = resultData?.rankings ?? resultData?.Rankings ?? [];
-              const rankedEntries = isOfficial
-                ? getRankedEntries(rankings).map((r) => {
-                    const horseId = r.horseId ?? r.HorseId;
-                    const entry = entries.find(
-                      (e) => (e.horseId ?? e.HorseId) === horseId,
-                    );
-                    const position = r.position ?? r.Position;
-                    return {
-                      position,
-                      horseId,
-                      horseName:
-                        r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName,
-                      jockeyName: entry?.jockeyName ?? entry?.JockeyName,
-                      label: getPlacementLabel({ position, isFinal, qualificationSlots }),
-                    };
-                  })
-                : [];
+              // RESULT-APPROVAL-REVIEW-UX: the full ranking is built regardless of
+              // Provisional/Official — Admin must be able to review every position before
+              // approving, not just the winner. Only the qualification label ("Đi tiếp"/"Bị
+              // loại"/"Vô địch") stays Official-only, since that outcome isn't final until then.
+              const rankedEntries = buildRankingDisplayList(rankings, entries).map((r) => ({
+                ...r,
+                label: isOfficial ? getPlacementLabel({ position: r.position, isFinal, qualificationSlots }) : "",
+              }));
 
               return {
                 race,

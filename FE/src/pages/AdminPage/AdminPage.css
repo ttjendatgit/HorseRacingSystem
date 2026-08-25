@@ -132,24 +132,97 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 .admin-form input, .admin-form select { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--hr-border-soft); background: var(--hr-surface-2); color: var(--hr-text); font-size: 13px; font-family: inherit; color-scheme: dark; }
 .admin-form input::placeholder { color: var(--hr-muted); }
 .admin-form input:focus, .admin-form select:focus { outline: none; border-color: var(--hr-focus); box-shadow: 0 0 0 2px var(--hr-focus-ring); }
-.admin-tournament-card { background: var(--hr-surface); border-radius: 12px; padding: 20px; border: 1px solid var(--hr-border); box-shadow: 0 8px 20px rgba(0,0,0,0.28); display: grid; gap: 12px; transition: all 0.2s; }
-.admin-tournament-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-.admin-tournament-card h3 { margin: 0 0 4px; color: var(--hr-paper); font-size: 16px; }
-.admin-tournament-card p { color: var(--hr-muted); font-size: 13px; margin: 0; }
-.admin-tournament-card dl { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0; }
-.admin-tournament-card dt { font-size: 10px; color: var(--hr-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.admin-tournament-card dd { font-size: 14px; color: var(--hr-paper); font-weight: 600; margin: 0; }
+/* ── Tournament Management (ADMIN-TOURNAMENTS-UI-POLISH) ──
+   Compact operational cards: 3 columns desktop, 2 tablet, 1 mobile — long real Tournament
+   names get room to breathe instead of the old 4-column squeeze. No decorative background
+   imagery; dark/gold surfaces stay the single source of visual truth. */
+.tm-toolbar { margin: 4px 0 16px; }
 
-/* ── Tournament card grid: capped columns so cards never get squeezed too narrow ── */
-.admin-tournament-grid { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 1400px) {
-  .admin-tournament-grid { grid-template-columns: repeat(3, 1fr); }
+.tm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 1100px) {
+  .tm-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 1024px) {
-  .admin-tournament-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 700px) {
+  .tm-grid { grid-template-columns: repeat(1, 1fr); }
 }
-@media (max-width: 640px) {
-  .admin-tournament-grid { grid-template-columns: repeat(1, 1fr); }
+
+.tm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--hr-surface);
+  border: 1px solid var(--hr-border);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tm-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.36); }
+/* Finished/Cancelled are history — quieter presentation, no lifecycle urgency implied. */
+.tm-card--muted { box-shadow: none; }
+.tm-card--muted:hover { transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+
+/* Compact horizontal media strip — fixed aspect/height so every card (with or
+   without a real Tournament image) stays the same height; ADMIN-TOURNAMENTS-
+   REGRESSION-FIX restores identity without going back to full-card wallpaper. */
+.tm-card__media {
+  width: 100%;
+  height: 96px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(184,134,59,0.14), rgba(184,134,59,0.04));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tm-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tm-card__media-placeholder { color: var(--hr-gold-soft); opacity: 0.55; }
+
+/* align-items: flex-start is required here — a flex column's default
+   (stretch) was making RaceStatusBadge fill the card's full width, reading
+   as a progress bar instead of a compact status chip. */
+.tm-card__header { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.tm-card__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--hr-paper);
+  line-height: 1.32;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tm-card__body { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.tm-card__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--hr-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tm-card__dates { margin: 0; font-size: 12px; color: var(--hr-text); }
+.tm-card__counts { margin: 0; font-size: 12px; color: var(--hr-muted); }
+
+.tm-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: auto;
+  border-top: 1px solid var(--hr-border-soft);
 }
 .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .admin-actions button, .admin-actions a { padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--hr-border-soft); cursor: pointer; font-family: inherit; text-decoration: none; transition: all 0.15s; background: transparent; color: var(--hr-text); }

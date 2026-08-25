@@ -31,6 +31,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Prize> Prizes => Set<Prize>();
     public DbSet<Protest> Protests => Set<Protest>();
+    public DbSet<RaceComplaint> RaceComplaints => Set<RaceComplaint>();
     public DbSet<HorseTransfer> HorseTransfers => Set<HorseTransfer>();
     public DbSet<InjuryRecord> InjuryRecords => Set<InjuryRecord>();
     public DbSet<Contract> Contracts => Set<Contract>();
@@ -401,6 +402,51 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Protest>()
             .Property(p => p.Status)
             .HasConversion<string>();
+
+        // RaceComplaint Model
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.Race)
+            .WithMany()
+            .HasForeignKey(c => c.RaceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.FiledByUser)
+            .WithMany()
+            .HasForeignKey(c => c.FiledByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.AssignedRefereeAssignment)
+            .WithMany()
+            .HasForeignKey(c => c.AssignedRefereeAssignmentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.RuledByUser)
+            .WithMany()
+            .HasForeignKey(c => c.RuledByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .Property(c => c.Type)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaint>()
+            .Property(c => c.Status)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.RaceId);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.FiledByUserId);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.Status);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.AssignedRefereeAssignmentId);
 
         // HorseTransfer Model
         modelBuilder.Entity<HorseTransfer>()

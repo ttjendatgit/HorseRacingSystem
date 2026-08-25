@@ -18,6 +18,17 @@ export const markProtestUnderReview = (id) => request(`/api/management/protests/
 export const ruleProtest = (id, p) => request(`/api/management/protests/${id}/rule`, { method: "POST", body: JSON.stringify(p) });
 export const withdrawProtest = (id) => request(`/api/management/protests/${id}/withdraw`, { method: "POST" });
 
+// ── Race Complaints ──
+export const getRaceComplaints = async (status) => unwrap(await request(`/api/management/race-complaints${status ? `?status=${status}` : ""}`));
+export const getMyRaceComplaints = async () => unwrap(await request("/api/management/race-complaints/mine"));
+export const getRefereeRaceComplaints = async () => unwrap(await request("/api/management/race-complaints/referee"));
+export const getEligibleRaceComplaintRaces = async () => unwrap(await request("/api/management/race-complaints/eligible-races"));
+export const createRaceComplaint = (p) => request("/api/management/race-complaints", { method: "POST", body: JSON.stringify(p) });
+export const routeRaceComplaint = (id, p) => request(`/api/management/race-complaints/${id}/route`, { method: "POST", body: JSON.stringify(p) });
+export const respondRaceComplaint = (id, p) => request(`/api/management/race-complaints/${id}/respond`, { method: "POST", body: JSON.stringify(p) });
+export const ruleRaceComplaint = (id, p) => request(`/api/management/race-complaints/${id}/rule`, { method: "POST", body: JSON.stringify(p) });
+export const withdrawRaceComplaint = (id) => request(`/api/management/race-complaints/${id}/withdraw`, { method: "POST" });
+
 // ── Horse Transfers ──
 export const getTransfers = async () => unwrap(await request("/api/management/transfers"));
 export const getPendingTransfers = async () => unwrap(await request("/api/management/transfers/pending"));

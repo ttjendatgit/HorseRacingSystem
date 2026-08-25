@@ -256,6 +256,19 @@ public class PrizeV1_1Tests
         public Task<ServiceResult<ProtestResponse>> WithdrawAsync(Guid id, Guid requestingUserId) => throw new NotSupportedException();
     }
 
+    private sealed class ThrowingRaceComplaintService : IRaceComplaintService
+    {
+        public Task<ServiceResult<RaceComplaintResponse>> FileAsync(CreateRaceComplaintRequest request, Guid filedByUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<System.Collections.Generic.IEnumerable<RaceComplaintResponse>>> GetAllAsync(RaceComplaintStatus? status) => throw new NotSupportedException();
+        public Task<ServiceResult<System.Collections.Generic.IEnumerable<RaceComplaintResponse>>> GetByFiledByUserAsync(Guid filedByUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<System.Collections.Generic.IEnumerable<RaceComplaintResponse>>> GetForRefereeAsync(Guid refereeUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<System.Collections.Generic.IEnumerable<RaceComplaintEligibleRaceResponse>>> GetEligibleRacesAsync(Guid userId) => throw new NotSupportedException();
+        public Task<ServiceResult<RaceComplaintResponse>> RouteAsync(Guid id, RouteRaceComplaintRequest request, Guid adminUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<RaceComplaintResponse>> RespondAsync(Guid id, RespondRaceComplaintRequest request, Guid refereeUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<RaceComplaintResponse>> RuleAsync(Guid id, RuleRaceComplaintRequest request, Guid ruledByUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<RaceComplaintResponse>> WithdrawAsync(Guid id, Guid requestingUserId) => throw new NotSupportedException();
+    }
+
     private sealed class ThrowingTransferService : IHorseTransferService
     {
         public Task<ServiceResult<HorseTransferResponse>> CreateAsync(CreateHorseTransferRequest request, Guid fromOwnerId) => throw new NotSupportedException();
@@ -287,7 +300,7 @@ public class PrizeV1_1Tests
     private static ManagementController BuildManagementController(RaceLifecycleTests.LifecycleFixture f, string? role)
     {
         var controller = new ManagementController(
-            MakePrizeService(f), new ThrowingProtestService(), new ThrowingTransferService(),
+            MakePrizeService(f), new ThrowingProtestService(), new ThrowingRaceComplaintService(), new ThrowingTransferService(),
             new ThrowingContractService(), new ThrowingInjuryService(), f.TournamentSvc);
 
         var httpContext = new DefaultHttpContext();

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyTournamentRegistrations, getMyRaceEntries } from "../../services/ownerHorseApi";
+import { createRaceComplaint } from "../../services/managementApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
 import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
 import { getJockeyNameDisplay } from "../../utils/jockeyAssignmentDisplay";
+import { RACE_COMPLAINT_TYPE_OPTIONS } from "../../utils/raceComplaintDisplay";
+import { RaceButton, RaceModalShell, RaceSelect } from "../../components/ui/RaceUi";
 import {
   getTournamentLifecycleLabel,
   normalizeTournamentStatus,
@@ -134,6 +137,10 @@ function OwnerParticipationsPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState(null);
   const [expandedRaces, setExpandedRaces] = useState({});
+  const [complaintModal, setComplaintModal] = useState(null); // { entry }
+  const [complaintForm, setComplaintForm] = useState({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+  const [complaintSubmitting, setComplaintSubmitting] = useState(false);
+  const [complaintMsg, setComplaintMsg] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -262,6 +269,35 @@ function OwnerParticipationsPage() {
     }));
   };
 
+  const openComplaintModal = (entry) => {
+    setComplaintForm({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+    setComplaintMsg(null);
+    setComplaintModal({ entry });
+  };
+
+  const submitComplaint = async () => {
+    if (!complaintModal) return;
+    if (!complaintForm.reason.trim()) {
+      setComplaintMsg({ type: "error", text: "Vui lòng nhập nội dung khiếu nại." });
+      return;
+    }
+    setComplaintSubmitting(true);
+    try {
+      await createRaceComplaint({
+        raceId: complaintModal.entry.raceId,
+        type: complaintForm.type,
+        reason: complaintForm.reason.trim(),
+        evidenceDescription: complaintForm.evidenceDescription?.trim() || null,
+      });
+      setComplaintModal(null);
+      setError("");
+    } catch (err) {
+      setComplaintMsg({ type: "error", text: err?.message || "Gửi khiếu nại thất bại." });
+    } finally {
+      setComplaintSubmitting(false);
+    }
+  };
+
   const renderRaceRow = (entry) => {
     const jockeyDisplay = getJockeyNameDisplay({
       jockeyId: entry.jockeyId,
@@ -281,6 +317,13 @@ function OwnerParticipationsPage() {
         <p>
           Kỵ sĩ: {jockeyDisplay} · Cổng {entry.gateNumber ?? "chưa xếp"} · Kết quả: {formatRank(entry.finishPosition)}
         </p>
+        {entry.raceStatusKey === "finished" && (
+          <div className="op-race-row__actions">
+            <RaceButton size="compact" variant="ghost" onClick={() => openComplaintModal(entry)}>
+              Khiếu nại cuộc đua
+            </RaceButton>
+          </div>
+        )}
       </div>
     );
   };
@@ -399,6 +442,54 @@ function OwnerParticipationsPage() {
           </section>
         )}
       </div>
+
+      {complaintModal && (
+        <RaceModalShell
+          title="Khiếu nại cuộc đua"
+          description={complaintModal.entry.raceName}
+          onClose={() => setComplaintModal(null)}
+          footer={(
+            <>
+              <RaceButton variant="ghost" onClick={() => setComplaintModal(null)}>Hủy</RaceButton>
+              <RaceButton loading={complaintSubmitting} disabled={complaintSubmitting} onClick={submitComplaint}>
+                Gửi khiếu nại
+              </RaceButton>
+            </>
+          )}
+        >
+          {complaintMsg && (
+            <p className="rm-field__message rm-field__message--error">{complaintMsg.text}</p>
+          )}
+          <RaceSelect
+            label="Loại khiếu nại"
+            value={complaintForm.type}
+            onChange={(e) => setComplaintForm((prev) => ({ ...prev, type: e.target.value }))}
+            options={RACE_COMPLAINT_TYPE_OPTIONS}
+          />
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-reason">Nội dung</label>
+            <textarea
+              id="op-complaint-reason"
+              className="rm-control"
+              rows={4}
+              value={complaintForm.reason}
+              onChange={(e) => setComplaintForm((prev) => ({ ...prev, reason: e.target.value }))}
+              placeholder="Mô tả nội dung khiếu nại..."
+            />
+          </div>
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-evidence">Bằng chứng (tùy chọn)</label>
+            <textarea
+              id="op-complaint-evidence"
+              className="rm-control"
+              rows={2}
+              value={complaintForm.evidenceDescription}
+              onChange={(e) => setComplaintForm((prev) => ({ ...prev, evidenceDescription: e.target.value }))}
+              placeholder="Mô tả bằng chứng liên quan (không bắt buộc)..."
+            />
+          </div>
+        </RaceModalShell>
+      )}
     </div>
   );
 }

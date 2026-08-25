@@ -298,6 +298,10 @@
   line-height: 1.35;
 }
 
+.op-race-row__actions {
+  margin-top: 4px;
+}
+
 .op-disclosure {
   justify-self: start;
   min-height: 28px;

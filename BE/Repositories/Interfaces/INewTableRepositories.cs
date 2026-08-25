@@ -35,6 +35,18 @@ public interface IProtestRepository
     Task UpdateAsync(Protest protest);
 }
 
+public interface IRaceComplaintRepository
+{
+    Task<RaceComplaint?> GetByIdAsync(Guid id);
+    Task<IEnumerable<RaceComplaint>> GetByRaceAsync(Guid raceId);
+    Task<IEnumerable<RaceComplaint>> GetByFiledByUserAsync(Guid filedByUserId);
+    Task<IEnumerable<RaceComplaint>> GetByAssignedRefereeUserAsync(Guid refereeUserId);
+    Task<IEnumerable<RaceComplaint>> GetAllAsync();
+    Task<bool> HasActiveByFilerRaceTypeAsync(Guid filedByUserId, Guid raceId, RaceComplaintType type);
+    Task AddAsync(RaceComplaint complaint);
+    Task UpdateAsync(RaceComplaint complaint);
+}
+
 public interface IHorseTransferRepository
 {
     Task<HorseTransfer?> GetByIdAsync(Guid id);
