@@ -36,6 +36,13 @@ public class JockeyService : IJockeyService
         _notifications = notifications;
     }
 
+    /// <summary>
+    /// Lấy danh sách các kỵ thủ sẵn sàng nhận lời mời thi đấu.
+    /// Tự động đồng bộ hồ sơ kỵ thủ và hỗ trợ lọc theo trạng thái duyệt.
+    /// </summary>
+    /// <param name="currentUserId">Mã định danh người dùng hiện tại.</param>
+    /// <param name="includeUnapproved">Cờ cho phép bao gồm các kỵ thủ chưa phê duyệt.</param>
+    /// <returns>Danh sách kỵ thủ và chỉ số thống kê thành tích.</returns>
     public async Task<ServiceResult<object>> GetAvailableJockeysAsync(Guid currentUserId, bool includeUnapproved = false)
     {
         await EnsureJockeyProfilesAsync();

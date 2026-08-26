@@ -87,8 +87,9 @@
 
 .ad-nav-link--active {
   color: #f2d28b !important;
-  background: linear-gradient(90deg, rgba(215,170,77,0.18) 0%, rgba(215,170,77,0.05) 100%) !important;
-  border-left: 3px solid #f2d28b;
+  background: linear-gradient(90deg, rgba(215, 170, 77, 0.28) 0%, rgba(215, 170, 77, 0.08) 100%) !important;
+  border-left: 4px solid #f2d28b;
+  box-shadow: 0 2px 10px rgba(215, 170, 77, 0.15);
 }
 
 .ad-nav-label {

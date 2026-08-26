@@ -34,6 +34,13 @@ public class PredictionService : IPredictionService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Tạo mới một lượt đặt dự đoán (đặt cược) cho khán giả.
+    /// Kiểm tra thời gian đóng cược (trước 5 phút so với giờ đua), chặn cược trùng và trừ tiền ví khán giả.
+    /// </summary>
+    /// <param name="userId">Mã định danh khán giả đặt cược.</param>
+    /// <param name="request">Thông tin chi tiết lượt đặt dự đoán.</param>
+    /// <returns>Kết quả thực hiện kèm thông tin chi tiết lượt đặt cược.</returns>
     public async Task<ServiceResult<object>> CreatePredictionAsync(Guid userId, PredictionCreateRequest request)
     {
         if (request.BetAmount <= 0)
@@ -161,6 +168,13 @@ public class PredictionService : IPredictionService
     /// Settlement_PartialPayoutFailure_DoesNotStrandOrDoublePay for the
     /// failure-injection proof that this is race-scoped and safe to retry.
     /// </summary>
+    /// <summary>
+    /// Quyết toán và cộng điểm thưởng dự đoán cho khán giả thắng cược khi có kết quả cuộc đua chính thức.
+    /// Tự động đánh dấu thua cho các lượt chọn ngựa khác và gửi thông báo thắng cược.
+    /// </summary>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <param name="winningHorseId">Mã định danh con ngựa về nhất.</param>
+    /// <returns>Kết quả quyết toán dự đoán và số lượng khán giả được trả thưởng.</returns>
     public async Task<ServiceResult<object>> SettlePredictionAsync(Guid raceId, Guid winningHorseId)
     {
         var race = await _races.GetByIdWithEntriesAsync(raceId);
@@ -251,6 +265,11 @@ public class PredictionService : IPredictionService
         });
     }
 
+    /// <summary>
+    /// Lấy danh sách lịch sử dự đoán (đặt cược) của khán giả hiện tại.
+    /// </summary>
+    /// <param name="userId">Mã định danh khán giả.</param>
+    /// <returns>Danh sách các lượt dự đoán kèm tỷ lệ cược và thưởng nhận được.</returns>
     public async Task<ServiceResult<object>> GetMyPredictionsAsync(Guid userId)
     {
         var predictions = await _predictions.GetByUserAsync(userId);

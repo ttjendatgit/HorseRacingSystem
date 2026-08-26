@@ -27,6 +27,11 @@ public class WalletService : IWalletService
         _pointsPerVnd = config.GetValue<decimal>("Wallet:PointsPerVnd", 1000);
     }
 
+    /// <summary>
+    /// Lấy thông tin số dư ví hiện tại và tỷ lệ quy đổi điểm/VNĐ của người dùng.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng.</param>
+    /// <returns>Số dư ví hiện tại và tỷ lệ quy đổi điểm.</returns>
     public async Task<ServiceResult<object>> GetBalanceAsync(Guid userId)
     {
         var wallet = await _walletRepo.GetByUserIdAsync(userId);
@@ -105,8 +110,17 @@ public class WalletService : IWalletService
         return ServiceResult<decimal>.Ok(vnd);
     }
 
+    /// <summary>
+    /// Lấy tỷ lệ quy đổi số điểm trên 1 VNĐ từ cấu hình hệ thống.
+    /// </summary>
+    /// <returns>Tỷ lệ quy đổi điểm trên 1 VNĐ.</returns>
     public decimal GetPointsPerVnd() => _pointsPerVnd;
 
+    /// <summary>
+    /// Lấy ví hiện tại của người dùng hoặc tự động tạo mới ví nếu là tài khoản Khán giả.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng.</param>
+    /// <returns>Đối tượng ví giao dịch của người dùng.</returns>
     private async Task<Wallet?> GetOrCreateWalletAsync(Guid userId)
     {
         var wallet = await _walletRepo.GetByUserIdAsync(userId);
