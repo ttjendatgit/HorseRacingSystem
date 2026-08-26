@@ -8,6 +8,18 @@
 // over the canonical Rankings array (the normal path) or, as a legacy-safety fallback, over raw
 // RaceEntries when an old Official result has no usable Rankings at all.
 
+const RESULT_STATUS_LABELS = Object.freeze({
+  provisional: "Kết quả tạm thời",
+  official: "Kết quả chính thức",
+});
+
+// Raw ResultStatus ("Provisional"/"Official") must never leak into the UI verbatim —
+// this is the single label mapping other pages should reuse instead of an inline map.
+export const getResultStatusLabel = (resultStatus) => {
+  const key = String(resultStatus ?? "").trim().toLowerCase();
+  return RESULT_STATUS_LABELS[key] ?? null;
+};
+
 // null/undefined/empty => null. Only a positive integer position is valid.
 export const getFinishPosition = (entry) => {
   const raw = entry?.position ?? entry?.Position ?? entry?.finishPosition ?? entry?.FinishPosition;

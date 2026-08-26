@@ -61,6 +61,8 @@ public class RefereeAssignmentResponse
     public Guid RaceId { get; set; }
     public string RaceName { get; set; } = string.Empty;
     public string RaceStatus { get; set; } = string.Empty;
+    public DateTime? ScheduledAt { get; set; }
+    public DateTime? ScheduledEndAt { get; set; }
     /// <summary>"Provisional" / "Official", or null when no RaceResult exists yet.</summary>
     public string? ResultStatus { get; set; }
     /// <summary>Set when the most recent submission was rejected and awaits resubmission.</summary>

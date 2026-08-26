@@ -44,22 +44,33 @@ const BODY_PARTS = [
 ];
 
 const SEVERITY_COLORS = {
-  Minor: "#22c55e",
-  Moderate: "#eab308",
-  Severe: "#f97316",
-  Critical: "#ef4444",
+  Minor: "#4ade80",
+  Moderate: "#facc15",
+  Severe: "#fb923c",
+  Critical: "#f87171",
 };
 
 const SEVERITY_BG = {
-  Minor: "rgba(34,197,94,0.15)",
-  Moderate: "rgba(234,179,8,0.15)",
-  Severe: "rgba(249,115,22,0.15)",
-  Critical: "rgba(239,68,68,0.15)",
+  Minor: "rgba(74,222,128,0.15)",
+  Moderate: "rgba(250,204,21,0.15)",
+  Severe: "rgba(251,146,60,0.15)",
+  Critical: "rgba(248,113,113,0.15)",
 };
 
 function severityToNumber(s) {
   const map = { Minor: 0, Moderate: 1, Severe: 3, Critical: 4 };
   return map[s] ?? 0;
+}
+
+/* ── SVG: empty state (no injuries recorded) ── */
+function InjuryEmptySVG() {
+  return (
+    <svg className="ri-empty-svg" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M40 90 L160 90" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
+      <path d="M60 90 L60 40 C60 30 70 20 80 20 L120 20 C130 20 140 30 140 40 L140 90" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.4" />
+      <path d="M90 55 L110 55 M100 45 L100 65" stroke="var(--ri-green)" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+    </svg>
+  );
 }
 
 function RefereeInjuryPage() {
@@ -69,6 +80,7 @@ function RefereeInjuryPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [assignments, setAssignments] = useState([]);
   const [selectedRaceId, setSelectedRaceId] = useState("");
@@ -111,8 +123,9 @@ function RefereeInjuryPage() {
     [assignments]
   );
 
-  const loadInjuries = async () => {
-    setLoading(true);
+  const loadInjuries = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
       const data = await getInjuries();
@@ -126,6 +139,7 @@ function RefereeInjuryPage() {
       setError("Không thể tải danh sách chấn thương: " + e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -248,12 +262,24 @@ function RefereeInjuryPage() {
           <h1 className="ri-title">Quản lý chấn thương</h1>
           <p className="ri-sub">Theo dõi và ghi nhận tình trạng chấn thương của ngựa</p>
         </div>
-        <button
-          className="ri-btn ri-btn-gold"
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "Hủy" : "+ Ghi nhận chấn thương"}
-        </button>
+        <div className="ri-header-actions">
+          <button
+            className="ri-btn ri-btn-outline"
+            onClick={() => loadInjuries(true)}
+            disabled={refreshing}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "ri-spin" : ""}>
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.58 3.69" />
+            </svg>
+            {refreshing ? "Đang tải..." : "Làm mới"}
+          </button>
+          <button
+            className="ri-btn ri-btn-gold"
+            onClick={() => setShowForm(!showForm)}
+          >
+            {showForm ? "Hủy" : "+ Ghi nhận chấn thương"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="ri-alert ri-alert-error">{error}</div>}
@@ -410,6 +436,7 @@ function RefereeInjuryPage() {
             <div className="ri-loading">Đang tải dữ liệu...</div>
           ) : injuries.length === 0 ? (
             <div className="ri-empty">
+              <InjuryEmptySVG />
               <p>Chưa có hồ sơ chấn thương nào.</p>
             </div>
           ) : (
@@ -439,8 +466,9 @@ function RefereeInjuryPage() {
                         <span
                           className="ri-badge"
                           style={{
-                            background: SEVERITY_BG[inj.severity] || "rgba(100,116,139,0.15)",
+                            background: SEVERITY_BG[inj.severity] || "rgba(255,255,255,0.1)",
                             color: SEVERITY_COLORS[inj.severity] || "#94a3b8",
+                            border: `1px solid ${SEVERITY_COLORS[inj.severity] || "#94a3b8"}40`,
                           }}
                         >
                           {getSeverityLabel(inj.severity)}

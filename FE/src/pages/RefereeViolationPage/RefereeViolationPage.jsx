@@ -5,6 +5,7 @@ import {
   recordViolation,
 } from "../../services/refereeApi";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
+import { isViolationResolved } from "../../utils/violationResolution";
 import "./RefereeViolationPage.css";
 
 const VIOLATION_TYPES = [
@@ -39,21 +40,13 @@ function getBadgeKey(typeValue) {
 function FlagWhistleSVG() {
   return (
     <svg className="rv-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Flag pole */}
-      <line x1="80" y1="28" x2="80" y2="120" stroke="currentColor" strokeWidth="2" opacity="0.2" strokeLinecap="round" />
-      {/* Flag */}
-      <path d="M82 32 L160 48 L82 64 Z" fill="var(--rh-gold)" fillOpacity="0.25" stroke="var(--rh-gold)" strokeWidth="0.8" strokeOpacity="0.3" strokeLinejoin="round" />
-      {/* Flag wave lines */}
-      <path d="M155 50 C165 52 170 48 175 50" stroke="var(--rh-gold)" strokeWidth="1" opacity="0.2" fill="none" strokeLinecap="round" />
-      {/* Whistle */}
-      <g opacity="0.15">
-        <rect x="170" y="82" width="28" height="10" rx="4" stroke="currentColor" strokeWidth="1.2" fill="none" />
-        <circle cx="198" cy="87" r="6" stroke="currentColor" strokeWidth="1.2" fill="none" />
-        <line x1="170" y1="87" x2="160" y2="85" stroke="currentColor" strokeWidth="1" />
+      <line x1="80" y1="28" x2="80" y2="120" stroke="currentColor" strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+      <path d="M82 32 L160 48 L82 64 Z" fill="var(--rv-gold)" fillOpacity="0.2" stroke="var(--rv-gold)" strokeWidth="1" strokeOpacity="0.4" strokeLinejoin="round" />
+      <g opacity="0.3">
+        <rect x="170" y="82" width="28" height="10" rx="4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <circle cx="198" cy="87" r="6" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <line x1="170" y1="87" x2="160" y2="85" stroke="currentColor" strokeWidth="1.5" />
       </g>
-      <text x="120" y="140" textAnchor="middle" fill="var(--rh-muted)" fontSize="12" fontFamily="sans-serif" opacity="0.7">
-        Chọn cuộc đua để ghi nhận vi phạm
-      </text>
     </svg>
   );
 }
@@ -62,11 +55,8 @@ function FlagWhistleSVG() {
 function EmptyViolationSVG() {
   return (
     <svg className="rv-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Shield with check */}
-      <path d="M60 10 L90 22 L90 44 C90 60 60 74 60 74 C60 74 30 60 30 44 L30 22 Z" stroke="currentColor" strokeWidth="1" opacity="0.2" fill="currentColor" fillOpacity="0.03" strokeLinejoin="round" />
-      {/* Checkmark inside */}
-      <path d="M50 42 L56 50 L70 34" stroke="var(--rh-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
-      <text x="60" y="90" textAnchor="middle" fill="var(--rh-muted)" fontSize="9" fontFamily="sans-serif" opacity="0.5">Chưa có vi phạm</text>
+      <path d="M60 10 L90 22 L90 44 C90 60 60 74 60 74 C60 74 30 60 30 44 L30 22 Z" stroke="currentColor" strokeWidth="1.5" opacity="0.3" fill="currentColor" fillOpacity="0.05" strokeLinejoin="round" />
+      <path d="M50 42 L56 50 L70 34" stroke="var(--rv-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
     </svg>
   );
 }
@@ -74,15 +64,13 @@ function EmptyViolationSVG() {
 /* ── SVG: Prompt when form is hidden ── */
 function ViolationPromptSVG() {
   return (
-    <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
-      {/* Flag icon */}
-      <line x1="40" y1="20" x2="40" y2="80" stroke="currentColor" strokeWidth="1" opacity="0.2" strokeLinecap="round" />
-      <path d="M42 24 L100 34 L42 44 Z" fill="var(--rh-gold)" fillOpacity="0.2" stroke="var(--rh-gold)" strokeWidth="0.6" strokeOpacity="0.25" strokeLinejoin="round" />
-      {/* Plus icon */}
-      <circle cx="130" cy="50" r="14" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" fill="none" />
-      <line x1="124" y1="50" x2="136" y2="50" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
-      <line x1="130" y1="44" x2="130" y2="56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
-      <text x="145" y="54" fill="currentColor" fontSize="10" fontFamily="sans-serif" opacity="0.5">Nhấn + để ghi nhận</text>
+    <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rv-muted)" }}>
+      <line x1="40" y1="20" x2="40" y2="80" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeLinecap="round" />
+      <path d="M42 24 L100 34 L42 44 Z" fill="var(--rv-gold)" fillOpacity="0.15" stroke="var(--rv-gold)" strokeWidth="1" strokeOpacity="0.4" strokeLinejoin="round" />
+      <circle cx="130" cy="50" r="14" stroke="var(--rv-gold)" strokeWidth="1.5" opacity="0.6" fill="none" />
+      <line x1="124" y1="50" x2="136" y2="50" stroke="var(--rv-gold)" strokeWidth="1.5" opacity="0.6" strokeLinecap="round" />
+      <line x1="130" y1="44" x2="130" y2="56" stroke="var(--rv-gold)" strokeWidth="1.5" opacity="0.6" strokeLinecap="round" />
+      <text x="145" y="54" fill="currentColor" fontSize="10" fontFamily="sans-serif" opacity="0.7">Nhấn + để ghi nhận</text>
     </svg>
   );
 }
@@ -97,6 +85,7 @@ function RefereeViolationPage() {
   const [success, setSuccess] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [form, setForm] = useState({
     horseId: "",
     violationType: 3,
@@ -151,9 +140,10 @@ function RefereeViolationPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  /* ---------- load violations ---------- */
-  const loadViolations = async (raceId) => {
-    setLoading(true);
+  /* ---------- load violations (initial load + manual refresh) ---------- */
+  const loadViolations = async (raceId, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
       const data = await getRaceViolations(raceId);
@@ -169,7 +159,13 @@ function RefereeViolationPage() {
       setViolations([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  /* ---------- manual refresh button ---------- */
+  const handleManualRefresh = () => {
+    if (selectedRaceId) loadViolations(selectedRaceId, true);
   };
 
   /* ---------- select a race ---------- */
@@ -233,10 +229,7 @@ function RefereeViolationPage() {
   }, [assignments]);
 
   const totalViolations = violations.length;
-  const resolvedCount = violations.filter((v) => {
-    const penalty = v.penalty ?? v.Penalty;
-    return Boolean(penalty && penalty.trim());
-  }).length;
+  const resolvedCount = violations.filter(isViolationResolved).length;
   const pendingCount = totalViolations - resolvedCount;
 
   /* ---------- render ---------- */
@@ -253,16 +246,28 @@ function RefereeViolationPage() {
             </p>
           </div>
           {selectedRaceId && (
-            <button
-              className="rv-btn--gold"
-              onClick={() => setShowForm((p) => !p)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              {showForm ? "Thu gọn" : "+ Ghi nhận vi phạm"}
-            </button>
+            <div className="rv-topbar-actions">
+              <button
+                className="rv-btn rv-btn--outline"
+                onClick={handleManualRefresh}
+                disabled={refreshing}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "rv-spin" : ""}>
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.58 3.69" />
+                </svg>
+                {refreshing ? "Đang tải..." : "Làm mới"}
+              </button>
+              <button
+                className="rv-btn rv-btn--gold"
+                onClick={() => setShowForm((p) => !p)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                {showForm ? "Thu gọn" : "+ Ghi nhận vi phạm"}
+              </button>
+            </div>
           )}
         </header>
 
@@ -290,7 +295,7 @@ function RefereeViolationPage() {
             <div className="rv-kpi-value rv-kpi-value--amber">
               {pendingCount}
             </div>
-            <span className="rv-kpi-sub">Đang chờ xem xét</span>
+            <span className="rv-kpi-sub">Đang chờ Admin xem xét</span>
           </div>
         </div>
 
@@ -489,7 +494,7 @@ function RefereeViolationPage() {
                             ? new Date(v.createdAt).toLocaleString("vi-VN")
                             : ""}
                         </span>
-                        {(v.penalty ?? v.Penalty) ? (
+                        {isViolationResolved(v) ? (
                           <span className="rv-badge rv-badge--status-resolved">
                             {STATUS_MAP.Resolved}
                           </span>

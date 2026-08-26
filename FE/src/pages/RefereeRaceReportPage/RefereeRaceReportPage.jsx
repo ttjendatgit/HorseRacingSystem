@@ -2,7 +2,22 @@
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import { createReport, getRaceReport, getRaceEntries, getRaceHealthChecks, submitRaceResult } from "../../services/refereeApi";
 import { getLatestHealthCheck } from "../../utils/healthCheckDisplay";
+import { buildFullRankingSubmission, isFullRankingComplete } from "../../utils/raceResultSubmission";
 import "./RefereeRaceReportPage.css";
+
+/* ── SVG: empty state (no race selected) ── */
+function ReportEmptySVG() {
+  return (
+    <svg className="rr-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="70" y="20" width="100" height="110" rx="8" stroke="currentColor" strokeWidth="2" opacity="0.3" fill="none" />
+      <line x1="90" y1="45" x2="150" y2="45" stroke="currentColor" strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+      <line x1="90" y1="65" x2="130" y2="65" stroke="currentColor" strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+      <line x1="90" y1="85" x2="140" y2="85" stroke="currentColor" strokeWidth="2" opacity="0.3" strokeLinecap="round" />
+      <path d="M140 100 L160 120 M160 100 L140 120" stroke="#f2d28b" strokeWidth="3" opacity="0.8" strokeLinecap="round" />
+      <circle cx="150" cy="110" r="24" stroke="#f2d28b" strokeWidth="2" opacity="0.4" fill="none" />
+    </svg>
+  );
+}
 
 const REPORT_TYPES = [
   {
@@ -65,6 +80,7 @@ export default function RefereeRaceReportPage() {
   const [existingReport, setExistingReport] = useState(null);
   const [form, setForm] = useState({ content: "", notes: "" });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
   const [reportType, setReportType] = useState("post-race");
@@ -79,26 +95,35 @@ export default function RefereeRaceReportPage() {
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
 
+  // Referee may only report on/submit results for a Race they've actually
+  // confirmed the assignment for — "Assigned" or "Pending" is not enough.
+  const loadAssignments = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const d = await getMyAssignments();
+      const list = Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+      const confirmedAssignments = list.filter((a) => {
+        const status = (a.status || a.Status || "").toLowerCase();
+        return status === "confirmed";
+      });
+      setAssignments(confirmedAssignments);
+      if (!isRefresh && confirmedAssignments.length > 0) {
+        setSelectedRaceId(
+          confirmedAssignments[0].raceId || confirmedAssignments[0].RaceId || ""
+        );
+      }
+    } catch {
+      // keep existing list on refresh failure
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    getMyAssignments()
-      .then((d) => {
-        const list = Array.isArray(d) ? d : [];
-        console.log("🔍 All assignments:", list);
-        // Filter only confirmed assignments (referee đã chấp nhận lời mời)
-        const confirmedAssignments = list.filter((a) => {
-          const status = (a.status || a.Status || "").toLowerCase();
-          console.log(`Assignment ${a.raceId || a.RaceId}: status=${status}`);
-          return status === "confirmed";
-        });
-        console.log("✅ Confirmed assignments:", confirmedAssignments);
-        setAssignments(confirmedAssignments);
-        if (confirmedAssignments.length > 0)
-          setSelectedRaceId(
-            confirmedAssignments[0].raceId || confirmedAssignments[0].RaceId || ""
-          );
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadAssignments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -131,8 +156,8 @@ export default function RefereeRaceReportPage() {
       getRaceEntries(selectedRaceId).catch(() => []),
       getRaceHealthChecks(selectedRaceId).catch(() => []),
     ]).then(([entriesData, hcData]) => {
-      setResultEntries(Array.isArray(entriesData) ? entriesData : []);
-      setHealthChecks(Array.isArray(hcData) ? hcData : []);
+      setResultEntries(Array.isArray(entriesData?.data) ? entriesData.data : Array.isArray(entriesData) ? entriesData : []);
+      setHealthChecks(Array.isArray(hcData?.data) ? hcData.data : Array.isArray(hcData) ? hcData : []);
     });
   }, [selectedRaceId]);
 
@@ -162,11 +187,7 @@ export default function RefereeRaceReportPage() {
 
   // Every position 1..N assigned to exactly one horse — matches the backend
   // full-ranking validation exactly (see LiveResultService.ValidateAndCanonicalizeRankings).
-  const assignedPositions = Object.values(resultPositions).filter((p) => p !== "" && p != null);
-  const isRankingComplete =
-    resultEntryCount > 0 &&
-    assignedPositions.length === resultEntryCount &&
-    new Set(assignedPositions).size === resultEntryCount;
+  const isRankingComplete = isFullRankingComplete(resultEntries, resultPositions);
 
   const handlePositionChange = (horseId, value) => {
     setResultPositions((prev) => ({ ...prev, [horseId]: value === "" ? "" : Number(value) }));
@@ -249,11 +270,7 @@ export default function RefereeRaceReportPage() {
     setResultSubmitting(true);
     setResultMsg("");
     try {
-      const rankings = resultEntries.map((entry) => ({
-        horseId: entry.horseId || entry.HorseId,
-        position: resultPositions[entry.horseId || entry.HorseId],
-      }));
-      await submitRaceResult(selectedRaceId, { rankings });
+      await submitRaceResult(selectedRaceId, buildFullRankingSubmission(resultEntries, resultPositions));
       setResultMsg("✅ Kết quả đã được gửi thành công! Admin sẽ duyệt sau.");
       setResultPositions({});
     } catch (err) {
@@ -296,6 +313,16 @@ export default function RefereeRaceReportPage() {
           <h1 className="rr-title">Báo cáo cuộc đua</h1>
           <p className="rr-sub">Tạo và theo dõi báo cáo cho các cuộc đua được phân công</p>
         </div>
+        <button
+          className="rr-btn rr-btn--outline"
+          onClick={() => loadAssignments(true)}
+          disabled={refreshing}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "rr-spin" : ""}>
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.58 3.69" />
+          </svg>
+          {refreshing ? "Đang tải..." : "Làm mới"}
+        </button>
       </div>
 
       {/* ── Report Type Selector ── */}
@@ -348,6 +375,15 @@ export default function RefereeRaceReportPage() {
               </select>
             )}
           </div>
+
+          {!selectedRaceId && (
+            <div className="rr-card rr-card-dark">
+              <div className="rr-empty-state">
+                <ReportEmptySVG />
+                <p>Vui lòng chọn một cuộc đua ở trên để bắt đầu viết báo cáo và chốt kết quả.</p>
+              </div>
+            </div>
+          )}
 
           {existingReport ? (
             <div className="rr-card rr-card-dark">
@@ -409,8 +445,8 @@ export default function RefereeRaceReportPage() {
 
           {/* ── Submit Race Result ── */}
           {selectedRaceId && (
-            <form className="rr-card rr-card-dark rr-form" onSubmit={handleSubmitResult} style={{ marginTop: 16, borderTop: "3px solid #e6a54a" }}>
-              <h3 className="rr-card-title" style={{ color: "#7C2D12" }}>
+            <form className="rr-card rr-card-dark rr-form" onSubmit={handleSubmitResult} style={{ marginTop: 16, borderTop: "3px solid var(--rr-gold-dim)" }}>
+              <h3 className="rr-card-title" style={{ color: "var(--rr-gold)" }}>
                 🏁 Chốt kết quả cuộc đua
               </h3>
               {resultMsg && (
@@ -422,14 +458,14 @@ export default function RefereeRaceReportPage() {
                 Xếp vị trí về đích cho từng ngựa (vị trí 1 là ngựa thắng cuộc). Kết quả sẽ được gửi lên admin duyệt.
               </p>
               {currentRaceStatus && (
-                <p className="rr-muted" style={{ marginBottom: 4, fontWeight: 600, color: canSubmitResult ? "#166534" : "#b45309" }}>
+                <p className="rr-muted" style={{ marginBottom: 4, fontWeight: 600, color: canSubmitResult ? "var(--rr-green)" : "var(--rr-amber)" }}>
                   Trạng thái cuộc đua: {RACE_STATUS_LABEL[currentRaceStatus] ?? currentRaceStatus}
                   {currentResultStatus && ` · Kết quả: ${RESULT_STATUS_LABEL[currentResultStatus] ?? currentResultStatus}`}
                   {!canSubmitResult && " — chưa thể nộp kết quả lúc này"}
                 </p>
               )}
               {currentRejectedReason && currentResultStatus !== "Official" && (
-                <p className="rr-muted" style={{ marginBottom: 12, color: "#b45309" }}>
+                <p className="rr-muted" style={{ marginBottom: 12, color: "var(--rr-red)" }}>
                   ⚠️ Kết quả trước đã bị từ chối: {currentRejectedReason} — vui lòng nộp lại.
                 </p>
               )}
@@ -443,12 +479,12 @@ export default function RefereeRaceReportPage() {
                     return (
                       <div
                         key={horseId}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}
                       >
-                        <span style={{ flex: 1, fontSize: 14 }}>
+                        <span style={{ flex: 1, fontSize: 14, color: "var(--rr-text)" }}>
                           🐎 {entry.horseName || entry.HorseName}
                           {horseFailedHealthCheck && (
-                            <span style={{ color: "#b45309", fontSize: 12 }}> · Không Đạt sức khỏe (không thể xếp #1)</span>
+                            <span style={{ color: "var(--rr-amber)", fontSize: 12 }}> · Không Đạt sức khỏe (không thể xếp #1)</span>
                           )}
                         </span>
                         <select
@@ -458,12 +494,12 @@ export default function RefereeRaceReportPage() {
                           style={{ padding: 8, borderRadius: 8, fontSize: 14, minWidth: 110 }}
                           disabled={!canSubmitResult}
                         >
-                          <option value="">-- Vị trí --</option>
+                          <option value="">-- Chọn hạng --</option>
                           {Array.from({ length: resultEntryCount }, (_, i) => i + 1)
                             .filter((position) => position !== 1 || !horseFailedHealthCheck)
                             .map((position) => (
                               <option key={position} value={position}>
-                                #{position}
+                                Hạng {position}
                               </option>
                             ))}
                         </select>
@@ -476,7 +512,7 @@ export default function RefereeRaceReportPage() {
                 type="submit"
                 className="rr-submit-btn"
                 disabled={resultSubmitting || !isRankingComplete || !canSubmitResult}
-                style={{ background: isRankingComplete ? "#e6a54a" : undefined, marginTop: 12 }}
+                style={{ background: isRankingComplete ? "var(--rr-green)" : undefined, color: isRankingComplete ? "#fff" : undefined, marginTop: 12 }}
               >
                 {resultSubmitting ? "Đang gửi..." : "📨 Gửi kết quả"}
               </button>
