@@ -293,4 +293,16 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// OWNER-DEMO-SEED: dedicated explicit gate, deliberately independent of Features:SeedDemoData —
+// enabling the legacy demo seed above must never also enable this one, and vice versa.
+var seedOwnerDemo = string.Equals(
+    Environment.GetEnvironmentVariable("SEED_OWNER_DEMO"),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+
+if (seedOwnerDemo)
+{
+    await DemoSeeder.SeedOwnerDemoAsync(app.Services);
+}
+
 app.Run();

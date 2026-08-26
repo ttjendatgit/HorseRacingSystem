@@ -539,8 +539,7 @@ function OwnerParticipationsPage() {
         </div>
         <div className="op-complaint-summary">
           <span>{getRaceComplaintTypeLabel(complaint.type)}</span>
-          <span>Bằng chứng của bạn: {filerCount}</span>
-          <span>Bằng chứng trọng tài: {refereeCount}</span>
+          <span>Bằng chứng của bạn: {filerCount} · Bằng chứng trọng tài: {refereeCount}</span>
         </div>
         <div className="op-complaint-actions">
           <RaceButton size="compact" variant="ghost" onClick={() => toggleComplaintDisclosure(complaint.id)}>

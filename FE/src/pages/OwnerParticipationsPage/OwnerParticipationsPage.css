@@ -383,6 +383,15 @@
   background: var(--hr-crimson-hover);
 }
 
+.op-complaint-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--hr-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 860px) {
   .app-shell:has(.owner-participations) .page-wrapper {
     padding: 22px 18px 48px;
