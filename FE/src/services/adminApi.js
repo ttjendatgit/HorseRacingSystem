@@ -2,64 +2,75 @@ import { request } from "./apiClient";
 
 const unwrap = (response) => response?.data ?? response?.Data ?? response;
 
+/** Lấy thông tin thống kê tổng quan Bảng điều khiển Quản trị viên */
 export const getAdminDashboard = async () =>
   unwrap(await request("/api/admin/dashboard"));
 
+/** Lấy danh sách tất cả người dùng trong hệ thống */
 export const getAdminUsers = async () =>
   unwrap(await request("/api/admin/users"));
 
+/** Lấy thông tin chi tiết một người dùng theo ID */
 export const getAdminUser = async (id) =>
   unwrap(await request(`/api/admin/users/${id}`));
 
+/** Lấy danh sách ngựa thuộc sở hữu của một chủ ngựa */
 export const getOwnerHorses = async (userId) =>
   unwrap(await request(`/api/admin/users/${userId}/horses`));
 
+/** Lấy chi tiết thông tin một con ngựa của chủ ngựa */
 export const getOwnerHorse = async (userId, horseId) =>
   unwrap(await request(`/api/admin/users/${userId}/horses/${horseId}`));
 
+/** Cập nhật trạng thái phê duyệt của ngựa thuộc chủ ngựa */
 export const updateOwnerHorseStatus = (userId, horseId, payload) =>
   request(`/api/admin/users/${userId}/horses/${horseId}/status`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 
+/** Kích hoạt hoặc vô hiệu hóa tài khoản người dùng */
 export const setUserActive = (id, isActive) =>
   request(`/api/admin/users/${id}/${isActive ? "reactivate" : "deactivate"}`, {
     method: "POST",
   });
 
-// J-ADMIN-REVIEW: Admin-only Jockey verification detail (Phone/Address/DateOfBirth/Height/Weight/
-// IdCardNumber/LicenseFile/ApprovalNote/CreatedAt) — distinct from getAvailableJockeys(), which
-// intentionally never exposes those fields to non-Admin callers.
+/** Lấy chi tiết hồ sơ nài ngựa phục vụ phê duyệt */
 export const getJockeyAdminDetail = async (id) =>
   unwrap(await request(`/api/admin/jockeys/${id}`));
 
+/** Phê duyệt hồ sơ đăng ký nài ngựa */
 export const approveJockey = (id) =>
   request(`/api/admin/jockeys/${id}/approve`, {
     method: "POST",
   });
 
+/** Từ chối hồ sơ đăng ký nài ngựa */
 export const rejectJockey = (id, reason) =>
   request(`/api/admin/jockeys/${id}/reject`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
 
+/** Lấy danh sách tất cả các giải đấu quản lý */
 export const getAdminTournaments = async () =>
   unwrap(await request("/api/tournaments"));
 
+/** Tạo mới một giải đấu */
 export const createTournament = (payload) =>
   request("/api/tournaments", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
+/** Cập nhật thông tin giải đấu */
 export const updateTournament = (id, payload) =>
   request(`/api/tournaments/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 
+/** Xóa một giải đấu */
 export const deleteTournament = (id) =>
   request(`/api/tournaments/${id}`, { method: "DELETE" });
 

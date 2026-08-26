@@ -127,6 +127,18 @@ npm run lint
 npm run preview
 ```
 
+## Integration & Modules
+
+### 1. SePay Payment Integration
+- **Nạp tiền qua VietQR / Chuyển khoản ngân hàng**: Tự động sinh mã tham chiếu duy nhất (Reference) dạng 8 ký tự Hex (ví dụ: `Nap tien 3A9F1B2C`).
+- **Xác thực Webhook tự động**: Xác thực HMAC-SHA256 hoặc API Key từ SePay, tự động đối soát nội dung chuyển khoản và cộng tiền vào ví người dùng ngay lập tức.
+- **Bảo mật giao dịch**: Kiểm tra Idempotency tránh trùng lặp giao dịch và hỗ trợ chống giả mạo chữ ký Webhook.
+
+### 2. Spectator Prediction & Wallet Module
+- **Dự đoán kết quả**: Khán giả có thể sử dụng điểm trong ví để dự đoán ngựa chiến thắng trong từng trận đua sắp diễn ra.
+- **Tự động đóng cược**: Tự động khóa cược trước 5 phút khi cuộc đua bắt đầu hoặc khi cuộc đua chuyển sang trạng thái `InProgress`.
+- **Hoàn tiền an toàn**: Tự động hoàn tiền vào ví nếu cuộc đua hoặc giải đấu bị hủy bỏ.
+
 ## License
 
-Dự án học tập / đồ án cá nhân.
+Dự án học tập SWP391 — Đồ án Hệ thống Quản lý Giải đua ngựa (Horse Racing System).
