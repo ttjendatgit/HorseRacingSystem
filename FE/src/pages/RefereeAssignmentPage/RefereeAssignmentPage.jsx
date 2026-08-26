@@ -11,13 +11,17 @@ import { getMyAssignments, respondToRefereeAssignment } from "../../services/ref
 import {
   ASSIGNMENT_TABS,
   filterAssignmentsByTab,
+  formatDateTime,
   getAssignmentId,
   getAssignmentStatus,
   getAssignmentStatusDetails,
   getAssignmentTabCounts,
   getDefaultAssignmentTab,
+  getScheduledAt,
   isPendingAssignment,
 } from "../../utils/refereeAssignmentDisplay";
+import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
+import { getResultStatusLabel } from "../../utils/raceResultDisplay";
 import "./RefereeAssignmentPage.css";
 
 const roleLabels = {
@@ -54,27 +58,6 @@ const tabCopy = {
 
 function readAssignmentValue(assignment, camelKey, pascalKey) {
   return assignment?.[camelKey] ?? assignment?.[pascalKey];
-}
-
-function formatDateTime(value) {
-  if (!value) return "Chưa xác định";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Chưa xác định";
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getScheduledAt(assignment) {
-  return (
-    readAssignmentValue(assignment, "raceDate", "RaceDate") ??
-    readAssignmentValue(assignment, "scheduledAt", "ScheduledAt") ??
-    readAssignmentValue(assignment, "scheduledStartDate", "ScheduledStartDate")
-  );
 }
 
 function getDisplayRole(role) {
@@ -213,11 +196,13 @@ export default function RefereeAssignmentPage() {
     const assignedAt = readAssignmentValue(assignment, "assignedAt", "AssignedAt");
     const raceStatus = readAssignmentValue(assignment, "raceStatus", "RaceStatus");
     const resultStatus = readAssignmentValue(assignment, "resultStatus", "ResultStatus");
+    const raceStatusLabel = getOwnerRaceStatusLabel(raceStatus);
+    const resultStatusLabel = getResultStatusLabel(resultStatus);
 
     const secondaryMeta = [
       { label: "Phân công", value: formatDateTime(assignedAt) },
-      raceStatus ? { label: "Cuộc đua", value: raceStatus } : null,
-      resultStatus ? { label: "Kết quả", value: resultStatus } : null,
+      raceStatus ? { label: "Cuộc đua", value: raceStatusLabel } : null,
+      resultStatusLabel ? { label: "Kết quả", value: resultStatusLabel } : null,
     ].filter(Boolean);
 
     return (

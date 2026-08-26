@@ -310,6 +310,8 @@ public class RefereeService : IRefereeService
             RaceId = assignment.RaceId,
             RaceName = race?.Name,
             RaceStatus = race?.Status.ToString() ?? string.Empty,
+            ScheduledAt = race?.ScheduledAt,
+            ScheduledEndAt = race?.ScheduledEndAt,
             ResultStatus = race?.Result?.Status.ToString(),
             RejectedReason = race?.Result?.RejectedReason,
             RoundName = race?.Round?.Name,

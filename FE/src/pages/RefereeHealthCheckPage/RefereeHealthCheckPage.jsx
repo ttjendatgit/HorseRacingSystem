@@ -5,6 +5,7 @@ import {
   createHealthCheck,
   approveHorseForRace,
   rejectHorseForRace,
+  getHorseHealthHistory,
 } from "../../services/refereeApi";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
@@ -22,27 +23,23 @@ const STATUS_OPTIONS = ["Passed", "Failed", "RequiresRecheck"];
 function VetHorseSVG() {
   return (
     <svg className="rh-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Horse silhouette */}
-      <g opacity="0.15">
+      <g opacity="0.25">
         <path d="M52 100 C48 94 46 86 50 80 C54 74 62 72 70 74 L78 72 C82 70 86 66 90 66 C94 66 96 70 94 76 L92 82 C98 80 104 82 108 88 L112 86 L114 90 L110 94 L104 96 C106 100 104 106 98 110 C92 114 84 116 76 118 C68 120 58 118 52 112 Z" fill="currentColor" />
         <rect x="58" y="116" width="5" height="24" rx="2" fill="currentColor" />
         <rect x="68" y="116" width="5" height="24" rx="2" fill="currentColor" />
         <rect x="86" y="116" width="5" height="24" rx="2" fill="currentColor" />
         <rect x="96" y="116" width="5" height="24" rx="2" fill="currentColor" />
       </g>
-      {/* Vet silhouette */}
-      <g opacity="0.12">
+      <g opacity="0.2">
         <circle cx="162" cy="54" r="9" fill="currentColor" />
         <rect x="156" y="63" width="12" height="28" rx="4" fill="currentColor" />
         <rect x="150" y="88" width="8" height="22" rx="3" fill="currentColor" />
         <rect x="166" y="88" width="8" height="22" rx="3" fill="currentColor" />
       </g>
-      {/* Stethoscope */}
-      <path d="M162 63 C162 56 168 50 174 48" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-      <circle cx="177" cy="46" r="5" stroke="currentColor" strokeWidth="1.2" opacity="0.25" fill="none" />
-      {/* Heartbeat line */}
-      <path d="M190 60 L194 56 L198 64 L202 50 L206 58 L210 56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <text x="120" y="140" textAnchor="middle" fill="var(--rh-muted)" fontSize="12" fontFamily="sans-serif" opacity="0.7">
+      <path d="M162 63 C162 56 168 50 174 48" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
+      <circle cx="177" cy="46" r="5" stroke="currentColor" strokeWidth="1.2" opacity="0.4" fill="none" />
+      <path d="M190 60 L194 56 L198 64 L202 50 L206 58 L210 56" stroke="var(--rh-gold-dim)" strokeWidth="1.5" opacity="0.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <text x="120" y="140" textAnchor="middle" fill="currentColor" fontSize="12" fontFamily="sans-serif" opacity="0.8">
         Chọn cuộc đua để bắt đầu kiểm tra
       </text>
     </svg>
@@ -53,15 +50,12 @@ function VetHorseSVG() {
 function EmptyHistorySVG() {
   return (
     <svg className="rh-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Clipboard */}
-      <rect x="30" y="12" width="60" height="54" rx="6" stroke="currentColor" strokeWidth="1" opacity="0.2" fill="currentColor" fillOpacity="0.04" />
-      <rect x="44" y="6" width="32" height="10" rx="3" stroke="currentColor" strokeWidth="1" opacity="0.15" fill="currentColor" fillOpacity="0.04" />
-      {/* Lines of text */}
-      <rect x="40" y="30" width="40" height="2" rx="1" fill="currentColor" opacity="0.1" />
-      <rect x="40" y="38" width="32" height="2" rx="1" fill="currentColor" opacity="0.08" />
-      <rect x="40" y="46" width="36" height="2" rx="1" fill="currentColor" opacity="0.08" />
-      {/* Checkmark */}
-      <path d="M40 54 L46 60 L56 48" stroke="var(--rh-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+      <rect x="30" y="12" width="60" height="54" rx="6" stroke="currentColor" strokeWidth="1" opacity="0.3" fill="currentColor" fillOpacity="0.05" />
+      <rect x="44" y="6" width="32" height="10" rx="3" stroke="currentColor" strokeWidth="1" opacity="0.25" fill="currentColor" fillOpacity="0.05" />
+      <rect x="40" y="30" width="40" height="2" rx="1" fill="currentColor" opacity="0.2" />
+      <rect x="40" y="38" width="32" height="2" rx="1" fill="currentColor" opacity="0.15" />
+      <rect x="40" y="46" width="36" height="2" rx="1" fill="currentColor" opacity="0.15" />
+      <path d="M40 54 L46 60 L56 48" stroke="var(--rh-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
     </svg>
   );
 }
@@ -70,17 +64,15 @@ function EmptyHistorySVG() {
 function BodyMapPromptSVG() {
   return (
     <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
-      {/* Simple horse outline */}
-      <path d="M30 55 C26 50 24 44 28 38 C32 32 40 30 48 32 L56 30 C60 28 64 24 68 24 C72 24 74 28 72 34 L70 40 C76 38 82 40 86 46 L90 44 L92 48 L88 52 L82 54 C84 58 82 64 76 68 C70 72 62 74 54 76 C46 78 36 76 30 70 Z" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.25" />
-      <line x1="36" y1="74" x2="36" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
-      <line x1="46" y1="74" x2="46" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
-      <line x1="64" y1="74" x2="64" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
-      <line x1="74" y1="74" x2="74" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
-      {/* Plus icon */}
-      <circle cx="110" cy="50" r="14" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" fill="none" />
-      <line x1="104" y1="50" x2="116" y2="50" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
-      <line x1="110" y1="44" x2="110" y2="56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
-      <text x="145" y="54" fill="currentColor" fontSize="10" fontFamily="sans-serif" opacity="0.5">Nhấn + để thêm</text>
+      <path d="M30 55 C26 50 24 44 28 38 C32 32 40 30 48 32 L56 30 C60 28 64 24 68 24 C72 24 74 28 72 34 L70 40 C76 38 82 40 86 46 L90 44 L92 48 L88 52 L82 54 C84 58 82 64 76 68 C70 72 62 74 54 76 C46 78 36 76 30 70 Z" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.35" />
+      <line x1="36" y1="74" x2="36" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
+      <line x1="46" y1="74" x2="46" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
+      <line x1="64" y1="74" x2="64" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
+      <line x1="74" y1="74" x2="74" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
+      <circle cx="110" cy="50" r="14" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.6" fill="none" />
+      <line x1="104" y1="50" x2="116" y2="50" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.6" strokeLinecap="round" />
+      <line x1="110" y1="44" x2="110" y2="56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.6" strokeLinecap="round" />
+      <text x="145" y="54" fill="currentColor" fontSize="10" fontFamily="sans-serif" opacity="0.7">Nhấn + để thêm</text>
     </svg>
   );
 }
@@ -103,6 +95,10 @@ function RefereeHealthCheckPage() {
   });
   const [bodyMapData] = useState({});
   const [bodyMapSelected, setBodyMapSelected] = useState(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyHorseName, setHistoryHorseName] = useState("");
 
   /* ---------- load assignments on mount ---------- */
   useEffect(() => {
@@ -240,6 +236,22 @@ function RefereeHealthCheckPage() {
       loadHealthChecks(selectedRaceId);
     } catch (e) {
       setError(e?.message || "Không thể từ chối.");
+    }
+  };
+
+  /* ---------- view a horse's full health-check history ---------- */
+  const handleViewHistory = async (targetHorseId, targetHorseName) => {
+    if (!targetHorseId) return;
+    setHistoryHorseName(targetHorseName || "");
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const res = await getHorseHealthHistory(targetHorseId);
+      setHistoryData(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
+    } catch (e) {
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -410,6 +422,20 @@ function RefereeHealthCheckPage() {
                         Tất cả ngựa đã được kiểm tra xong.
                       </p>
                     )}
+                    {form.horseId && (
+                      <button
+                        type="button"
+                        className="rh-history-trigger"
+                        onClick={() =>
+                          handleViewHistory(
+                            form.horseId,
+                            availableEntries.find((entry) => entry.horseId === form.horseId)?.horseName
+                          )
+                        }
+                      >
+                        Lịch sử y tế
+                      </button>
+                    )}
                   </div>
 
                   <div className="rh-form-row">
@@ -509,6 +535,14 @@ function RefereeHealthCheckPage() {
                         <strong className="rh-item__name">
                           {check.horseName || "Ngựa #" + check.horseId}
                         </strong>
+                        <button
+                          type="button"
+                          className="rh-history-trigger rh-history-trigger--sm"
+                          title="Xem lịch sử y tế"
+                          onClick={() => handleViewHistory(check.horseId, check.horseName)}
+                        >
+                          Lịch sử
+                        </button>
                         <span
                           className={`rh-badge rh-badge--${check.status?.toLowerCase()}`}
                         >
@@ -563,6 +597,60 @@ function RefereeHealthCheckPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ════════ Health history modal ════════ */}
+        {showHistoryModal && (
+          <div className="rh-modal-backdrop" onClick={() => setShowHistoryModal(false)}>
+            <div className="rh-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="rh-modal__header">
+                <h3>Lịch sử y tế{historyHorseName ? ` — ${historyHorseName}` : ""}</h3>
+                <button
+                  type="button"
+                  className="rh-modal__close"
+                  onClick={() => setShowHistoryModal(false)}
+                  aria-label="Đóng"
+                >
+                  ×
+                </button>
+              </div>
+
+              {historyLoading ? (
+                <div className="rh-history-empty">Đang tải dữ liệu...</div>
+              ) : historyData.length === 0 ? (
+                <div className="rh-history-empty">Ngựa này chưa có lịch sử kiểm tra sức khỏe.</div>
+              ) : (
+                <table className="rh-history-table">
+                  <thead>
+                    <tr>
+                      <th>Cuộc đua</th>
+                      <th>Trạng thái</th>
+                      <th>Ghi chú</th>
+                      <th>Thời gian</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData.map((h, i) => {
+                      const status = h.status || h.Status;
+                      const createdAt = h.createdAt || h.CreatedAt;
+                      return (
+                        <tr key={h.id || h.Id || i}>
+                          <td>{h.raceName || h.RaceName || "Khám tổng quát"}</td>
+                          <td>
+                            <span className={`rh-badge rh-badge--${status?.toLowerCase()}`}>
+                              {STATUS_MAP[status] || status}
+                            </span>
+                          </td>
+                          <td>{h.notes || h.Notes || h.observations || h.Observations || "—"}</td>
+                          <td>{createdAt ? new Date(createdAt).toLocaleString("vi-VN") : ""}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>

@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { buildRankingDisplayList, getFinishPosition, getPlacementLabel, getRankedEntries } from "./raceResultDisplay.js";
+import { buildRankingDisplayList, getFinishPosition, getPlacementLabel, getRankedEntries, getResultStatusLabel } from "./raceResultDisplay.js";
+
+describe("getResultStatusLabel", () => {
+  test("Provisional -> Kết quả tạm thời", () => {
+    assert.equal(getResultStatusLabel("Provisional"), "Kết quả tạm thời");
+  });
+
+  test("Official -> Kết quả chính thức", () => {
+    assert.equal(getResultStatusLabel("Official"), "Kết quả chính thức");
+  });
+
+  test("is case-insensitive", () => {
+    assert.equal(getResultStatusLabel("official"), "Kết quả chính thức");
+    assert.equal(getResultStatusLabel("provisional"), "Kết quả tạm thời");
+  });
+
+  test("does not expose the raw enum string", () => {
+    assert.notEqual(getResultStatusLabel("Provisional"), "Provisional");
+    assert.notEqual(getResultStatusLabel("Official"), "Official");
+  });
+
+  test("null/undefined/unknown => null (no result yet, nothing to render)", () => {
+    assert.equal(getResultStatusLabel(null), null);
+    assert.equal(getResultStatusLabel(undefined), null);
+    assert.equal(getResultStatusLabel("SomethingElse"), null);
+  });
+});
 
 describe("getFinishPosition", () => {
   test("reads camelCase position", () => {

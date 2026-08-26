@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterAssignmentsByTab,
+  formatDateTime,
   getAssignmentStatusDetails,
   getAssignmentTabCounts,
   getDefaultAssignmentTab,
+  getScheduledAt,
   isPendingAssignment,
 } from "./refereeAssignmentDisplay.js";
 
@@ -66,4 +68,31 @@ test("filterAssignmentsByTab only hides rows outside the selected group", () => 
   assert.deepEqual(filterAssignmentsByTab(assignments, "confirmed"), [assignments[1]]);
   assert.deepEqual(filterAssignmentsByTab(assignments, "rejected"), [assignments[2]]);
   assert.deepEqual(filterAssignmentsByTab(assignments, "all"), assignments);
+});
+
+test("getScheduledAt reads Race.ScheduledAt (camelCase/PascalCase) now exposed by the API", () => {
+  assert.equal(getScheduledAt({ scheduledAt: "2026-08-19T05:45:00" }), "2026-08-19T05:45:00");
+  assert.equal(getScheduledAt({ ScheduledAt: "2026-08-19T05:45:00" }), "2026-08-19T05:45:00");
+});
+
+test("getScheduledAt is undefined when no schedule-like field is present (null ScheduledAt from API)", () => {
+  assert.equal(getScheduledAt({ scheduledAt: null }), undefined);
+  assert.equal(getScheduledAt({}), undefined);
+});
+
+test("formatDateTime renders a populated ScheduledAt as a real Vietnamese date/time, not 'Chưa xác định'", () => {
+  const formatted = formatDateTime("2026-08-19T05:45:00");
+  assert.notEqual(formatted, "Chưa xác định");
+  assert.match(formatted, /2026/);
+});
+
+test("formatDateTime falls back to 'Chưa xác định' for null/undefined, never DateTime.MinValue", () => {
+  assert.equal(formatDateTime(null), "Chưa xác định");
+  assert.equal(formatDateTime(undefined), "Chưa xác định");
+  assert.doesNotMatch(formatDateTime(null), /0001|year 1/i);
+});
+
+test("end-to-end: a populated Race.ScheduledAt no longer resolves to 'Chưa xác định' via getScheduledAt+formatDateTime", () => {
+  const assignment = { scheduledAt: "2026-08-19T05:45:00" };
+  assert.notEqual(formatDateTime(getScheduledAt(assignment)), "Chưa xác định");
 });

@@ -23,21 +23,21 @@ function RacetrackSVG() {
   return (
     <svg viewBox="0 0 320 200" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Track surface — oval */}
-      <rect x="18" y="38" width="284" height="124" rx="62" fill="#E8E2D7" stroke="#D4CFC4" strokeWidth="1" />
+      <rect x="18" y="38" width="284" height="124" rx="62" fill="#1f1b18" stroke="#362f29" strokeWidth="1" />
       {/* Inner grass */}
-      <rect x="46" y="58" width="228" height="84" rx="42" fill="#D8E6D0" stroke="#C5D6BB" strokeWidth="0.5" />
+      <rect x="46" y="58" width="228" height="84" rx="42" fill="#141a15" stroke="#1f2d22" strokeWidth="0.5" />
 
       {/* Lane lines */}
-      <ellipse cx="160" cy="100" rx="130" ry="54" stroke="rgba(0,0,0,0.06)" strokeWidth="0.5" fill="none" />
-      <ellipse cx="160" cy="100" rx="112" ry="46" stroke="rgba(0,0,0,0.06)" strokeWidth="0.5" fill="none" />
+      <ellipse cx="160" cy="100" rx="130" ry="54" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" fill="none" />
+      <ellipse cx="160" cy="100" rx="112" ry="46" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" fill="none" />
 
       {/* Finish line (checkered) */}
       <defs>
         <pattern id="checker" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
           <rect x="0" y="0" width="4" height="4" fill="#f2d28b" />
           <rect x="4" y="4" width="4" height="4" fill="#f2d28b" />
-          <rect x="4" y="0" width="4" height="4" fill="#D4CFC4" />
-          <rect x="0" y="4" width="4" height="4" fill="#D4CFC4" />
+          <rect x="4" y="0" width="4" height="4" fill="#362f29" />
+          <rect x="0" y="4" width="4" height="4" fill="#362f29" />
         </pattern>
       </defs>
       <rect x="157" y="38" width="6" height="124" rx="1" fill="url(#checker)" opacity="0.8" />
@@ -61,14 +61,14 @@ function RacetrackSVG() {
 
       {/* Horse 3 — trailing */}
       <g transform="translate(48, 80) scale(0.7)" opacity="0.55">
-        <path d="M0 8 C2 0,6 -2,10 0 L14 -4 L13 1 C16 0,18 2,16 6 L15 8 L10 10 L6 10 Z" fill="#64748b" />
-        <rect x="2" y="10" width="4" height="6" rx="1" fill="#64748b" />
-        <rect x="10" y="10" width="4" height="6" rx="1" fill="#64748b" />
+        <path d="M0 8 C2 0,6 -2,10 0 L14 -4 L13 1 C16 0,18 2,16 6 L15 8 L10 10 L6 10 Z" fill="#94a3b8" />
+        <rect x="2" y="10" width="4" height="6" rx="1" fill="#94a3b8" />
+        <rect x="10" y="10" width="4" height="6" rx="1" fill="#94a3b8" />
         <circle cx="3" cy="3" r="1.5" fill="#1a1d23" />
       </g>
 
       {/* Start/Finish label */}
-      <text x="160" y="176" textAnchor="middle" fontSize="9" fill="#64748b" fontFamily="sans-serif">XUẤT PHÁT / VỀ ĐÍCH</text>
+      <text x="160" y="176" textAnchor="middle" fontSize="9" fill="#94a3b8" fontFamily="sans-serif">XUẤT PHÁT / VỀ ĐÍCH</text>
     </svg>
   );
 }
@@ -82,36 +82,45 @@ function SortArrow({ dir }) {
 /* ==================================================================
    Page Component
    ================================================================== */
+const ITEMS_PER_PAGE = 10;
+
 export default function RefereeDashboardPage() {
-  // eslint-disable-next-line no-unused-vars
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortKey, setSortKey] = useState("assignedAt");
   const [sortDir, setSortDir] = useState("desc");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  /* ── Fetch data ── */
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const data = await getMyAssignments();
-        if (!alive) return;
-        const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-        setAssignments(list);
-      } catch (e) {
-        if (!alive) return;
-        setError(e.message);
-        setAssignments([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-    load();
-    return () => { alive = false; };
+  /* ── Fetch data (initial load + manual refresh) ── */
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const data = await getMyAssignments();
+      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+      setAssignments(list);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+      setAssignments([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  /* ── Reset to page 1 whenever the visible set changes shape ── */
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortKey, sortDir]);
 
   /* ── KPI computations ── */
   const {
@@ -177,6 +186,13 @@ export default function RefereeDashboardPage() {
     return items;
   }, [assignments, searchTerm, sortKey, sortDir]);
 
+  /* ── Pagination ── */
+  const totalPages = Math.ceil(displayed.length / ITEMS_PER_PAGE) || 1;
+  const currentData = useMemo(
+    () => displayed.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [displayed, currentPage]
+  );
+
   /* ── Status pill mapping ── */
   const pillClass = (s) => STATUS_PILL[s] || "rd-pill--Pending";
 
@@ -194,7 +210,7 @@ export default function RefereeDashboardPage() {
     var(--rd-gold-dim) 0deg ${donutPct.conf * 3.6}deg,
     var(--rd-green) ${donutPct.conf * 3.6}deg ${(donutPct.conf + donutPct.comp) * 3.6}deg,
     var(--rd-blue) ${(donutPct.conf + donutPct.comp) * 3.6}deg ${(donutPct.conf + donutPct.comp + donutPct.pend) * 3.6}deg,
-    rgba(0,0,0,0.06) ${(donutPct.conf + donutPct.comp + donutPct.pend) * 3.6}deg 360deg
+    rgba(255,255,255,0.08) ${(donutPct.conf + donutPct.comp + donutPct.pend) * 3.6}deg 360deg
   )`;
 
   /* ── Infraction bar chart data ── */
@@ -217,11 +233,23 @@ export default function RefereeDashboardPage() {
               Quản lý phân công trận đấu và duy trì tiêu chuẩn liêm chính cao nhất.
             </p>
           </div>
-          <div className="rd-topbar-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-            </svg>
-            {new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          <div className="rd-topbar-actions">
+            <button
+              className="rd-btn-refresh"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "rd-spin" : ""}>
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.58 3.69" />
+              </svg>
+              {refreshing ? "Đang tải..." : "Làm mới"}
+            </button>
+            <div className="rd-topbar-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+              {new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </div>
           </div>
         </header>
 
@@ -260,7 +288,7 @@ export default function RefereeDashboardPage() {
             <span className="rd-kpi-label">Kiểm tra sức khoẻ</span>
             <div className="rd-kpi-value">{healthCheckCount}</div>
             <div className="rd-kpi-row">
-              <span style={{ fontSize: 12, color: "#64748b" }}>Đang chờ xử lý</span>
+              <span style={{ fontSize: 12, color: "var(--rd-muted)" }}>Đang chờ xử lý</span>
             </div>
           </div>
 
@@ -335,7 +363,7 @@ export default function RefereeDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayed.map((a) => (
+                    {currentData.map((a) => (
                       <tr key={a.id}>
                         <td style={{ fontWeight: 500 }}>{a.raceName || "Cuộc đua"}</td>
                         <td className="rd-cell-role">{a.role || "Trọng tài"}</td>
@@ -349,7 +377,7 @@ export default function RefereeDashboardPage() {
                           </span>
                         </td>
                         <td>
-                          <button className="rd-btn-detail">Chi tiết</button>
+                          <button className="rd-btn-detail" onClick={() => navigate("/referee/assignments")}>Xem</button>
                         </td>
                       </tr>
                     ))}
@@ -357,6 +385,28 @@ export default function RefereeDashboardPage() {
                 </table>
               )}
             </div>
+
+            {!loading && totalPages > 1 && (
+              <div className="rd-pagination">
+                <button
+                  className="rd-btn-detail"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  ← Trước
+                </button>
+                <span className="rd-pagination-label">
+                  Trang {currentPage} / {totalPages}
+                </span>
+                <button
+                  className="rd-btn-detail"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Sau →
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -389,7 +439,7 @@ export default function RefereeDashboardPage() {
                   <span className="rd-lbl">{pendingCount}</span>
                 </div>
                 <div className="rd-donut-legend-item">
-                  <span className="rd-dot" style={{ background: "rgba(0,0,0,0.06)" }} />
+                  <span className="rd-dot" style={{ background: "rgba(255,255,255,0.1)" }} />
                   Khác
                   <span className="rd-lbl">{Math.max(0, assignments.length - confirmedCount - completedCount - pendingCount)}</span>
                 </div>
