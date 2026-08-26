@@ -231,13 +231,21 @@ public class TournamentService : ITournamentService
                 // shift under an already-Published Tournament's existing Round structure.
                 if (request.MaxRounds.HasValue && request.MaxRounds.Value != tournament.MaxRounds)
                     immutableFieldErrors.Add("MaxRounds không thể thay đổi sau khi công bố giải đấu.");
+                // PRIZE-V1 Part 4: PrizePool now follows the same structural-lock convention as
+                // the other Draft-only fields above — a Prize allocation's SUM(Amount)==PrizePool
+                // invariant (enforced at Publish) must not be able to drift once the Tournament has
+                // left Draft. Previously PrizePool was explicitly kept mutable through Published
+                // (see the removed "Phase4B: Name and PrizePool stay mutable" comment below); that
+                // is intentionally reversed here.
+                if (request.PrizePool.HasValue && request.PrizePool.Value != tournament.PrizePool)
+                    immutableFieldErrors.Add("PrizePool không thể thay đổi sau khi công bố giải đấu.");
 
                 if (immutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", immutableFieldErrors));
 
-                // Phase4B: Name and PrizePool stay mutable after Published, but their own business
-                // invariants must still hold. Validate only the supplied values — do NOT run the
-                // full Draft validator here, since unrelated immutable legacy data (e.g. an old
+                // Phase4B: Name stays mutable after Published, but its own business invariants
+                // must still hold. Validate only the supplied value — do NOT run the full Draft
+                // validator here, since unrelated immutable legacy data (e.g. an old
                 // RegistrationDeadline/StartDate relationship) must not block this edit.
                 var publishedMutableFieldErrors = new List<string>();
                 if (request.Name != null)
@@ -247,8 +255,6 @@ public class TournamentService : ITournamentService
                     else if (request.Name.Length > 200)
                         publishedMutableFieldErrors.Add("Tên giải đấu (Name) không được vượt quá 200 ký tự.");
                 }
-                if (request.PrizePool.HasValue && request.PrizePool.Value < 0)
-                    publishedMutableFieldErrors.Add("PrizePool không được âm.");
 
                 if (publishedMutableFieldErrors.Count > 0)
                     return ServiceResult<TournamentResponse>.Fail(400, string.Join("; ", publishedMutableFieldErrors));
@@ -335,6 +341,35 @@ public class TournamentService : ITournamentService
                             $"Không thể giảm MaxRounds xuống {candidateMaxRounds} vì Vòng {maxExistingRoundNumber.Value} đã tồn tại.");
                     }
                 }
+
+                // PRIZE-V1.1 Part 4: MaxParticipants/MaxRounds directly drive PlannedFinalParticipants
+                // (see PlannedFinalParticipantsHelper), which is the ceiling every existing Prize.Position
+                // must stay within. Changing either in a way that would strand an existing Prize row
+                // above the new ceiling is rejected before mutating anything — same convention as the
+                // checks above. Recomputed against the CANDIDATE values, not the persisted ones.
+                if (request.MaxParticipants.HasValue || request.MaxRounds.HasValue)
+                {
+                    var maxExistingPrizePosition = await _db.Prizes
+                        .Where(p => p.TournamentId == tournament.Id)
+                        .Select(p => (int?)p.Position)
+                        .MaxAsync();
+                    if (maxExistingPrizePosition.HasValue)
+                    {
+                        var newPlanned = await PlannedFinalParticipantsHelper.ComputeAsync(
+                            _db, tournament.Id, candidateMaxRounds, candidateMaxParticipants);
+                        if (!newPlanned.HasValue || newPlanned.Value < maxExistingPrizePosition.Value)
+                        {
+                            return ServiceResult<TournamentResponse>.Fail(400,
+                                $"Không thể thay đổi cấu trúc giải đấu vì đã tồn tại Hạng thưởng {maxExistingPrizePosition.Value} vượt quá số người có thể tham gia Vòng chung kết mới.");
+                        }
+                    }
+                }
+
+                // PRIZE-V1.2 Part 5: PrizePool no longer has a "can't lower below allocated" guard —
+                // Prize.Amount is now DERIVED from PercentageOfPool (which is always <= 100
+                // regardless of PrizePool's value), so no PrizePool value can ever make existing
+                // percentage allocations "impossible." Amounts are instead recalculated from the
+                // new PrizePool below, atomically with this same save (see "apply values" section).
             }
 
             // All validation passed — now apply values to the tracked entity.
@@ -366,7 +401,23 @@ public class TournamentService : ITournamentService
 
             // Phase3B additions — null/omitted leaves the existing value untouched (see UpdateTournamentRequest).
             if (request.PrizePool.HasValue)
+            {
                 tournament.PrizePool = candidatePrizePool;
+                // PRIZE-V1.2 Part 5: recalculate every existing Prize row's Amount from its
+                // unchanged PercentageOfPool against the NEW PrizePool — atomic with this same
+                // SaveChangesAsync below (isDraft-scoped: Published PrizePool is immutable, so
+                // this only ever runs for a genuine Draft edit, never touching historical rows).
+                // Prize rows fetched here are tracked by the same DbContext, so mutating .Amount
+                // is enough — no explicit Update() call needed.
+                if (isDraft)
+                {
+                    var prizesToRecalculate = await _db.Prizes
+                        .Where(p => p.TournamentId == tournament.Id)
+                        .OrderBy(p => p.Position)
+                        .ToListAsync();
+                    PrizeAmountCalculator.RecalculateAmounts(prizesToRecalculate, candidatePrizePool);
+                }
+            }
             if (request.Venue != null)
                 tournament.Venue = candidateVenue;
             if (request.Country != null)
@@ -660,6 +711,104 @@ public class TournamentService : ITournamentService
     {
         var errors = await ValidatePublishTournamentFieldsAsync(tournament);
         errors.AddRange(await ValidateStructuralReadinessAsync(tournament));
+        errors.AddRange(await ValidatePrizeReadinessAsync(tournament));
+        return errors;
+    }
+
+    /// <summary>
+    /// PRIZE-V1.2 Part 10: Prize allocation readiness. CASE A (PrizePool == 0): zero Prize rows is
+    /// valid and Publish does NOT require any allocation. CASE B (PrizePool &gt; 0): requires at
+    /// least one Prize row, every PercentageOfPool &gt; 0, every Position &gt;= 1 and within the
+    /// structural Final-rank limit, Position unique, positions contiguous 1..N, SUM(PercentageOfPool)
+    /// == 100% exactly (the source-of-truth completeness rule — NOT the Amount sum), every stored
+    /// Amount still matching what PercentageOfPool*PrizePool/100 derives (defensive re-check for
+    /// legacy/direct-DB-write drift), and SUM(Amount) == PrizePool exactly. Deliberately does NOT
+    /// require Position count to equal Final-round participant count — Admin may configure Top 1,
+    /// Top 3, Top N &lt;= PlannedFinalParticipants freely (Part 8) — and never reads RaceResult/
+    /// RankingsJson — Prize.Position is an Admin-configured allocation slot, not derived from an
+    /// actual ranking (Part 20).
+    /// </summary>
+    private async Task<List<string>> ValidatePrizeReadinessAsync(Tournament tournament)
+    {
+        var errors = new List<string>();
+
+        var prizes = await _db.Prizes
+            .Where(p => p.TournamentId == tournament.Id)
+            .OrderBy(p => p.Position)
+            .ToListAsync();
+
+        if (tournament.PrizePool == 0 && prizes.Count == 0)
+            return errors; // CASE A: no budget, no allocation — valid.
+
+        // PRIZE-V1 FINAL HARDENING Part 1: PrizePool == 0 with existing Prize rows is a legacy
+        // state the current Create/Update API can no longer produce, but historical databases may
+        // still contain rows written before this validation existed. Reject explicitly rather than
+        // relying on a later check to catch it incidentally — and never auto-delete the legacy rows.
+        if (tournament.PrizePool == 0 && prizes.Count > 0)
+        {
+            errors.Add("Giải đấu không có quỹ thưởng nhưng vẫn tồn tại cơ cấu giải thưởng.");
+            return errors;
+        }
+
+        if (tournament.PrizePool > 0 && prizes.Count == 0)
+        {
+            errors.Add("Giải đấu có quỹ thưởng nhưng chưa cấu hình cơ cấu giải thưởng.");
+            return errors;
+        }
+
+        // PRIZE-V1.1 Part 3: Position must not exceed the structural planned Final capacity —
+        // defensive re-check even though Create/Update already enforce it, since legacy DB rows
+        // predating this rule (or written directly) may still violate it. Computed once (not
+        // per-row) since it's a single Tournament-level fact; if indeterminate, one summary error
+        // is reported instead of repeating "can't verify" once per Prize row.
+        var plannedFinalParticipants = await PlannedFinalParticipantsHelper.ComputeAsync(
+            _db, tournament.Id, tournament.MaxRounds, tournament.MaxParticipants);
+        if (!plannedFinalParticipants.HasValue)
+            errors.Add("Chưa xác định được số người có thể tham gia Vòng chung kết của giải đấu.");
+
+        foreach (var prize in prizes)
+        {
+            if (prize.PercentageOfPool <= 0)
+                errors.Add($"Giải thưởng Hạng {prize.Position}: Tỷ lệ phân bổ phải lớn hơn 0.");
+            if (prize.Position < 1)
+                errors.Add($"Giải thưởng có thứ hạng không hợp lệ ({prize.Position}).");
+            if (plannedFinalParticipants.HasValue && prize.Position > plannedFinalParticipants.Value)
+                errors.Add($"Giải thưởng Hạng {prize.Position}: Hạng thưởng vượt quá số người có thể tham gia Vòng chung kết.");
+        }
+
+        var positions = prizes.Select(p => p.Position).OrderBy(n => n).ToList();
+        if (positions.Count != positions.Distinct().Count())
+        {
+            errors.Add("Thứ hạng giải thưởng bị trùng lặp.");
+        }
+        else if (!positions.SequenceEqual(Enumerable.Range(1, positions.Count)))
+        {
+            errors.Add("Thứ hạng giải thưởng phải liên tục từ 1.");
+        }
+
+        // PRIZE-V1.2 Part 2/10: percentage total is the source-of-truth completeness rule at
+        // Publish — decimal-safe equality at the entity's own storage precision (decimal(5,2)).
+        var totalPercentage = prizes.Sum(p => p.PercentageOfPool);
+        if (totalPercentage != 100m)
+            errors.Add($"Tổng tỷ lệ phân bổ phải bằng 100% (hiện tại: {totalPercentage}%).");
+
+        // PRIZE-V1.2 Part 10: defensive re-derivation — recompute what Amount SHOULD be from each
+        // row's own PercentageOfPool (same rounding-remainder rule as every write path) and flag
+        // any row whose stored Amount has drifted, e.g. legacy data or a direct DB write.
+        var recomputed = prizes
+            .Select(p => new Prize { Id = p.Id, Position = p.Position, PercentageOfPool = p.PercentageOfPool })
+            .ToList();
+        PrizeAmountCalculator.RecalculateAmounts(recomputed, tournament.PrizePool);
+        for (int i = 0; i < prizes.Count; i++)
+        {
+            if (prizes[i].Amount != recomputed[i].Amount)
+                errors.Add($"Giải thưởng Hạng {prizes[i].Position}: Tiền thưởng chưa khớp với tỷ lệ phân bổ (kỳ vọng {recomputed[i].Amount:N0}).");
+        }
+
+        var total = prizes.Sum(p => p.Amount);
+        if (total != tournament.PrizePool)
+            errors.Add("Tổng cơ cấu giải thưởng phải bằng quỹ thưởng của giải đấu.");
+
         return errors;
     }
 
@@ -1319,6 +1468,26 @@ public class RoundService : IRoundService
                     {
                         return ServiceResult<RoundResponse>.Fail(400, string.Join("; ", scheduleErrors));
                     }
+                }
+            }
+
+            // PRIZE-V1.1 Part 4: if this Round is the PRE-final Round (RoundNumber == MaxRounds - 1),
+            // its AdvanceCount IS PlannedFinalParticipants for a multi-round Tournament — lowering it
+            // below an already-configured Prize.Position would strand that Prize row. Reject before
+            // mutating anything, same convention as the schedule-containment check above. Scoped to
+            // AdvanceCount changes on the pre-final Round only, per the task's explicit write-path list
+            // (a simultaneous RoundNumber change that also shifts which Round is pre-final is out of
+            // scope here, same as it already is for the sibling MaxRounds/MaxParticipants check).
+            if (request.AdvanceCount.HasValue && round.Tournament != null && round.RoundNumber == round.Tournament.MaxRounds - 1)
+            {
+                var maxExistingPrizePosition = await _db.Prizes
+                    .Where(p => p.TournamentId == round.TournamentId)
+                    .Select(p => (int?)p.Position)
+                    .MaxAsync();
+                if (maxExistingPrizePosition.HasValue && request.AdvanceCount.Value < maxExistingPrizePosition.Value)
+                {
+                    return ServiceResult<RoundResponse>.Fail(400,
+                        $"Không thể giảm AdvanceCount xuống {request.AdvanceCount.Value} vì đã tồn tại Hạng thưởng {maxExistingPrizePosition.Value}.");
                 }
             }
 

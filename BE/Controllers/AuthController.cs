@@ -199,7 +199,12 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
-    [Authorize]
+    // J-REG-FILE: this endpoint is called from RegisterJockeyPage BEFORE the account exists (no
+    // JWT yet) — Jockey license upload is step 1 of registration, not a post-login action. It was
+    // incorrectly marked [Authorize], which made every registration-time upload attempt fail with
+    // 401 regardless of file validity. Rate-limited the same as the other pre-auth endpoints
+    // (Register/Login) below since it's now reachable anonymously.
+    [EnableRateLimiting("auth")]
     [HttpPost("upload-document")]
     public async Task<ActionResult> UploadDocument(IFormFile file)
     {

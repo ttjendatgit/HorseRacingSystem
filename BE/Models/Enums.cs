@@ -166,6 +166,22 @@ public enum ProtestStatus
     Withdrawn = 5
 }
 
+public enum RaceComplaintType
+{
+    ResultJudging = 1,
+    RaceOperation = 2
+}
+
+public enum RaceComplaintStatus
+{
+    Pending = 1,
+    AwaitingRefereeResponse = 2,
+    UnderReview = 3,
+    Upheld = 4,
+    Rejected = 5,
+    Withdrawn = 6
+}
+
 public enum BetStatus
 {
     Placed = 1,

@@ -814,7 +814,10 @@ namespace HorseRacing.Migrations
 
                     b.HasIndex("RaceId");
 
-                    b.HasIndex("TournamentId");
+                    b.HasIndex("TournamentId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Prizes_TournamentId_Position_Active")
+                        .HasFilter("\"TournamentId\" IS NOT NULL");
 
                     b.ToTable("Prizes");
                 });
@@ -962,6 +965,82 @@ namespace HorseRacing.Migrations
                     b.ToTable("Races");
                 });
 
+            modelBuilder.Entity("HorseRacing.Models.RaceComplaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool?>("AffectsResult")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("AssignedRefereeAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("EvidenceDescription")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("FiledByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("RefereeRespondedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RefereeResponse")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ResponseRequestedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("RuledByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ruling")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedRefereeAssignmentId");
+
+                    b.HasIndex("FiledByUserId");
+
+                    b.HasIndex("RaceId");
+
+                    b.HasIndex("RuledByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("RaceComplaints");
+                });
+
             modelBuilder.Entity("HorseRacing.Models.RaceEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1018,6 +1097,11 @@ namespace HorseRacing.Migrations
                     b.HasIndex("HorseId");
 
                     b.HasIndex("JockeyId");
+
+                    b.HasIndex("RaceId", "GateNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RaceEntries_RaceId_GateNumber_Active")
+                        .HasFilter("\"GateNumber\" IS NOT NULL");
 
                     b.HasIndex("RaceId", "HorseId")
                         .IsUnique();
@@ -2059,6 +2143,39 @@ namespace HorseRacing.Migrations
                     b.Navigation("Tournament");
 
                     b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("HorseRacing.Models.RaceComplaint", b =>
+                {
+                    b.HasOne("HorseRacing.Models.RefereeAssignment", "AssignedRefereeAssignment")
+                        .WithMany()
+                        .HasForeignKey("AssignedRefereeAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HorseRacing.Models.User", "FiledByUser")
+                        .WithMany()
+                        .HasForeignKey("FiledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HorseRacing.Models.Race", "Race")
+                        .WithMany()
+                        .HasForeignKey("RaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HorseRacing.Models.User", "RuledByUser")
+                        .WithMany()
+                        .HasForeignKey("RuledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AssignedRefereeAssignment");
+
+                    b.Navigation("FiledByUser");
+
+                    b.Navigation("Race");
+
+                    b.Navigation("RuledByUser");
                 });
 
             modelBuilder.Entity("HorseRacing.Models.RaceEntry", b =>

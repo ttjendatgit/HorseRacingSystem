@@ -127,6 +127,13 @@ public class AdminController : ControllerBase
     }
 
     // Jockey Management
+    [HttpGet("jockeys/{jockeyId:guid}")]
+    public async Task<ActionResult> GetJockeyDetail(Guid jockeyId)
+    {
+        var result = await _adminService.GetJockeyDetailAsync(jockeyId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
     [HttpPost("jockeys/{jockeyId:guid}/approve")]
     public async Task<ActionResult> ApproveJockey(Guid jockeyId)
     {
@@ -137,10 +144,10 @@ public class AdminController : ControllerBase
     [HttpPost("jockeys/{jockeyId:guid}/reject")]
     public async Task<ActionResult> RejectJockey(Guid jockeyId, [FromBody] RejectJockeyRequest request)
     {
-        var reason = string.IsNullOrWhiteSpace(request?.Reason)
-            ? "Không có lý do"
-            : request.Reason.Trim();
-        var result = await _adminService.RejectJockeyAsync(jockeyId, reason);
+        // J-ADMIN-REVIEW: no more silent "Không có lý do" substitution — a blank/whitespace reason
+        // is now rejected with 400 by AdminService.RejectJockeyAsync itself, so this can't be
+        // bypassed by calling the API directly.
+        var result = await _adminService.RejectJockeyAsync(jockeyId, request?.Reason);
         return StatusCode(result.StatusCode, result.Result);
     }
 

@@ -80,6 +80,30 @@ public class RaceRepository : IRaceRepository
             .ToListAsync();
     }
 
+    // J-CROSS: single query, no navigation properties — used to compare two Tournaments' full
+    // immutable Race schedule sets (including Round2+/Final races that may not have RaceEntries
+    // yet) without an N+1 per-Tournament round trip. Finished/Cancelled races are excluded — a
+    // race that has already concluded or was cancelled no longer represents a live/future jockey
+    // schedule obligation, regardless of the parent Tournament's own status. Tournament status
+    // itself is NOT filtered here — the caller (HorseService) already restricts to Published/
+    // Ongoing other-Tournament IDs before calling this.
+    public async Task<Dictionary<Guid, List<(DateTime Start, DateTime End)>>> GetScheduleWindowsByTournamentsAsync(IEnumerable<Guid> tournamentIds)
+    {
+        var ids = tournamentIds.Distinct().ToList();
+        var races = await _db.Races
+            .Where(r => ids.Contains(r.TournamentId) &&
+                        r.Status != RaceStatus.Finished &&
+                        r.Status != RaceStatus.Cancelled)
+            .Select(r => new { r.TournamentId, r.ScheduledAt, r.ScheduledEndAt })
+            .ToListAsync();
+
+        return races
+            .GroupBy(r => r.TournamentId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(r => (r.ScheduledAt, r.ScheduledEndAt ?? r.ScheduledAt.AddMinutes(30))).ToList());
+    }
+
     public Task AddAsync(Race race)
     {
         _db.Races.Add(race);

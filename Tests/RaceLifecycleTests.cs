@@ -636,6 +636,32 @@ public class RaceLifecycleTests
             => throw new NotSupportedException();
     }
 
+    private sealed class FakeAuditLogService : IAuditLogService
+    {
+        public Task<ServiceResult<AuditLogDto>> LogActionAsync(CreateAuditLogDto dto)
+            => Task.FromResult(ServiceResult<AuditLogDto>.Ok(new AuditLogDto()));
+        public Task<ServiceResult<AuditLogDetailDto>> GetAuditLogByIdAsync(Guid id)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByAdminAsync(Guid adminId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByEntityAsync(string entityType, Guid entityId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsWithFilterAsync(AuditLogFilterDto filter)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByDateRangeAsync(DateTime fromDate, DateTime toDate)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetAuditLogsByUserAsync(Guid userId)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<AuditLogStatsDto>> GetAuditStatsAsync()
+            => throw new NotSupportedException();
+        public Task<ServiceResult<bool>> DeleteOldAuditLogsAsync(int daysOlder)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<string>> ExportAuditLogsAsync(AuditExportDto dto)
+            => throw new NotSupportedException();
+        public Task<ServiceResult<List<AuditLogDto>>> GetLatestLogsAsync(int count)
+            => throw new NotSupportedException();
+    }
+
     private sealed class FakeRefereeService : IRefereeService
     {
         public Task<ServiceResult<RefereeResponse>> CreateRefereeAsync(CreateRefereeRequest request) => throw new NotSupportedException();
@@ -674,9 +700,11 @@ public class RaceLifecycleTests
         public FaultInjectingWalletService FaultWallet { get; private set; } = null!;
         public IViolationRecordRepository ViolationRepo { get; }
         public IProtestRepository ProtestRepo { get; }
+        public IRaceComplaintRepository RaceComplaintRepo { get; }
         public IHealthCheckRepository HealthCheckRepo { get; }
         public IViolationRecordService ViolationSvc { get; }
         public IProtestService ProtestSvc { get; }
+        public IRaceComplaintService RaceComplaintSvc { get; }
         public IRefereeHealthCheckService HealthCheckSvc { get; }
 
         private readonly IOwnerRepository _ownerRepo;
@@ -716,6 +744,7 @@ public class RaceLifecycleTests
             _walletRepo = new WalletRepository(db);
             ViolationRepo = new ViolationRecordRepository(db);
             ProtestRepo = new ProtestRepository(db);
+            RaceComplaintRepo = new RaceComplaintRepository(db);
             HealthCheckRepo = new HealthCheckRepository(db);
 
             var config = new ConfigurationBuilder().Build();
@@ -738,13 +767,19 @@ public class RaceLifecycleTests
                 _userRepo, new UserRegistrationRepository(db), _horseRepo, _jockeyRepo,
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
-                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, UnitOfWork);
+                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, RaceComplaintRepo, UnitOfWork);
 
             ViolationSvc = new ViolationRecordService(
                 ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
                 new FakeNotificationService(), _userRepo, UnitOfWork);
 
-            ProtestSvc = new ProtestService(ProtestRepo, RaceRepo, UnitOfWork);
+            ProtestSvc = new ProtestService(
+                ProtestRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
+                UnitOfWork, new FakeNotificationService(), new FakeAuditLogService());
+
+            RaceComplaintSvc = new RaceComplaintService(
+                RaceComplaintRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
+                _assignmentRepo, UnitOfWork, db, new FakeNotificationService(), new FakeAuditLogService());
 
             HealthCheckSvc = new RefereeHealthCheckService(
                 HealthCheckRepo, RaceRepo, _horseRepo, new RefereeRepository(db), UnitOfWork);
@@ -796,10 +831,16 @@ public class RaceLifecycleTests
             var winnerHorse = new Horse { Id = Guid.NewGuid(), Name = $"Winner{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
             var loserHorse = new Horse { Id = Guid.NewGuid(), Name = $"Loser{n}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
 
+            // CreateRaceAsync requires the Tournament to still be Draft, so it is seeded that way
+            // (the model default) and only flipped to Ongoing afterward — see R1a note below.
             var tournament = new Tournament { Id = Guid.NewGuid(), Name = $"Tournament{n}", StartDate = now, EndDate = now.AddDays(7) };
             var round = new Round { Id = Guid.NewGuid(), Name = "Round 1", TournamentId = tournament.Id, RoundNumber = 1, ScheduledStartDate = now, ScheduledEndDate = now.AddDays(1) };
+            // GATE-V1 FINAL CAPACITY CORRECTION: GateNumber's upper bound is Track.Capacity, not
+            // Race.MaxParticipants — this helper is named "ready to start", so it needs a real
+            // Track with headroom above the base 2 entries for AddExtraApprovedEntryAsync callers.
+            var track = new Track { Id = Guid.NewGuid(), Name = $"Track{n}", Capacity = 20, CreatedAt = now };
 
-            Db.AddRange(ownerUser, owner, jockeyUser, jockey, jockeyUser2, jockey2, refereeUser, referee, winnerHorse, loserHorse, tournament, round);
+            Db.AddRange(ownerUser, owner, jockeyUser, jockey, jockeyUser2, jockey2, refereeUser, referee, winnerHorse, loserHorse, tournament, round, track);
             await Db.SaveChangesAsync();
 
             var createResult = await RaceManagement.CreateRaceAsync(new CreateRaceRequest
@@ -809,19 +850,29 @@ public class RaceLifecycleTests
                 RoundId = round.Id,
                 ScheduledAt = now.AddHours(1),
                 MaxParticipants = 8,
+                TrackId = track.Id,
                 Distance = 1200
             });
             var raceId = createResult.Result.Data!.Id;
 
+            // R1a: StartRace now requires the parent Tournament to be Ongoing — this helper is
+            // named "ready to start", so the seeded Tournament must already satisfy that gate.
+            tournament.Status = TournamentStatus.Ongoing;
+            tournament.IsActive = true;
+
+            // GATE-V1: StartRace now requires every participating entry to have a unique, in-range
+            // GateNumber — this helper is named "ready to start", so the seeded entries must
+            // already satisfy that gate too (gates are otherwise unrelated to what each test here
+            // actually exercises, so any distinct in-range pair works).
             var winnerEntry = new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = winnerHorse.Id, JockeyId = jockey.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = 1
             };
             var loserEntry = new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = loserHorse.Id, JockeyId = jockey2.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = 2
             };
             Db.AddRange(winnerEntry, loserEntry);
 
@@ -864,10 +915,14 @@ public class RaceLifecycleTests
             Db.AddRange(ownerUser, owner, jockeyUser, jockey, horse);
             await Db.SaveChangesAsync();
 
+            // GATE-V1: assign the next free gate dynamically (base race already holds gates 1/2
+            // from CreateReadyToStartRaceAsync) so repeated calls for a 3rd/4th/etc. horse never
+            // collide with each other or with the base pair.
+            var nextGate = await Db.RaceEntries.CountAsync(e => e.RaceId == raceId) + 1;
             Db.Add(new RaceEntry
             {
                 Id = Guid.NewGuid(), RaceId = raceId, HorseId = horse.Id, JockeyId = jockey.Id,
-                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = nextGate
             });
             Db.Add(new HorseHealthCheck
             {

@@ -384,20 +384,21 @@ public class TournamentValidationTests
     }
 
     [Fact]
-    public async Task Published_ValidNameAndPrizePool_UpdateSucceeds()
+    public async Task Published_ValidName_UpdateSucceeds()
     {
+        // PRIZE-V1 Part 4: PrizePool became immutable after Publish (see PrizeV1Tests'
+        // UpdateTournament_PrizePool_Published_* cases for that rule's own coverage) — this test
+        // now isolates Name, which remains the one Published-mutable field.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var id = await SeedPublishedTournamentAsync(f);
 
         var update = await f.TournamentSvc.UpdateTournamentAsync(id, new UpdateTournamentRequest
         {
-            Name = "Tên hợp lệ sau công bố",
-            PrizePool = 500m
+            Name = "Tên hợp lệ sau công bố"
         });
 
         Assert.True(update.Result.Success, update.Result.Message);
         Assert.Equal("Tên hợp lệ sau công bố", update.Result.Data!.Name);
-        Assert.Equal(500m, update.Result.Data.PrizePool);
     }
 
     [Fact]

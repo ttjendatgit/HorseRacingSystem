@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  getPrizes, createPrize, deletePrize,
-  getPendingProtests, ruleProtest,
+  getPendingProtests, getProtests, markProtestUnderReview, ruleProtest,
   getPendingTransfers, approveTransfer, rejectTransfer,
   getContracts,
   getInjuries,
 } from "../../services/managementApi";
-import { getAdminTournaments } from "../../services/adminApi";
+import {
+  buildRuleProtestPayload,
+  filterProtestsByTab,
+  getAvailableProtestActions,
+  getDefaultProtestTab,
+  getProtestStatusDetails,
+  getProtestTabCounts,
+} from "../../utils/protestDisplay";
 
 const fDate = (v) => v ? new Date(v).toLocaleDateString("vi-VN", { dateStyle: "medium" }) : "-";
 
@@ -25,44 +32,8 @@ function Modal({ title, children, onClose }) {
   );
 }
 
-// ── Prize Management ──
-export function PrizeManagement() {
-  const [items, setItems] = useState([]);
-  const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({ name: "", amount: 0, position: 1, currency: "USD", tournamentId: "", raceId: "", sponsorName: "" });
-  const [tournaments, setTournaments] = useState([]);
-  const load = () => getPrizes().then((d) => setItems(Array.isArray(d) ? d : [])).catch((e) => setMsg(e.message));
-  useEffect(() => { load(); getAdminTournaments().then((d) => setTournaments(Array.isArray(d) ? d : [])); }, []);
-
-  const submit = async (ev) => { ev.preventDefault(); try { await createPrize({ ...form, amount: Number(form.amount), position: Number(form.position), tournamentId: form.tournamentId || null, raceId: form.raceId || null }); setMsg("Đã tạo giải thưởng."); load(); } catch (e) { setMsg(e.message); } };
-  const remove = async (id) => { if (!confirm("Xóa?")) return; try { await deletePrize(id); load(); } catch (e) { setMsg(e.message); } };
-
-  return (
-    <div>
-      <h2>Tiền thưởng</h2>
-      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Quản lý phân phối tiền thưởng cho giải đấu và cuộc đua.</p>
-      {msg && <p className="admin-notice">{msg}</p>}
-      <form onSubmit={submit} className="admin-form" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        <input placeholder="Tên giải thưởng" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <input type="number" placeholder="Số tiền" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-        <input type="number" placeholder="Vị trí (1,2,3...)" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-        <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })}>
-          <option value="">Giải đấu (tùy chọn)</option>
-          {tournaments.map((t) => <option key={t.id ?? t.Id} value={t.id ?? t.Id}>{t.name ?? t.Name}</option>)}
-        </select>
-        <input placeholder="Nhà tài trợ" value={form.sponsorName} onChange={(e) => setForm({ ...form, sponsorName: e.target.value })} />
-        <button className="primary-button" type="submit">Thêm giải thưởng</button>
-      </form>
-      <div className="admin-table-wrap"><table className="admin-table">
-        <thead><tr><th>Tên</th><th>Số tiền</th><th>Vị trí</th><th>Nhà tài trợ</th><th>Đã phân phối</th><th>Thao tác</th></tr></thead>
-        <tbody>{items.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.amount} {p.currency}</td><td>#{p.position}</td><td>{p.sponsorName || "-"}</td><td>{p.isDistributed ? "Có" : "Không"}</td><td><button onClick={() => remove(p.id)}>Xóa</button></td></tr>)}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
 // ── Protest Management ──
-export function ProtestManagement() {
+function LegacyProtestManagement() {
   const [items, setItems] = useState([]);
   const [msg, setMsg] = useState("");
   const [modal, setModal] = useState(null); // { id, type: "upheld"|"reject" }
@@ -123,7 +94,154 @@ export function ProtestManagement() {
   );
 }
 
-// ── Horse Transfer Management ──
+// ── Protest Management ──
+export function ProtestManagement() {
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [showResultCta, setShowResultCta] = useState(false);
+  const [activeTab, setActiveTab] = useState("pending");
+  const [modal, setModal] = useState(null); // { id, outcome: "Upheld"|"Rejected" }
+  const [modalText, setModalText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const load = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getProtests();
+      const nextItems = Array.isArray(data) ? data : [];
+      setItems(nextItems);
+      setActiveTab((current) => current || getDefaultProtestTab(getProtestTabCounts(nextItems)));
+    } catch (e) {
+      setMsg(e.message);
+      setShowResultCta(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const counts = useMemo(() => getProtestTabCounts(items), [items]);
+  const visibleItems = useMemo(() => filterProtestsByTab(items, activeTab), [items, activeTab]);
+  const tabs = [
+    { key: "pending", label: "Chờ xử lý", count: counts.pending },
+    { key: "underReview", label: "Đang xem xét", count: counts.underReview },
+    { key: "resolved", label: "Đã xử lý", count: counts.resolved },
+    { key: "all", label: "Tất cả", count: counts.all },
+  ];
+
+  const openRuleModal = (id, outcome) => {
+    setModal({ id, outcome });
+    setModalText("");
+  };
+
+  const startReview = async (id) => {
+    try {
+      await markProtestUnderReview(id);
+      setMsg("Khiếu nại đã được chuyển sang đang xem xét.");
+      setShowResultCta(false);
+      load();
+    } catch (e) {
+      setMsg(e.message);
+      setShowResultCta(false);
+    }
+  };
+
+  const submitRule = async () => {
+    if (!modal) return;
+    try {
+      await ruleProtest(modal.id, buildRuleProtestPayload(modal.outcome, modalText));
+      setMsg(modal.outcome === "Upheld"
+        ? "Khiếu nại được chấp nhận. Kết quả cuộc đua phải được chỉnh sửa và gửi lại trước khi có thể xác nhận chính thức."
+        : "Khiếu nại đã bị bác.");
+      setShowResultCta(modal.outcome === "Upheld");
+      setModal(null);
+      load();
+    } catch (e) {
+      setMsg(e.message);
+      setShowResultCta(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Khiáº¿u náº¡i</h2>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Xem xÃ©t vÃ  phÃ¡n quyáº¿t khiáº¿u náº¡i cuá»™c Ä‘ua tá»« chá»§ sá»Ÿ há»¯u vÃ  ká»µ sÄ©.</p>
+      {msg && (
+        <div className="admin-notice" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <span>{msg}</span>
+          {showResultCta && (
+            <button type="button" className="ghost-button" onClick={() => navigate("/admin/race-results")}>
+              Đi đến kết quả cuộc đua
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="admin-actions" style={{ marginBottom: 16 }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={activeTab === tab.key ? "primary-button" : ""}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
+
+      {modal && (
+        <Modal title={modal.outcome === "Upheld" ? "Chấp nhận khiếu nại" : "Bác khiếu nại"} onClose={() => setModal(null)}>
+          <div className="form-group">
+            <label>Ghi chú quyết định</label>
+            <textarea
+              className="form-textarea"
+              rows={4}
+              value={modalText}
+              onChange={(e) => setModalText(e.target.value)}
+              placeholder={modal.outcome === "Upheld" ? "Mô tả cách giải quyết..." : "Lý do bác khiếu nại..."}
+            />
+          </div>
+          <div className="modal-actions" style={{ marginTop: 16 }}>
+            <button className="primary-button" onClick={submitRule}>{modal.outcome === "Upheld" ? "Chấp nhận" : "Bác khiếu nại"}</button>
+            <button className="ghost-button" onClick={() => setModal(null)}>Há»§y</button>
+          </div>
+        </Modal>
+      )}
+
+      {isLoading ? <p className="muted">Đang tải khiếu nại...</p> : visibleItems.length === 0 ? <p className="muted">Không có khiếu nại trong nhóm này.</p> : (
+        <div className="admin-card-grid">
+          {visibleItems.map((p) => {
+            const id = p.id ?? p.Id;
+            const status = getProtestStatusDetails(p.status ?? p.Status);
+            const actions = getAvailableProtestActions(status.status);
+            return (
+              <article key={id} className="admin-simple-card">
+                <span className={`status status--${status.variant}`}>{status.label}</span>
+                <h3>{p.filedByName || p.FiledByName || "Không xác định"}</h3>
+                <p>Cuá»™c Ä‘ua: {p.raceName || p.RaceName || p.raceId || p.RaceId}</p>
+                <p>Chá»‘ng láº¡i: {p.againstHorseName || p.AgainstHorseName || p.againstEntryId || p.AgainstEntryId}</p>
+                <p><strong>LÃ½ do:</strong> {p.reason || p.Reason}</p>
+                {(p.evidence || p.Evidence) && <p><strong>Báº±ng chá»©ng:</strong> {p.evidence || p.Evidence}</p>}
+                <p className="time">Ná»™p: {fDate(p.filedAt || p.FiledAt)}</p>
+                {actions.length > 0 && (
+                  <div className="admin-actions" style={{ marginTop: 8 }}>
+                    {actions.includes("underReview") && <button onClick={() => startReview(id)}>Bắt đầu xem xét</button>}
+                    {actions.includes("upheld") && <button onClick={() => openRuleModal(id, "Upheld")}>Chấp nhận</button>}
+                    {actions.includes("rejected") && <button className="admin-danger" onClick={() => openRuleModal(id, "Rejected")}>Bác khiếu nại</button>}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TransferManagement() {
   const [items, setItems] = useState([]);
   const [msg, setMsg] = useState("");

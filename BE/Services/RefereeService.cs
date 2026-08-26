@@ -314,6 +314,7 @@ public class RefereeService : IRefereeService
             RejectedReason = race?.Result?.RejectedReason,
             RoundName = race?.Round?.Name,
             TournamentName = race?.Tournament?.Name,
+            TrackCapacity = race?.Track?.Capacity,
             RefereeId = assignment.RefereeId,
             RefereeName = referee?.User?.FullName,
             Role = assignment.Role,

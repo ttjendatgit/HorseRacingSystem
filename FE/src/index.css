@@ -21,6 +21,7 @@
   --hr-bg-deep: #0d0b09;
   --hr-surface: #1a1511;
   --hr-surface-2: #211a14;
+  --hr-surface-elevated: var(--hr-surface-2);
   --hr-surface-soft: rgba(238, 229, 212, .045);
 
   /* -- text -- */
@@ -39,6 +40,19 @@
   --hr-border-soft: rgba(238, 229, 212, .08);
   --hr-focus: rgba(184, 134, 59, .55);
   --hr-focus-ring: rgba(184, 134, 59, .18);
+
+  /* -- shared UI scale -- */
+  --hr-radius-compact: 8px;
+  --hr-radius: 10px;
+  --hr-radius-panel: 12px;
+  --hr-shadow-soft: 0 10px 28px rgba(0, 0, 0, .24);
+  --hr-control-height-compact: 32px;
+  --hr-control-height: 38px;
+  --hr-space-xs: 4px;
+  --hr-space-sm: 8px;
+  --hr-space-md: 12px;
+  --hr-space-lg: 16px;
+  --hr-space-xl: 20px;
 
   /* -- semantic status (muted, text-safe ≥4.5:1 on --hr-bg) -- */
   --hr-success: #708b68;

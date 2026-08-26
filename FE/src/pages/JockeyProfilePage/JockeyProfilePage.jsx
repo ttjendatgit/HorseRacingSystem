@@ -1,14 +1,26 @@
 import { useEffect, useState, useCallback } from "react";
 import { updateProfile, changePassword, getProfile } from "../../services/authApi";
-import { getContracts, signContractJockey, getProtests, createProtest } from "../../services/managementApi";
-import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary } from "../ProfileCommon";
+import {
+  getContracts, signContractJockey,
+  getMyRaceComplaints, createRaceComplaint, withdrawRaceComplaint, getEligibleRaceComplaintRaces,
+} from "../../services/managementApi";
+import { getMyJockeyProfile } from "../../services/jockeyApi";
+import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
+import {
+  RACE_COMPLAINT_TYPE_OPTIONS,
+  canFilerWithdraw,
+  getRaceComplaintStatusDetails,
+  getRaceComplaintTypeLabel,
+  mapEligibleRacesToOptions,
+} from "../../utils/raceComplaintDisplay";
+import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary, fieldStyle, fieldLabel, inputBase } from "../ProfileCommon";
 import "../ProfilePages.css";
 
 const JOCKEY_TABS = [
   { key: "info", label: "Thông tin cá nhân" },
   { key: "password", label: "Mật khẩu & bảo mật" },
   { key: "contracts", label: "Hợp đồng" },
-  { key: "protests", label: "Khiếu nại" },
+  { key: "complaints", label: "Khiếu nại" },
 ];
 
 const statusColor = (s) => {
@@ -22,6 +34,7 @@ const statusColor = (s) => {
 
 export default function JockeyProfilePage() {
   const [profile, setProfile] = useState(null);
+  const [approval, setApproval] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("info");
   const [msg, setMsg] = useState(null);
@@ -30,10 +43,11 @@ export default function JockeyProfilePage() {
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
   const [contracts, setContracts] = useState([]);
   const [contractsLoading, setContractsLoading] = useState(false);
-  const [protests, setProtests] = useState([]);
-  const [protestsLoading, setProtestsLoading] = useState(false);
-  const [showProtestForm, setShowProtestForm] = useState(false);
-  const [protestForm, setProtestForm] = useState({ raceId: "", reason: "", evidence: "" });
+  const [complaints, setComplaints] = useState([]);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [showComplaintForm, setShowComplaintForm] = useState(false);
+  const [eligibleRaceOptions, setEligibleRaceOptions] = useState([]);
+  const [complaintForm, setComplaintForm] = useState({ raceId: "", type: "ResultJudging", reason: "", evidenceDescription: "" });
 
   const showMsg = useCallback((type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); }, []);
 
@@ -42,6 +56,11 @@ export default function JockeyProfilePage() {
       .then((d) => { const p = d?.data ?? d; setProfile(p); setInfo({ fullName: p.fullName ?? p.FullName ?? "", phoneNumber: p.phoneNumber ?? p.PhoneNumber ?? "" }); })
       .catch(() => { /* empty */ })
       .finally(() => setLoading(false));
+    // /api/auth/profile does not expose Jockey.ApprovalStatus — /api/jockeys/me is the
+    // authoritative source for competitive-approval state (see jockeyApproval.js).
+    getMyJockeyProfile()
+      .then((jockeyProfile) => setApproval(getJockeyApprovalDisplay(jockeyProfile)))
+      .catch(() => setApproval(null));
   }, []);
 
   useEffect(() => {
@@ -51,9 +70,18 @@ export default function JockeyProfilePage() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== "protests") return;
-    setProtestsLoading(true);
-    getProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? [])).catch(() => { /* empty */ }).finally(() => setProtestsLoading(false));
+    if (activeTab !== "complaints") return;
+    setComplaintsLoading(true);
+    Promise.all([
+      getMyRaceComplaints(),
+      getEligibleRaceComplaintRaces(),
+    ])
+      .then(([complaintData, raceData]) => {
+        setComplaints(Array.isArray(complaintData) ? complaintData : complaintData?.data ?? []);
+        setEligibleRaceOptions(mapEligibleRacesToOptions(Array.isArray(raceData) ? raceData : raceData?.data ?? []));
+      })
+      .catch(() => { /* empty */ })
+      .finally(() => setComplaintsLoading(false));
   }, [activeTab]);
 
   const saveInfo = async () => {
@@ -85,6 +113,16 @@ export default function JockeyProfilePage() {
     } catch (e) { showMsg("error", e?.message ?? "Lỗi."); }
   };
 
+  const withdraw = async (id) => {
+    try {
+      await withdrawRaceComplaint(id);
+      showMsg("success", "Đã rút khiếu nại.");
+      getMyRaceComplaints().then((d) => setComplaints(Array.isArray(d) ? d : d?.data ?? []));
+    } catch (e) {
+      showMsg("error", e?.message ?? "Rút khiếu nại thất bại.");
+    }
+  };
+
   if (loading) return <div className="spectator-page"><p>Đang tải...</p></div>;
   if (!profile) return <div className="spectator-page"><p>Không tìm thấy hồ sơ.</p></div>;
 
@@ -112,11 +150,15 @@ export default function JockeyProfilePage() {
           </div>
           {!editMode && (
             <div style={grid2}>
+              <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
               <Detail label="Hạng" value={`#${profile.rank ?? profile.Rank ?? "-"}`} />
               <Detail label="Tỉ lệ thắng" value={`${profile.winRate ?? profile.WinRate ?? 0}%`} />
               <Detail label="Giấy phép" value={profile.licenseNumber ?? profile.LicenseNumber ?? "-"} />
               <Detail label="Quốc tịch" value={profile.nationality ?? profile.Nationality ?? "-"} />
               <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
+              {approval?.isRejected && approval.note && (
+                <Detail label="Lý do từ chối" value={approval.note} />
+              )}
             </div>
           )}
         </section>
@@ -169,47 +211,80 @@ export default function JockeyProfilePage() {
         </section>
       )}
 
-      {activeTab === "protests" && (
+      {activeTab === "complaints" && (
         <section className="sp-section">
           <div className="sp-section-header">
-            <h2>Khiếu nại</h2>
-            <button style={btnSecondary} onClick={() => setShowProtestForm(!showProtestForm)}>{showProtestForm ? "Huỷ" : "Tạo khiếu nại"}</button>
+            <h2>Khiếu nại cuộc đua</h2>
+            <button style={btnSecondary} onClick={() => setShowComplaintForm(!showComplaintForm)}>{showComplaintForm ? "Huỷ" : "Khiếu nại cuộc đua"}</button>
           </div>
-          {showProtestForm && (
+          {showComplaintForm && (
             <div className="sp-card" style={{ marginBottom: 16 }}>
-              <Field label="Race ID" value={protestForm.raceId} onChange={(e) => setProtestForm((p) => ({ ...p, raceId: e.target.value }))} placeholder="Nhập ID cuộc đua" />
-              <Field label="Lý do" value={protestForm.reason} onChange={(e) => setProtestForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Mô tả lý do khiếu nại" />
-              <Field label="Bằng chứng" value={protestForm.evidence} onChange={(e) => setProtestForm((p) => ({ ...p, evidence: e.target.value }))} placeholder="Link / mô tả bằng chứng (không bắt buộc)" />
+              <div style={fieldStyle}>
+                <label style={fieldLabel}>Cuộc đua</label>
+                <select
+                  style={{ ...inputBase, appearance: "auto" }}
+                  value={complaintForm.raceId}
+                  onChange={(e) => setComplaintForm((p) => ({ ...p, raceId: e.target.value }))}
+                >
+                  <option value="">Chọn cuộc đua</option>
+                  {eligibleRaceOptions.map((race) => (
+                    <option key={race.value} value={race.value}>{race.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={fieldStyle}>
+                <label style={fieldLabel}>Loại khiếu nại</label>
+                <select
+                  style={{ ...inputBase, appearance: "auto" }}
+                  value={complaintForm.type}
+                  onChange={(e) => setComplaintForm((p) => ({ ...p, type: e.target.value }))}
+                >
+                  {RACE_COMPLAINT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <Field label="Nội dung" value={complaintForm.reason} onChange={(e) => setComplaintForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Mô tả nội dung khiếu nại" />
+              <Field label="Bằng chứng (tùy chọn)" value={complaintForm.evidenceDescription} onChange={(e) => setComplaintForm((p) => ({ ...p, evidenceDescription: e.target.value }))} placeholder="Mô tả bằng chứng liên quan (không bắt buộc)" />
               <div style={{ marginTop: 8 }}>
                 <button style={btnPrimary} onClick={async () => {
-                  if (!protestForm.raceId || !protestForm.reason) { showMsg("error", "Vui lòng nhập Race ID và lý do."); return; }
+                  if (!complaintForm.raceId || !complaintForm.reason) { showMsg("error", "Vui lòng chọn cuộc đua và nhập nội dung."); return; }
                   try {
-                    await createProtest({ raceId: protestForm.raceId, againstEntryId: null, reason: protestForm.reason, evidence: protestForm.evidence || null });
-                    setShowProtestForm(false);
-                    setProtestForm({ raceId: "", reason: "", evidence: "" });
+                    await createRaceComplaint({
+                      raceId: complaintForm.raceId,
+                      type: complaintForm.type,
+                      reason: complaintForm.reason,
+                      evidenceDescription: complaintForm.evidenceDescription || null,
+                    });
+                    setShowComplaintForm(false);
+                    setComplaintForm({ raceId: "", type: "ResultJudging", reason: "", evidenceDescription: "" });
                     showMsg("success", "Đã gửi khiếu nại!");
-                    getProtests().then((d) => setProtests(Array.isArray(d) ? d : d?.data ?? []));
+                    getMyRaceComplaints().then((d) => setComplaints(Array.isArray(d) ? d : d?.data ?? []));
                   } catch (e) { showMsg("error", e?.message ?? "Gửi khiếu nại thất bại."); }
                 }}>Gửi khiếu nại</button>
               </div>
             </div>
           )}
           <div className="sp-card" style={{ overflowX: "auto" }}>
-            {protestsLoading ? <p>Đang tải...</p> : protests.length === 0 ? (
+            {complaintsLoading ? <p>Đang tải...</p> : complaints.length === 0 ? (
               <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>Chưa có khiếu nại nào.</p>
             ) : (
               <table className="sp-history-table">
-                <thead><tr><th>Ngày</th><th>Lý do</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                 <tbody>
-                  {protests.map((p) => {
-                    const id = p.id ?? p.Id;
-                    const s = p.status ?? p.Status ?? "";
-                    const colors = statusColor(s);
+                  {complaints.map((c) => {
+                    const id = c.id ?? c.Id;
+                    const s = c.status ?? c.Status ?? "";
+                    const status = getRaceComplaintStatusDetails(s);
+                    const colors = statusColor(status.status);
+                    const withdrawable = canFilerWithdraw(status.status);
                     return (
                       <tr key={id}>
-                        <td>{p.createdAt ?? p.CreatedAt ? new Date(p.createdAt ?? p.CreatedAt).toLocaleDateString() : "-"}</td>
-                        <td>{p.reason ?? p.Reason ?? "-"}</td>
-                        <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{s}</span></td>
+                        <td>{c.createdAt ?? c.CreatedAt ? new Date(c.createdAt ?? c.CreatedAt).toLocaleDateString() : "-"}</td>
+                        <td>{getRaceComplaintTypeLabel(c.type ?? c.Type)}</td>
+                        <td>{c.reason ?? c.Reason ?? "-"}</td>
+                        <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{status.label}</span></td>
+                        <td>{withdrawable ? <button style={btnSecondary} onClick={() => withdraw(id)}>Rút</button> : "-"}</td>
                       </tr>
                     );
                   })}

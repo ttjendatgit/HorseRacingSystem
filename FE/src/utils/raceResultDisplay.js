@@ -26,6 +26,29 @@ export const getRankedEntries = (entries) => {
     .sort((a, b) => getFinishPosition(a) - getFinishPosition(b));
 };
 
+// RESULT-APPROVAL-REVIEW-UX: builds the full, ordered ranking display list an Admin needs to
+// review BEFORE approving a Provisional result — never gated on Official/Provisional, since the
+// backend already parses RankingsJson into `rankings` at both lifecycle stages (see
+// RaceService.GetRaceResultAsync/LiveResultService). `entries` (RaceEntry-shaped, from the
+// separate /entries endpoint) is used ONLY to look up JockeyName by HorseId — never for
+// FinishPosition, which stays Official-only per R0. Malformed/legacy rankings safely degrade to [].
+export const buildRankingDisplayList = (rankings, entries) => {
+  const ranked = getRankedEntries(rankings);
+  const entryList = Array.isArray(entries) ? entries : [];
+  return ranked.map((r) => {
+    const horseId = r.horseId ?? r.HorseId;
+    const position = getFinishPosition(r);
+    const entry = entryList.find((e) => (e.horseId ?? e.HorseId) === horseId);
+    return {
+      position,
+      horseId,
+      horseName: r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName ?? null,
+      jockeyName: entry?.jockeyName ?? entry?.JockeyName ?? null,
+      isWinner: position === 1,
+    };
+  });
+};
+
 // isFinal: Round.RoundNumber === Tournament.MaxRounds (V0/V0.1) — never AdvanceCount/QualificationSlots.
 // qualificationSlots: only meaningful for a non-final Race; missing/invalid never guesses a label.
 export const getPlacementLabel = ({ position, isFinal, qualificationSlots }) => {

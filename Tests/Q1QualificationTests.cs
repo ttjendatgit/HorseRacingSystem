@@ -143,10 +143,14 @@ public class Q1QualificationTests
         var jockey = new Jockey { Id = Guid.NewGuid(), UserId = jockeyUserId, ApprovalStatus = ApprovalStatus.Approved };
         f.Db.Add(jockey);
 
+        // GATE-V1: StartRace (used by FinishRaceOfficialAsync below) now requires every
+        // participating entry to have a unique, in-range gate — assign the next free one
+        // dynamically so any number of calls for the same race stay collision-free.
+        var nextGate = await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceId) + 1;
         f.Db.Add(new RaceEntry
         {
             Id = Guid.NewGuid(), RaceId = raceId, HorseId = horse.Id, JockeyId = jockey.Id,
-            Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true
+            Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = nextGate
         });
         f.Db.Add(new HorseHealthCheck
         {
@@ -157,9 +161,26 @@ public class Q1QualificationTests
         return (horse.Id, jockey.Id);
     }
 
+    /// <summary>R1a: StartRace now requires the parent Tournament to be Ongoing. CreateRaceAsync
+    /// requires the Tournament to still be Draft, so races/rounds are always built first (via
+    /// BuildTwoRoundTournamentAsync/CreateRaceAsync above) and only transitioned to Ongoing here,
+    /// right before a Race is actually driven through StartRace.</summary>
+    private static async Task SetTournamentOngoingAsync(RaceLifecycleTests.LifecycleFixture f, Guid raceId)
+    {
+        var tournamentId = (await f.Db.Races.SingleAsync(r => r.Id == raceId)).TournamentId;
+        var tournament = await f.Db.Tournaments.SingleAsync(t => t.Id == tournamentId);
+        if (tournament.Status != TournamentStatus.Ongoing)
+        {
+            tournament.Status = TournamentStatus.Ongoing;
+            tournament.IsActive = true;
+            await f.Db.SaveChangesAsync();
+        }
+    }
+
     /// <summary>Drives a Race with its already-seeded entries from Scheduled through Official, with the given full ranking.</summary>
     private static async Task FinishRaceOfficialAsync(RaceLifecycleTests.LifecycleFixture f, Guid raceId, Guid refereeId, List<Guid> orderedHorseIds)
     {
+        await SetTournamentOngoingAsync(f, raceId);
         var open = await f.RaceManagement.OpenRegistrationAsync(raceId);
         Assert.True(open.Result.Success, open.Result.Message);
         var close = await f.RaceManagement.CloseRegistrationAsync(raceId);
@@ -288,6 +309,7 @@ public class Q1QualificationTests
         var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
         var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
 
+        await SetTournamentOngoingAsync(f, raceA);
         await f.RaceManagement.OpenRegistrationAsync(raceA);
         await f.RaceManagement.CloseRegistrationAsync(raceA);
         await f.RaceManagement.StartRaceAsync(raceA);

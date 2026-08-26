@@ -67,6 +67,11 @@ public class RefereeAssignmentResponse
     public string? RejectedReason { get; set; }
     public string? RoundName { get; set; }
     public string? TournamentName { get; set; }
+    /// <summary>GATE-V1 FINAL CAPACITY CORRECTION: the Race's Track's physical gate capacity —
+    /// the actual upper bound for GateNumber (never Race.MaxParticipants). Null if the Race has no
+    /// Track assigned yet or the Track's Capacity isn't set (should be unreachable once Published,
+    /// since Publish readiness already requires both).</summary>
+    public int? TrackCapacity { get; set; }
     public Guid RefereeId { get; set; }
     public string? RefereeName { get; set; }
     public string Role { get; set; } = string.Empty;

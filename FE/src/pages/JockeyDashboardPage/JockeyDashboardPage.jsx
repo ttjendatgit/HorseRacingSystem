@@ -4,15 +4,19 @@ import {
   formatJockeyDate,
   getJockeyAssignedRaces,
   getJockeyInvitations,
+  getMyJockeyProfile,
   normalizeInvitationStatus,
 } from "../../services/jockeyApi";
 import { getProfile } from "../../services/authApi";
+import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
+import JockeyApprovalBanner from "../../components/JockeyApprovalBanner/JockeyApprovalBanner";
 import "./JockeyDashboardPage.css";
 
 function JockeyDashboardPage() {
   const [races, setRaces] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [approval, setApproval] = useState(null);
   const [, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -22,16 +26,18 @@ function JockeyDashboardPage() {
     const loadDashboard = async () => {
       try {
         setLoading(true);
-        const [raceData, invitationData, profileData] = await Promise.all([
+        const [raceData, invitationData, profileData, jockeyProfile] = await Promise.all([
           getJockeyAssignedRaces(),
           getJockeyInvitations(),
           getProfile().then(d => d?.data ?? d).catch(() => null),
+          getMyJockeyProfile().catch(() => null),
         ]);
 
         if (!cancelled) {
           setRaces(raceData);
           setInvitations(invitationData);
           setProfile(profileData);
+          setApproval(getJockeyApprovalDisplay(jockeyProfile));
           setErrorMessage("");
         }
       } catch (error) {
@@ -92,6 +98,26 @@ function JockeyDashboardPage() {
       </section>
 
       {errorMessage && <p className="jd-error">{errorMessage}</p>}
+
+      {/* Competitive approval status — account login/access is unaffected either way; this only
+          explains whether the Jockey can currently be invited/confirmed for a Race. */}
+      {approval?.isPending && (
+        <JockeyApprovalBanner
+          tone="pending"
+          title="Đang chờ Admin phê duyệt"
+          description="Hồ sơ kỵ sĩ của bạn đã được gửi thành công. Bạn có thể xem và cập nhật thông tin cá nhân, nhưng chưa thể tham gia thi đấu cho đến khi Admin phê duyệt."
+        />
+      )}
+      {approval?.isRejected && (
+        <JockeyApprovalBanner
+          tone="rejected"
+          title="Hồ sơ kỵ sĩ đã bị từ chối"
+          description={approval.note ? `Lý do: ${approval.note}` : undefined}
+        />
+      )}
+      {approval?.isApproved && (
+        <JockeyApprovalBanner tone="approved" title="Đã được Admin phê duyệt" compact />
+      )}
 
       {/* Quick Actions + Next Race */}
       <div className="jd-cols">

@@ -1,0 +1,269 @@
+/* J-ADMIN-REVIEW UX polish — Jockey verification review modal.
+   Extends (does not replace) the shared .admin-modal-backdrop/.admin-modal-panel shell from
+   AdminPage.css (RaceForm/TournamentForm/AdminOperations) so this modal stays visually consistent
+   with the rest of Admin, while being wide enough and structured enough for an actual document
+   verification workflow instead of a cramped form. */
+
+.jrm-panel {
+  max-width: min(1040px, 96vw);
+  width: 100%;
+  max-height: 88vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* only .jrm-body scrolls — header/footer stay put */
+}
+
+/* ── Header (sticky) ─────────────────────────────────────────────────── */
+.jrm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid var(--hr-border-soft);
+  flex-shrink: 0;
+}
+.jrm-header__eyebrow {
+  color: var(--hr-gold-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  margin: 0 0 6px;
+}
+.jrm-header__name {
+  color: var(--hr-paper);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.jrm-header__email {
+  display: block;
+  color: var(--hr-muted);
+  font-size: 13px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.jrm-header__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.jrm-close {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--hr-border-soft);
+  background: transparent;
+  color: var(--hr-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.jrm-close:hover { background: rgba(238,229,212,0.06); color: var(--hr-paper); border-color: var(--hr-border); }
+.jrm-close:focus-visible { outline: 2px solid var(--hr-focus); outline-offset: 2px; }
+
+/* ── Body (scrolls, two-column on desktop) ───────────────────────────── */
+.jrm-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 22px 28px;
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 28px;
+  align-content: start;
+}
+.jrm-col { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+
+.jrm-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: var(--hr-gold-soft);
+  margin: 0 0 12px;
+}
+
+/* Light label/value rows — deliberately NOT a grid of heavy bordered boxes. */
+.jrm-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+.jrm-field { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.jrm-field--full { grid-column: 1 / -1; }
+.jrm-field__label { font-size: 11px; color: var(--hr-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.jrm-field__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hr-paper);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ── Right column: license card ──────────────────────────────────────── */
+.jrm-license-card {
+  background: var(--hr-surface-2);
+  border: 1px solid var(--hr-border);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.jrm-doc-preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--hr-border-soft);
+  background: var(--hr-bg-deep);
+}
+.jrm-doc-preview--clickable { cursor: zoom-in; }
+.jrm-doc-preview img { width: 100%; height: 100%; object-fit: contain; display: block; background: var(--hr-bg-deep); }
+.jrm-doc-preview iframe { width: 100%; height: 100%; border: none; background: #fff; pointer-events: none; } /* card preview is a static peek; open lightbox/original for real interaction */
+.jrm-doc-preview__hint {
+  position: absolute;
+  inset: auto 10px 10px auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(13,11,9,0.72);
+  color: var(--hr-paper);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: none;
+}
+.jrm-doc-preview:hover .jrm-doc-preview__hint,
+.jrm-doc-preview:focus-visible .jrm-doc-preview__hint { opacity: 1; transform: translateY(0); }
+.jrm-doc-preview:focus-visible { outline: 2px solid var(--hr-focus); outline-offset: 2px; }
+
+.jrm-doc-empty {
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  border: 1px dashed var(--hr-border);
+  border-radius: 10px;
+  color: var(--hr-muted);
+  font-size: 13px;
+}
+
+.jrm-doc-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--hr-gold-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.jrm-doc-link:hover { text-decoration: underline; }
+.jrm-doc-link:focus-visible { outline: 2px solid var(--hr-focus); outline-offset: 2px; border-radius: 4px; }
+
+.jrm-reject-note {
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(201,105,90,0.1);
+  border: 1px solid rgba(201,105,90,0.3);
+}
+.jrm-reject-note__label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--hr-danger); margin-bottom: 6px; font-weight: 700; }
+.jrm-reject-note__text { color: var(--hr-text); font-size: 14px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+
+.jrm-inline-error {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(201,105,90,0.16);
+  border: 1px solid rgba(201,105,90,0.35);
+  color: var(--hr-danger);
+  font-size: 13px;
+  margin: 0 28px;
+}
+
+/* ── Footer (sticky) ─────────────────────────────────────────────────── */
+.jrm-footer {
+  flex-shrink: 0;
+  padding: 16px 28px;
+  border-top: 1px solid var(--hr-border-soft);
+  background: var(--hr-surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.jrm-footer--reject { flex-direction: column; align-items: stretch; }
+.jrm-footer .form-group { margin: 0 0 12px; }
+.jrm-footer__actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+/* ── Lightbox (above the modal backdrop) ─────────────────────────────── */
+.jrm-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(6,5,4,0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.jrm-lightbox__content {
+  position: relative;
+  max-width: 94vw;
+  max-height: 90vh;
+  display: flex;
+}
+.jrm-lightbox img { max-width: 94vw; max-height: 90vh; object-fit: contain; border-radius: 8px; display: block; }
+.jrm-lightbox iframe { width: min(94vw, 900px); height: 90vh; border: none; border-radius: 8px; background: #fff; }
+.jrm-lightbox__close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--hr-border-soft);
+  background: var(--hr-surface);
+  color: var(--hr-paper);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.jrm-lightbox__close:hover { background: var(--hr-surface-2); }
+.jrm-lightbox__close:focus-visible { outline: 2px solid var(--hr-focus); outline-offset: 2px; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .jrm-body { grid-template-columns: 1fr; gap: 24px; }
+  .jrm-panel { max-height: 92vh; }
+}
+
+@media (max-width: 560px) {
+  .jrm-header { padding: 18px 18px 14px; }
+  .jrm-body { padding: 16px 18px; }
+  .jrm-footer { padding: 14px 18px; }
+  .jrm-inline-error { margin: 0 18px; }
+  .jrm-field-grid { grid-template-columns: 1fr; }
+  .jrm-header__name { font-size: 19px; }
+  .jrm-footer__actions { width: 100%; }
+  .jrm-footer__actions button { flex: 1 1 auto; }
+}

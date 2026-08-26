@@ -521,7 +521,10 @@ public class JockeyService : IJockeyService
             totalWins = jockey.TotalWins,
             winRate = jockey.WinRate,
             rank = jockey.Rank,
-            approvalStatus = jockey.ApprovalStatus.ToString()
+            approvalStatus = jockey.ApprovalStatus.ToString(),
+            // J-ADMIN-REVIEW Part 8: the Jockey's own approval-rejection reason, set by Admin
+            // RejectJockeyAsync — J-UX's jockeyApproval.js already reads this defensively.
+            approvalNote = jockey.ApprovalNote
         });
     }
 }

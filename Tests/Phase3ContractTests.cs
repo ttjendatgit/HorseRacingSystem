@@ -362,6 +362,18 @@ public class Phase3ContractTests
 
     // ── Race ────────────────────────────────────────────────────────────
 
+    /// <summary>R1a: CreateReadyToStartRaceAsync now leaves the Tournament Ongoing (so StartRace
+    /// tests work out of the box), but CreateRaceAsync/UpdateRaceAsync both still require Draft —
+    /// tests below that only need a start-ready Race's scaffolding, not an actually start-ready
+    /// Tournament, temporarily revert the status before calling either.</summary>
+    private static async Task RevertTournamentToDraftAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
+    {
+        var tournament = await f.Db.Tournaments.SingleAsync(t => t.Id == tournamentId);
+        tournament.Status = TournamentStatus.Draft;
+        tournament.IsActive = false;
+        await f.Db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Race_QualificationSlots_RoundTripsThroughCreateAndUpdate()
     {
@@ -370,6 +382,8 @@ public class Phase3ContractTests
         var race = await f.RaceRepo.GetByIdAsync(seeded.Id);
         var tournamentId = race!.TournamentId;
         var roundId = race.RoundId;
+
+        await RevertTournamentToDraftAsync(f, tournamentId);
 
         var create = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
         {
@@ -408,6 +422,8 @@ public class Phase3ContractTests
         await f.Db.SaveChangesAsync();
 
         var seeded = await f.CreateReadyToStartRaceAsync();
+        var seededRace = await f.RaceRepo.GetByIdAsync(seeded.Id);
+        await RevertTournamentToDraftAsync(f, seededRace!.TournamentId);
         await f.RaceManagement.UpdateRaceAsync(seeded.Id, new UpdateRaceRequest { TrackId = track.Id });
 
         var details = await f.RaceManagement.GetRaceDetailsAsync(seeded.Id);
@@ -423,6 +439,8 @@ public class Phase3ContractTests
         await f.Db.SaveChangesAsync();
 
         var seeded = await f.CreateReadyToStartRaceAsync();
+        var seededRace = await f.RaceRepo.GetByIdAsync(seeded.Id);
+        await RevertTournamentToDraftAsync(f, seededRace!.TournamentId);
         await f.RaceManagement.UpdateRaceAsync(seeded.Id, new UpdateRaceRequest { TrackId = track.Id, QualificationSlots = 2 });
 
         var list = await f.RaceSvc.GetRacesAsync();

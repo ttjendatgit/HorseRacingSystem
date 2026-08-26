@@ -111,3 +111,80 @@ export const getCapacityFullMessage = (tournament, now = new Date()) => {
   const { maxParticipants, approvedCount } = getCapacityInfo(tournament);
   return `Giải đấu đã đủ ${approvedCount}/${maxParticipants} ngựa tham gia.\nHẹn bạn ở giải đấu tiếp theo.`;
 };
+
+// ADMIN-TOURNAMENTS-UI-POLISH: metadata (Name/Description/ImageUrl/Venue/...) stays editable
+// through Draft AND Published — only Draft-only STRUCTURAL fields lock earlier (see
+// canEditTournamentStructure above). Backend gate: TournamentAndRoundService.UpdateTournamentAsync
+// rejects the whole update (400) once Status is neither Draft nor Published — this governs
+// whether the FE offers "Sửa" at all, matching that gate exactly (not a new rule).
+export const canEditTournamentMetadata = (tournament) =>
+  ["Draft", "Published"].includes(normalizeTournamentStatus(tournament));
+
+// Compact status-tab model for /admin/tournaments — mirrors the real TournamentStatus enum
+// (Draft=0, Published=1, Ongoing=2, Finished=3, Cancelled=4) one-to-one, plus an "all" tab.
+// No invented lifecycle groupings.
+export const TOURNAMENT_STATUS_TABS = [
+  { value: "all", label: "Tất cả" },
+  { value: "draft", label: "Nháp" },
+  { value: "published", label: "Đã công bố" },
+  { value: "ongoing", label: "Đang diễn ra" },
+  { value: "finished", label: "Đã kết thúc" },
+  { value: "cancelled", label: "Đã hủy" },
+];
+
+export const getTournamentStatusTabCounts = (tournaments) => {
+  const counts = { all: 0, draft: 0, published: 0, ongoing: 0, finished: 0, cancelled: 0 };
+  if (!Array.isArray(tournaments)) return counts;
+  tournaments.forEach((t) => {
+    counts.all += 1;
+    const key = normalizeTournamentStatus(t).toLowerCase();
+    if (key in counts) counts[key] += 1;
+  });
+  return counts;
+};
+
+export const filterTournamentsByStatusTab = (tournaments, tab) => {
+  if (!Array.isArray(tournaments)) return [];
+  if (!tab || tab === "all") return tournaments;
+  return tournaments.filter((t) => normalizeTournamentStatus(t).toLowerCase() === tab);
+};
+
+// Composes the card footer's action visibility from EXISTING authoritative sources only:
+// - `transitions` passes through the backend's own NextTransitions (TournamentAndRoundService.
+//   GetNextTransitions) verbatim — the only legitimate source for lifecycle buttons (Công bố/Bắt
+//   đầu giải/Kết thúc giải/Hủy giải). No transition is invented here.
+// - canEdit / canDelete reuse the existing Draft-or-Published and Draft-or-Cancelled gates above.
+// Draft: canEdit, transitions=[Công bố, Hủy giải], no delete unless also matching canDelete (it
+// does, since Draft is in the hard-delete allow-list too).
+// Published/Ongoing: canEdit only for Published; both offer their own next-step transitions.
+// Finished: no transitions, no edit, no delete — view only.
+// Cancelled: no transitions, no edit, delete allowed (T-D1/T-D2).
+export const getTournamentCardActions = (tournament) => {
+  const rawTransitions = tournament?.nextTransitions ?? tournament?.NextTransitions;
+  return {
+    canEdit: canEditTournamentMetadata(tournament),
+    canDelete: canHardDeleteTournament(tournament),
+    transitions: Array.isArray(rawTransitions) ? rawTransitions : [],
+  };
+};
+
+// A Tournament is "operationally read-only" from the card's perspective when none of the three
+// mutating affordances (edit / delete / lifecycle transition) apply — true for Finished today,
+// and the general contract any future terminal-ish status should also satisfy.
+export const isTournamentCardReadOnly = (tournament) => {
+  const actions = getTournamentCardActions(tournament);
+  return !actions.canEdit && actions.transitions.length === 0;
+};
+
+// ADMIN-TOURNAMENTS-REGRESSION-FIX: card thumbnail source — restrained identity (fixed-size
+// thumbnail), never a full-card background. Returns null (never "", never undefined) so callers
+// can render a single safe fallback placeholder without extra truthiness gymnastics.
+export const getTournamentThumbnailUrl = (tournament) =>
+  tournament?.imageUrl ?? tournament?.ImageUrl ?? null;
+
+// Pure state->view mapping for the list/detail split on /admin/tournaments — selecting a
+// Tournament enters the full operational workspace; clearing the selection returns to the list.
+// Keeping this as a named function (rather than an inline ternary in the component) is what
+// makes "Xem chi tiết enters detail" / "back exits to list" testable without a DOM renderer.
+export const resolveTournamentPageView = (selectedTournament) =>
+  selectedTournament ? "detail" : "list";

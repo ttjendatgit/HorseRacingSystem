@@ -118,6 +118,30 @@ public class RejectJockeyRequest
     public string? Reason { get; set; }
 }
 
+// J-ADMIN-REVIEW: Admin-only Jockey review detail — deliberately separate from JockeyListResponse
+// (returned by GET /api/jockeys, visible to Owner/Jockey/Admin), which never included
+// Phone/Address/DateOfBirth/Height/Weight/IdCardNumber/LicenseFile/ApprovalNote/CreatedAt. Those
+// fields are sensitive verification data and must only ever reach this Admin-only endpoint.
+public class JockeyAdminDetailResponse
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public string? Phone { get; set; }
+    public string? Address { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public decimal? Height { get; set; }
+    public decimal? Weight { get; set; }
+    public string? IdCardNumber { get; set; }
+    public string? LicenseNumber { get; set; }
+    public string? LicenseFile { get; set; }
+    public string ApprovalStatus { get; set; } = string.Empty;
+    public string? ApprovalNote { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 public class RejectResultRequest
 {
     public string Reason { get; set; } = string.Empty;

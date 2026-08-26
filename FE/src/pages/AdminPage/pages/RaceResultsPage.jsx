@@ -1,10 +1,9 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { request } from "../../../services/apiClient";
-import { apiToVNDate } from "../../../utils/vnDateTime";
+import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
 import { isFinalRound } from "../../../utils/tournamentRegistration";
-import { getPlacementLabel, getRankedEntries } from "../../../utils/raceResultDisplay";
+import { buildRankingDisplayList, getPlacementLabel } from "../../../utils/raceResultDisplay";
 
-// RaceStatus — event lifecycle only. Retained numeric values (see BE Enums.cs).
 const STATUS_NUM = {
   1: "scheduled",
   2: "inprogress",
@@ -14,15 +13,14 @@ const STATUS_NUM = {
   8: "registrationclosed",
 };
 
-// Backend serializes enums as numbers (raw entities) or strings (DTOs)
 const normalizeStatus = (s) => {
   if (s === null || s === undefined) return "";
   if (typeof s === "number") return STATUS_NUM[s] ?? String(s);
-  return String(s).toLowerCase();
+  const text = String(s).trim();
+  if (/^\d+$/.test(text)) return STATUS_NUM[Number(text)] ?? text;
+  return text.toLowerCase();
 };
 
-// Only a Finished race can possibly have a result worth fetching — a race
-// that hasn't finished never has a RaceResult under the locked lifecycle.
 const RESULT_STATUSES = new Set(["finished"]);
 
 const STATUS_LABEL = {
@@ -34,24 +32,100 @@ const STATUS_LABEL = {
   cancelled: "Đã hủy",
 };
 
-const STATUS_COLOR = {
-  finished: { color: "var(--hr-success)", bg: "rgba(112,139,104,0.16)" },
+const STATUS_TONE = {
+  finished: "success",
+  inprogress: "live",
+  scheduled: "neutral",
+  registrationopen: "warning",
+  registrationclosed: "neutral",
+  cancelled: "danger",
 };
 
-// RaceResultStatus — separate concern. Only "Official" may be shown as a
-// settled winner; "Provisional" must always read as pending/unconfirmed
-// (see the render below, gated on det.resultStatus).
+const RESULT_STATUS_LABEL = {
+  official: "Chính thức",
+  provisional: "Tạm thời",
+};
 
-// Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js.
 const fmtDate = (v) => (v ? apiToVNDate(v) : "-");
+const fmtDateTime = (v) => (v ? apiToVNDisplay(v) : "-");
+const getValue = (obj, camel, pascal) => obj?.[camel] ?? obj?.[pascal];
+const getRaceDate = (race) => getValue(race, "scheduledAt", "ScheduledAt");
+
+const formatRoundLabel = (race) => {
+  const roundNumber = getValue(race, "roundNumber", "RoundNumber");
+  const roundName = getValue(race, "roundName", "RoundName");
+  if (roundNumber && roundName) return `Vòng ${roundNumber} · ${roundName}`;
+  if (roundNumber) return `Vòng ${roundNumber}`;
+  if (roundName) return roundName;
+  return "Chưa gắn vòng";
+};
+
+const formatSeconds = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${numeric.toFixed(2)}s` : "";
+};
+
+const getPlacementTone = (label) => {
+  if (label === "Bị loại") return "danger";
+  if (label === "Đi tiếp" || label === "Vô địch") return "success";
+  return "neutral";
+};
+
+function ResultStatusBadge({ status }) {
+  const key = (status || "").toLowerCase();
+  if (!key) return <span className="rr-result-status rr-result-status--empty">Chưa có</span>;
+  return (
+    <span className={`rr-result-status rr-result-status--${key}`}>
+      {RESULT_STATUS_LABEL[key] ?? status}
+    </span>
+  );
+}
+
+function ResultRow({ entry }) {
+  const isWinner = Number(entry.position) === 1;
+  const placementTone = getPlacementTone(entry.label);
+
+  return (
+    <div className={`rr-result-row ${isWinner ? "rr-result-row--winner" : ""}`}>
+      <span className="rr-rank">#{entry.position}</span>
+      <strong className="rr-runner-name">{entry.horseName ?? "Chưa xác định"}</strong>
+      <span className="rr-jockey">{entry.jockeyName ? `Kỵ sĩ: ${entry.jockeyName}` : "Chưa có kỵ sĩ"}</span>
+      {entry.label ? (
+        <span className={`rr-placement rr-placement--${placementTone}`}>{entry.label}</span>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function LegacyWinner({ det }) {
+  const time = formatSeconds(det.winnerTime);
+  const odds = det.winnerOdds ? `${Number(det.winnerOdds).toFixed(2)}x` : "";
+  const secondary = [det.winnerJockeyName && `Kỵ sĩ: ${det.winnerJockeyName}`, time && `Thành tích ${time}`, odds && `Tỉ lệ ${odds}`]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="rr-result-row rr-result-row--winner">
+      <span className="rr-rank">#1</span>
+      <strong className="rr-runner-name">{det.winnerHorseName}</strong>
+      <span className="rr-jockey">{secondary || "Chưa có kỵ sĩ"}</span>
+      <span className="rr-placement rr-placement--success">Thắng cuộc</span>
+    </div>
+  );
+}
 
 export default function RaceResultsPage() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setError("");
       try {
         const [racesRes, tournamentsRes] = await Promise.all([
           request("/api/races"),
@@ -83,6 +157,8 @@ export default function RaceResultsPage() {
               const resultStatus = (
                 resultData?.resultStatus ?? resultData?.ResultStatus ?? ""
               ).toLowerCase();
+              const rejectedReason =
+                resultData?.rejectedReason ?? resultData?.RejectedReason ?? "";
               const isOfficial = resultStatus === "official";
               const winnerHorseId =
                 resultData?.winningHorseId ?? resultData?.WinningHorseId;
@@ -90,10 +166,6 @@ export default function RaceResultsPage() {
                 (e) => (e.horseId ?? e.HorseId) === winnerHorseId,
               );
 
-              // Q1-UX: full ranking, sourced from RaceResultResponse.Rankings — the backend's own
-              // parse of the canonical RaceResult.RankingsJson (Q1's qualification authority),
-              // never RaceEntry.FinishPosition. Only built once Official; Provisional keeps the
-              // existing winner-only summary below.
               const tournamentId = race.tournamentId ?? race.TournamentId;
               const tournament = tournamentList.find(
                 (t) => (t.id ?? t.Id) === tournamentId,
@@ -101,29 +173,21 @@ export default function RaceResultsPage() {
               const isFinal = isFinalRound(race, tournament);
               const qualificationSlots = race.qualificationSlots ?? race.QualificationSlots;
               const rankings = resultData?.rankings ?? resultData?.Rankings ?? [];
-              const rankedEntries = isOfficial
-                ? getRankedEntries(rankings).map((r) => {
-                    const horseId = r.horseId ?? r.HorseId;
-                    const entry = entries.find(
-                      (e) => (e.horseId ?? e.HorseId) === horseId,
-                    );
-                    const position = r.position ?? r.Position;
-                    return {
-                      position,
-                      horseId,
-                      horseName:
-                        r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName,
-                      jockeyName: entry?.jockeyName ?? entry?.JockeyName,
-                      label: getPlacementLabel({ position, isFinal, qualificationSlots }),
-                    };
-                  })
-                : [];
+              // RESULT-APPROVAL-REVIEW-UX: the full ranking is built regardless of
+              // Provisional/Official — Admin must be able to review every position before
+              // approving, not just the winner. Only the qualification label ("Đi tiếp"/"Bị
+              // loại"/"Vô địch") stays Official-only, since that outcome isn't final until then.
+              const rankedEntries = buildRankingDisplayList(rankings, entries).map((r) => ({
+                ...r,
+                label: isOfficial ? getPlacementLabel({ position: r.position, isFinal, qualificationSlots }) : "",
+              }));
 
               return {
                 race,
                 det: {
                   entries,
                   resultStatus,
+                  rejectedReason,
                   rankedEntries,
                   winnerHorseName:
                     winnerEntry?.horseName ??
@@ -140,7 +204,15 @@ export default function RaceResultsPage() {
                 },
               };
             } catch {
-              return { race, det: { entries: [], resultStatus: "", rankedEntries: [], winnerHorseName: null } };
+              return {
+                race,
+                det: {
+                  entries: [],
+                  resultStatus: "",
+                  rankedEntries: [],
+                  winnerHorseName: null,
+                },
+              };
             }
           }),
         );
@@ -149,21 +221,27 @@ export default function RaceResultsPage() {
           const tMap = new Map(
             tournamentList.map((t) => [
               t.id ?? t.Id,
-              { name: t.name ?? t.Name, startDate: t.startDate ?? t.StartDate },
+              {
+                name: t.name ?? t.Name,
+                startDate: t.startDate ?? t.StartDate,
+                endDate: t.endDate ?? t.EndDate,
+              },
             ]),
           );
           const byTournament = new Map();
           loaded.filter(Boolean).forEach(({ race, det }) => {
             const tournamentId = race.tournamentId ?? race.TournamentId;
-            if (!byTournament.has(tournamentId)) {
-              byTournament.set(tournamentId, {
-                id: tournamentId,
+            const tournamentKey = tournamentId ?? "__unknown";
+            if (!byTournament.has(tournamentKey)) {
+              byTournament.set(tournamentKey, {
+                id: tournamentKey,
                 name: tMap.get(tournamentId)?.name ?? "Giải đấu",
                 startDate: tMap.get(tournamentId)?.startDate,
+                endDate: tMap.get(tournamentId)?.endDate,
                 races: [],
               });
             }
-            byTournament.get(tournamentId).races.push({ race, det });
+            byTournament.get(tournamentKey).races.push({ race, det });
           });
           const result = [...byTournament.values()]
             .sort(
@@ -173,14 +251,17 @@ export default function RaceResultsPage() {
           result.forEach((g) =>
             g.races.sort(
               (a, b) =>
-                new Date(b.race.scheduledAt ?? b.race.ScheduledAt) -
-                new Date(a.race.scheduledAt ?? a.race.ScheduledAt),
+                new Date(getRaceDate(b.race) ?? 0) -
+                new Date(getRaceDate(a.race) ?? 0),
             ),
           );
           setGroups(result);
         }
-      } catch {
-        /* ignore */
+      } catch (err) {
+        if (!cancelled) {
+          setGroups([]);
+          setError(err?.message || "Không thể tải dữ liệu kết quả cuộc đua.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -190,203 +271,114 @@ export default function RaceResultsPage() {
     };
   }, []);
 
-  if (loading)
+  const totalRaces = groups.reduce((sum, group) => sum + group.races.length, 0);
+  const officialRaces = groups.reduce(
+    (sum, group) =>
+      sum + group.races.filter(({ det }) => det.resultStatus === "official").length,
+    0,
+  );
+  const totalRankedEntries = groups.reduce(
+    (sum, group) =>
+      sum + group.races.reduce((raceSum, { det }) => raceSum + (det.rankedEntries?.length ?? 0), 0),
+    0,
+  );
+
+  if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "var(--hr-muted)" }}>
-        Đang tải...
+      <div className="rr-page">
+        <section className="rr-state-card">
+          <strong>Đang tải kết quả</strong>
+          <span>Đang tổng hợp các cuộc đua đã kết thúc.</span>
+        </section>
       </div>
     );
+  }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px" }}>
-      <h1 style={{ margin: "0 0 8px", fontSize: 28, color: "var(--hr-paper)" }}>
-        Kết quả cuộc đua
-      </h1>
-      <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--hr-muted)" }}>
-        Bảng xếp hạng đầy đủ của từng cuộc đua theo giải đấu.
-      </p>
+    <div className="rr-page">
+      <section className="rr-title">
+        <div>
+          <h1>Quản lý bảng xếp hạng</h1>
+          <p>Theo dõi kết quả đã nộp và thứ hạng chính thức theo từng giải đấu.</p>
+        </div>
+        <p className="rr-summary-line">
+          {groups.length} giải đấu · {totalRaces} cuộc đua · {officialRaces} chính thức · {totalRankedEntries} lượt xếp hạng
+        </p>
+      </section>
+
+      {error ? <p className="admin-notice admin-notice--error">{error}</p> : null}
 
       {groups.length === 0 ? (
-        <p style={{ color: "var(--hr-muted)" }}>Chưa có cuộc đua nào kết thúc.</p>
+        <section className="rr-state-card">
+          <strong>Chưa có cuộc đua nào kết thúc</strong>
+          <span>Khi trọng tài nộp kết quả và admin duyệt, bảng xếp hạng sẽ xuất hiện tại đây.</span>
+        </section>
       ) : (
         groups.map((group) => (
-          <section key={group.id} style={{ marginBottom: 28 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginBottom: 14,
-                paddingBottom: 10,
-                borderBottom: "2px solid var(--hr-border)",
-              }}
-            >
-              <span
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  background: "rgba(184,134,59,0.14)",
-                  color: "var(--hr-gold-soft)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: 15,
-                }}
-              >
-                {String(group.name || "?").slice(0, 1)}
-              </span>
+          <section key={group.id} className="rr-tournament">
+            <header className="rr-tournament__header">
               <div>
-                <h2 style={{ margin: 0, fontSize: 19, color: "var(--hr-paper)" }}>
-                  {group.name}
-                </h2>
-                <span style={{ fontSize: 12, color: "var(--hr-muted)" }}>
-                  {group.races.length} cuộc đua · {fmtDate(group.startDate)}
-                </span>
+                <h2>{group.name}</h2>
+                <p>
+                  {group.races.length} cuộc đua · {fmtDate(group.startDate)} → {fmtDate(group.endDate)}
+                </p>
               </div>
-            </div>
+            </header>
 
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              }}
-            >
+            <div className="rr-race-list">
               {group.races.map(({ race, det }) => {
                 const id = race.id ?? race.Id;
                 const status = normalizeStatus(race.status ?? race.Status);
+                const statusTone = STATUS_TONE[status] ?? "neutral";
                 const isOfficial = det.resultStatus === "official";
                 const hasWinner = Boolean(det.winnerHorseName) && isOfficial;
                 const hasProvisionalWinner =
                   Boolean(det.winnerHorseName) && det.resultStatus === "provisional";
-                const stColor =
-                  STATUS_COLOR[status] ?? { color: "var(--hr-muted)", bg: "rgba(238,229,212,0.06)" };
+                const raceName = race.name ?? race.Name ?? "Cuộc đua";
+                const location = race.location ?? race.Location;
+
                 return (
-                  <article
-                    key={id}
-                    style={{
-                      borderRadius: 14,
-                      border: "1px solid var(--hr-border)",
-                      background: "var(--hr-surface)",
-                      padding: "16px 18px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 10,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 8,
-                      }}
-                    >
+                  <article key={id} className="rr-race">
+                    <header className="rr-race__header">
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: "var(--hr-paper)" }}>
-                          {race.name ?? race.Name}
-                        </div>
-                        {(race.roundNumber ?? race.RoundNumber) && (
-                          <div style={{ fontSize: 12, color: "var(--hr-gold-soft)", marginTop: 2 }}>
-                            Vòng {race.roundNumber ?? race.RoundNumber}{(race.roundName ?? race.RoundName) ? ` — ${race.roundName ?? race.RoundName}` : ""}
-                          </div>
-                        )}
+                        <span className="rr-round">{formatRoundLabel(race)}</span>
+                        <h3>{raceName}</h3>
                       </div>
-                      <span
-                        style={{
-                          padding: "3px 10px",
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          whiteSpace: "nowrap",
-                          background: stColor.bg,
-                          color: stColor.color,
-                        }}
-                      >
+                      <span className={`rr-status rr-status--${statusTone}`}>
                         {STATUS_LABEL[status] ?? race.status ?? race.Status}
                       </span>
-                    </div>
+                    </header>
 
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "var(--hr-muted)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span>
-                        {fmtDate(race.scheduledAt ?? race.ScheduledAt)}
-                        {(race.location ?? race.Location)
-                          ? ` · ${race.location ?? race.Location}`
-                          : ""}
-                      </span>
+                    <div className="rr-race__meta">
+                      <span>{fmtDateTime(getRaceDate(race))}</span>
                       <span>{det.entries?.length ?? 0} ngựa</span>
+                      <span>{location || "Đường đua chưa xác định"}</span>
+                      <ResultStatusBadge status={det.resultStatus} />
                     </div>
 
-                    <div
-                      style={{
-                        borderTop: "1px solid var(--hr-border-soft)",
-                        paddingTop: 10,
-                      }}
-                    >
-                      {det.rankedEntries?.length > 0 ? (
-                        <div style={{ display: "grid", gap: 5 }}>
-                          {det.rankedEntries.map((r) => {
-                            const color =
-                              r.label === "Bị loại"
-                                ? "var(--hr-danger)"
-                                : r.label === "Đi tiếp" || r.label === "Vô địch"
-                                  ? "var(--hr-success)"
-                                  : "var(--hr-text)";
-                            return (
-                              <div key={r.horseId} style={{ fontSize: 12 }}>
-                                <span style={{ color: "var(--hr-paper)", fontWeight: r.position === 1 ? 700 : 600 }}>
-                                  {r.position === 1 ? "🏆 " : `#${r.position} `}
-                                  {r.horseName ?? "Chưa xác định"}
-                                </span>
-                                {r.jockeyName ? (
-                                  <span style={{ color: "var(--hr-muted)" }}> · {r.jockeyName}</span>
-                                ) : null}
-                                {r.label ? (
-                                  <span style={{ marginLeft: 6, fontWeight: 700, color }}>{r.label}</span>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : hasWinner ? (
-                        // Legacy safety: Official but no usable Rankings (pre-R0 data) — winner-only
-                        // fallback rather than a blank result.
-                        <>
-                          <div style={{ fontSize: 13, color: "var(--hr-success)", fontWeight: 700 }}>
-                            🏆 {det.winnerHorseName}
-                          </div>
-                          <div style={{ fontSize: 12, color: "var(--hr-text)", marginTop: 4 }}>
-                            Kỵ sĩ: <strong>{det.winnerJockeyName ?? "Chưa xác định"}</strong>
-                            {det.winnerOdds ? (
-                              <span style={{ color: "var(--hr-gold-soft)" }}>
-                                {" "}
-                                · Tỉ lệ {Number(det.winnerOdds).toFixed(2)}x
-                              </span>
-                            ) : null}
-                            {det.winnerTime ? (
-                              <span> · {Number(det.winnerTime).toFixed(2)}s</span>
-                            ) : null}
-                          </div>
-                        </>
-                      ) : hasProvisionalWinner ? (
-                        <div style={{ fontSize: 13, color: "var(--hr-warning)" }}>
-                          ⏳ Kết quả tạm thời — <strong>{det.winnerHorseName}</strong> đang chờ admin duyệt thành chính thức.
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 13, color: "var(--hr-muted)" }}>
-                          Chưa có kết quả — chờ trọng tài nộp và admin duyệt.
-                        </div>
-                      )}
-                    </div>
+                    {det.resultStatus === "provisional" && det.rejectedReason ? (
+                      <p className="rr-inline-state" style={{ color: "var(--hr-danger)" }}>
+                        Cần chỉnh sửa kết quả: {det.rejectedReason}
+                      </p>
+                    ) : null}
+
+                    {det.rankedEntries?.length > 0 ? (
+                      <div className="rr-result-list">
+                        {det.rankedEntries.map((entry) => (
+                          <ResultRow key={`${entry.horseId}-${entry.position}`} entry={entry} />
+                        ))}
+                      </div>
+                    ) : hasWinner ? (
+                      <div className="rr-result-list">
+                        <LegacyWinner det={det} />
+                      </div>
+                    ) : hasProvisionalWinner ? (
+                      <p className="rr-inline-state">
+                        Kết quả tạm thời: <strong>{det.winnerHorseName}</strong> đang chờ duyệt chính thức.
+                      </p>
+                    ) : (
+                      <p className="rr-inline-state">Chưa có kết quả. Chờ trọng tài nộp và admin duyệt.</p>
+                    )}
                   </article>
                 );
               })}

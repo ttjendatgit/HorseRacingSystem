@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
+using HorseRacing.Models;
 
 namespace HorseRacing.Services.Interfaces;
 
 public interface IPrizeService
 {
     Task<ServiceResult<PrizeResponse>> CreateAsync(CreatePrizeRequest request);
+    Task<ServiceResult<PrizeResponse>> UpdateAsync(Guid id, UpdatePrizeRequest request);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByTournamentAsync(Guid tournamentId);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByRaceAsync(Guid raceId);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetAllAsync();
@@ -19,7 +21,23 @@ public interface IProtestService
     Task<ServiceResult<ProtestResponse>> FileAsync(CreateProtestRequest request, Guid filedByUserId);
     Task<ServiceResult<IEnumerable<ProtestResponse>>> GetPendingAsync();
     Task<ServiceResult<IEnumerable<ProtestResponse>>> GetAllAsync();
+    Task<ServiceResult<IEnumerable<ProtestResponse>>> GetByFiledByUserAsync(Guid filedByUserId);
+    Task<ServiceResult<ProtestResponse>> MarkUnderReviewAsync(Guid id, Guid reviewedByUserId);
     Task<ServiceResult<ProtestResponse>> RuleAsync(Guid id, RuleProtestRequest request, Guid ruledByUserId);
+    Task<ServiceResult<ProtestResponse>> WithdrawAsync(Guid id, Guid requestingUserId);
+}
+
+public interface IRaceComplaintService
+{
+    Task<ServiceResult<RaceComplaintResponse>> FileAsync(CreateRaceComplaintRequest request, Guid filedByUserId);
+    Task<ServiceResult<IEnumerable<RaceComplaintResponse>>> GetAllAsync(RaceComplaintStatus? status = null);
+    Task<ServiceResult<IEnumerable<RaceComplaintResponse>>> GetByFiledByUserAsync(Guid filedByUserId);
+    Task<ServiceResult<IEnumerable<RaceComplaintResponse>>> GetForRefereeAsync(Guid refereeUserId);
+    Task<ServiceResult<IEnumerable<RaceComplaintEligibleRaceResponse>>> GetEligibleRacesAsync(Guid userId);
+    Task<ServiceResult<RaceComplaintResponse>> RouteAsync(Guid id, RouteRaceComplaintRequest request, Guid adminUserId);
+    Task<ServiceResult<RaceComplaintResponse>> RespondAsync(Guid id, RespondRaceComplaintRequest request, Guid refereeUserId);
+    Task<ServiceResult<RaceComplaintResponse>> RuleAsync(Guid id, RuleRaceComplaintRequest request, Guid ruledByUserId);
+    Task<ServiceResult<RaceComplaintResponse>> WithdrawAsync(Guid id, Guid requestingUserId);
 }
 
 public interface IHorseTransferService
