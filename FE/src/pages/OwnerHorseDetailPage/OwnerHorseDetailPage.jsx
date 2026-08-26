@@ -20,6 +20,12 @@ const registrationStatusLabels = {
   3: "Từ chối",
 };
 
+const approvalStatusClassMap = {
+  1: "pending",
+  2: "approved",
+  3: "rejected",
+};
+
 function OwnerHorseDetailPage() {
   const { id } = useParams();
   const [horse, setHorse] = useState(null);
@@ -65,9 +71,12 @@ function OwnerHorseDetailPage() {
     };
   }, [id]);
 
+  const approvalStatus = horse?.approvalStatus ?? horse?.ApprovalStatus ?? 1;
   const statusLabel = horse
-    ? (approvalStatusMap[horse.approvalStatus] ?? "Chờ duyệt")
+    ? (approvalStatusMap[approvalStatus] ?? "Chờ duyệt")
     : "Chờ duyệt";
+  const statusClass = approvalStatusClassMap[approvalStatus] ?? "pending";
+  const approvalNote = horse?.approvalNote ?? horse?.ApprovalNote ?? "";
 
   const formattedDob = horse?.dateOfBirth
     ? new Date(horse.dateOfBirth).toLocaleDateString()
@@ -174,21 +183,18 @@ function OwnerHorseDetailPage() {
               </div>
               <div className="horse-banner__content">
                 <div className="horse-banner__header">
-                  <span className={`horse-detail-status horse-detail-status--${statusLabel.toLowerCase()}`}>
+                  <span className={`horse-detail-status horse-detail-status--${statusClass}`}>
                     {statusLabel}
                   </span>
                   {(horse.isArchived ?? horse.IsArchived) ? (
-                    <span
-                      className="horse-detail-status"
-                      style={{ background: "rgba(71,85,105,0.14)", color: "#334155" }}
-                    >
+                    <span className="horse-detail-status horse-detail-status--archived">
                       Đã lưu trữ
                     </span>
                   ) : null}
                   {/* Editing an archived Horse is backend-rejected (HorseService.UpdateHorseAsync) — hidden here to match. */}
                   {!isJockeyRole() && !(horse.isArchived ?? horse.IsArchived) && (
                     <Link className="secondary-button" to={`/owner/horses/${horse.id}/edit`}>
-                      Chỉnh sửa hồ sơ
+                      {approvalStatus === 3 ? "Gửi duyệt lại" : "Chỉnh sửa hồ sơ"}
                     </Link>
                   )}
                 </div>
@@ -199,6 +205,12 @@ function OwnerHorseDetailPage() {
                   {horse.color ? ` • ${horse.color}` : ""}
                   {horse.gender ? ` • ${horse.gender}` : ""}
                 </p>
+                {approvalStatus === 3 ? (
+                  <div className="horse-approval-note">
+                    <strong>Lý do từ chối</strong>
+                    <span>{approvalNote || "Admin đã từ chối hồ sơ. Vui lòng cập nhật và gửi duyệt lại."}</span>
+                  </div>
+                ) : null}
                 <div className="horse-banner__meta">
                   <div>
                     <span>Tuổi</span>

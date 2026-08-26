@@ -62,11 +62,11 @@ export const getRaceComplaintStatusDetails = (status) => {
     case "UnderReview":
       return { status: normalized, label: "Đang xem xét", variant: "active", group: "underReview" };
     case "Upheld":
-      return { status: normalized, label: "Chấp nhận khiếu nại", variant: "approved", group: "resolved" };
+      return { status: normalized, label: "Khiếu nại được chấp nhận", variant: "approved", group: "resolved" };
     case "Rejected":
-      return { status: normalized, label: "Bác khiếu nại", variant: "rejected", group: "resolved" };
+      return { status: normalized, label: "Khiếu nại bị bác", variant: "rejected", group: "resolved" };
     case "Withdrawn":
-      return { status: normalized, label: "Đã rút", variant: "inactive", group: "resolved" };
+      return { status: normalized, label: "Đã rút khiếu nại", variant: "inactive", group: "resolved" };
     default:
       return { status: normalized, label: String(status || "Không rõ"), variant: "inactive", group: "resolved" };
   }
@@ -121,6 +121,16 @@ export const canRefereeRespond = (status) =>
 export const canFilerWithdraw = (status) => {
   const normalized = normalizeRaceComplaintStatus(status);
   return normalized === "Pending" || normalized === "AwaitingRefereeResponse" || normalized === "UnderReview";
+};
+
+// OWNER-DEMO-POLISH-V1.2 §3: a complaint only has an actual Admin ruling once it's Upheld or
+// Rejected — Withdrawn is a terminal state too (canFilerWithdraw is false), but it was never ruled
+// on, so its "expand" CTA must read "Xem chi tiết" like the still-open statuses, never
+// "Mở kết luận". Do not derive this from !canFilerWithdraw — that conflates "no longer
+// withdrawable" with "has a ruling", which is exactly the Withdrawn bug this fixes.
+export const hasFinalComplaintRuling = (status) => {
+  const normalized = normalizeRaceComplaintStatus(status);
+  return normalized === "Upheld" || normalized === "Rejected";
 };
 
 export const buildRuleRaceComplaintPayload = (outcome, ruling, affectsResult = null) => {

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Controllers;
 using HorseRacing.Dtos;
@@ -167,8 +168,67 @@ public class HorseOwnerAuthorizationTests
         await f.Db.SaveChangesAsync();
 
         var service = BuildHorseService(f);
-        var result = await service.CreateHorseAsync(userId, new HorseCreateRequest { Name = "New Horse" });
+        var result = await service.CreateHorseAsync(userId, new HorseCreateRequest { Name = "New Horse", Weight = 480, Height = 165 });
         Assert.Equal(200, result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 165, "Cân nặng phải lớn hơn 0")]
+    [InlineData(-1, 165, "Cân nặng phải lớn hơn 0")]
+    [InlineData(480, 0, "Chiều cao phải lớn hơn 0")]
+    [InlineData(480, -1, "Chiều cao phải lớn hơn 0")]
+    public async Task Owner_CreateHorse_InvalidWeightOrHeight_Rejected(decimal weight, decimal height, string expectedMessage)
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var userId = Guid.NewGuid();
+        var user = new User { Id = userId, Email = "owner-invalid-measure@test.com", PasswordHash = "x", FullName = "Owner", Role = UserRole.HorseOwner };
+        var owner = new Owner { Id = Guid.NewGuid(), UserId = userId, OwnerCode = "OWN-INVALID-MEASURE" };
+        f.Db.AddRange(user, owner);
+        await f.Db.SaveChangesAsync();
+
+        var service = BuildHorseService(f);
+        var result = await service.CreateHorseAsync(userId, new HorseCreateRequest { Name = "Invalid Horse", Weight = weight, Height = height });
+
+        Assert.False(result.Result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Equal(expectedMessage, result.Result.Message);
+    }
+
+    [Theory]
+    [InlineData("""{"name":"Bad Horse","weight":1e2,"height":165}""")]
+    [InlineData("""{"name":"Bad Horse","weight":480,"height":1e2}""")]
+    [InlineData("""{"name":"Bad Horse","weight":-480,"height":165}""")]
+    [InlineData("""{"name":"Bad Horse","weight":"+480","height":165}""")]
+    [InlineData("""{"name":"Bad Horse","weight":"480kg","height":165}""")]
+    [InlineData("""{"name":"Bad Horse","weight":480.5,"height":165}""")]
+    public void HorseCreateRequest_InvalidMeasurementTokens_RejectedDuringJsonParsing(string json)
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HorseCreateRequest>(json, options));
+    }
+
+    [Fact]
+    public async Task Owner_UpdateRejectedHorse_ResetsApprovalToPending()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (_, userId, horseId) = await CreateApprovedOwnerHorseAsync(f, "resubmit");
+        var horse = await f.Db.Horses.FirstAsync(h => h.Id == horseId);
+        horse.ApprovalStatus = ApprovalStatus.Rejected;
+        horse.ApprovalNote = "Thiếu chiều cao hợp lệ";
+        await f.Db.SaveChangesAsync();
+
+        var service = BuildHorseService(f);
+        var result = await service.UpdateHorseAsync(userId, horseId, new HorseUpdateRequest
+        {
+            Name = "Horse-resubmit-updated",
+            Weight = 481,
+            Height = 166,
+        });
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        var updated = await f.Db.Horses.AsNoTracking().FirstAsync(h => h.Id == horseId);
+        Assert.Equal(ApprovalStatus.Pending, updated.ApprovalStatus);
+        Assert.Null(updated.ApprovalNote);
     }
 
     [Fact]

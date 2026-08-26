@@ -146,6 +146,45 @@ describe("buildRankingDisplayList (RESULT-APPROVAL-REVIEW-UX)", () => {
     assert.equal(rows.length, 3);
     assert.equal(rows[0].isWinner, true);
   });
+
+  // ── OWNER-DEMO-POLISH-V1.2 §1/§15: Owner Finished Tournament ranking was showing missing
+  // Jockeys for Horses outside the logged-in Owner's own participation data. Root cause was the
+  // CALLER passing an Owner-scoped RaceEntry list (their own Horses only) into this function —
+  // buildRankingDisplayList itself was always correct, it just needs the FULL, race-wide RaceEntry
+  // list (every Horse in that Race) to resolve every ranked Horse's official Jockey. These tests
+  // pin that requirement so a future caller can't silently regress back to a scoped/partial list. ──
+  test("full race-wide entries resolve the Jockey for every ranked Horse, including ones the viewing Owner does not own", () => {
+    const officialRankings = [
+      { position: 1, horseId: "bach-ma", horseName: "Bach Ma" },
+      { position: 2, horseId: "alain", horseName: "Alain" },
+      { position: 3, horseId: "anassar", horseName: "Anassar" },
+    ];
+    // Simulates GET /api/referees/race/{raceId}/entries — every Approved entry in the Race,
+    // across every Owner, not filtered to any single viewer.
+    const fullRaceEntries = [
+      { horseId: "bach-ma", jockeyName: "Ky Si Mot" },
+      { horseId: "alain", jockeyName: "Ky Si Hai" },
+      { horseId: "anassar", jockeyName: "Ky Si Ba" },
+    ];
+    const rows = buildRankingDisplayList(officialRankings, fullRaceEntries);
+    assert.equal(rows.find((r) => r.horseId === "bach-ma").jockeyName, "Ky Si Mot");
+    assert.equal(rows.find((r) => r.horseId === "alain").jockeyName, "Ky Si Hai");
+    assert.equal(rows.find((r) => r.horseId === "anassar").jockeyName, "Ky Si Ba");
+  });
+
+  test("an Owner-scoped (partial) entries list reproduces the original bug — other Owners' Horses show no Jockey", () => {
+    const officialRankings = [
+      { position: 1, horseId: "bach-ma", horseName: "Bach Ma" },
+      { position: 2, horseId: "alain", horseName: "Alain" },
+      { position: 3, horseId: "anassar", horseName: "Anassar" },
+    ];
+    // The viewing Owner only owns "Bach Ma" — this is what the old, buggy caller passed in.
+    const ownerScopedEntries = [{ horseId: "bach-ma", jockeyName: "Ky Si Mot" }];
+    const rows = buildRankingDisplayList(officialRankings, ownerScopedEntries);
+    assert.equal(rows.find((r) => r.horseId === "bach-ma").jockeyName, "Ky Si Mot");
+    assert.equal(rows.find((r) => r.horseId === "alain").jockeyName, null, "documents the bug: a scoped entries list loses this Jockey");
+    assert.equal(rows.find((r) => r.horseId === "anassar").jockeyName, null, "documents the bug: a scoped entries list loses this Jockey");
+  });
 });
 
 describe("getPlacementLabel", () => {

@@ -10,6 +10,12 @@ import { getOwnerTournaments } from "../../services/ownerApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
 import { getTournamentRegistrationState, getCapacityFullMessage } from "../../utils/tournamentRegistration";
 import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
+import {
+  buildTournamentRequirementItems,
+  canSubmitTournamentRegistration,
+  getHorseTournamentSelectionState,
+  ownerHasActiveTournamentRegistration,
+} from "../../utils/ownerDemoDisplay";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentRegisterPage.css";
 
@@ -40,7 +46,16 @@ const mapRegistration = (r) => {
     statusRaw: status,
     status: getRegistrationStatusLabel(status),
     submitted: (r.createdAt ?? r.CreatedAt ?? "").toString().slice(0, 10),
+    note: r.note ?? r.Note ?? "",
   };
+};
+
+const getRegistrationTone = (status) => {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (normalized === "approved") return "approved";
+  if (normalized === "rejected") return "rejected";
+  if (normalized === "withdrawn") return "withdrawn";
+  return "pending";
 };
 
 function OwnerTournamentRegisterPage() {
@@ -101,20 +116,18 @@ function OwnerTournamentRegisterPage() {
 
       try {
         const data = await getMyHorses();
-        const approvedHorses = (Array.isArray(data) ? data : []).filter(
-          (horse) =>
-            horse.approvalStatus === 2 || horse.approvalStatus === "Approved",
+        const visibleHorses = (Array.isArray(data) ? data : []).filter(
+          (horse) => !(horse.isArchived ?? horse.IsArchived),
         );
 
         if (isMounted) {
-          setHorses(approvedHorses);
-          setSelectedHorseId(approvedHorses[0]?.id ?? "");
+          setHorses(visibleHorses);
         }
       } catch (err) {
         if (isMounted) {
           setHorses([]);
           setSelectedHorseId("");
-          setHorseError(err?.message || "Không thể tải danh sách ngựa đã duyệt.");
+          setHorseError(err?.message || "Không thể tải danh sách ngựa.");
         }
       } finally {
         if (isMounted) setIsHorseLoading(false);
@@ -171,6 +184,18 @@ function OwnerTournamentRegisterPage() {
     [selectedTournamentId, tournaments],
   );
 
+  useEffect(() => {
+    if (isHorseLoading || horses.length === 0) return;
+    const currentHorse = horses.find((horse) => horse.id === selectedHorseId);
+    const currentState = getHorseTournamentSelectionState(currentHorse, registrations, selectedTournamentId);
+    if (currentHorse && currentState.selectable) return;
+
+    const firstSelectable = horses.find(
+      (horse) => getHorseTournamentSelectionState(horse, registrations, selectedTournamentId).selectable,
+    );
+    setSelectedHorseId(firstSelectable?.id ?? horses[0]?.id ?? "");
+  }, [horses, isHorseLoading, registrations, selectedHorseId, selectedTournamentId]);
+
   // Resolved only after the Tournament list has actually loaded — before that, "not found" would
   // be a false negative, not a real "closed" state.
   const tournamentUnavailable =
@@ -198,32 +223,27 @@ function OwnerTournamentRegisterPage() {
     );
   }, [registrations, selectedHorseId, selectedTournamentId]);
 
-  const eligibilityChecks = [
-    {
-      label: "Duyệt ngựa",
-      value: selectedHorse ? "Đã duyệt" : "Không có ngựa được chọn",
-      tone: selectedHorse ? "success" : "warning",
-    },
-    {
-      label: "Yêu cầu tuổi",
-      value: selectedHorse?.age >= 3 ? "Đủ điều kiện" : "Quá trẻ",
-      tone: selectedHorse?.age >= 3 ? "success" : "warning",
-    },
-    {
-      label: "Thành tích đua",
-      value: selectedHorse
-        ? `${selectedHorse.totalWins ?? 0} trận thắng / ${selectedHorse.totalRaces ?? 0} cuộc đua`
-        : "-",
-      tone: selectedHorse ? "success" : "warning",
-    },
-    {
-      label: "Trạng thái đăng ký giải",
-      value: selectedTournament
-        ? selectedTournament.registrationLabel
-        : (cameFromTournamentCard ? "Giải đấu chưa được công bố." : "Chưa chọn giải đấu"),
-      tone: selectedTournament?.registerable ? "success" : "warning",
-    },
-  ];
+  const hasOwnerActiveRegistration = useMemo(
+    () => ownerHasActiveTournamentRegistration(registrations, selectedTournamentId),
+    [registrations, selectedTournamentId],
+  );
+
+  const selectedHorseState = useMemo(
+    () => getHorseTournamentSelectionState(selectedHorse, registrations, selectedTournamentId),
+    [registrations, selectedHorse, selectedTournamentId],
+  );
+
+  const selectedHorseTone = selectedHorseState.selectable
+    ? "success"
+    : selectedHorseState.label === "Chờ duyệt"
+      ? "pending"
+      : "warning";
+
+  const eligibilityChecks = buildTournamentRequirementItems({
+    tournament: selectedTournament,
+    selectedHorseState,
+    hasHorse: Boolean(selectedHorse),
+  });
 
   const handleSubmitRegistration = async () => {
     if (!selectedHorse || !selectedTournament) return;
@@ -254,11 +274,21 @@ function OwnerTournamentRegisterPage() {
     }
   };
 
-  const canSubmit =
-    !!selectedHorse &&
-    !!selectedTournament?.registerable &&
-    !isSubmitting &&
-    !hasExistingRegistration;
+  // Not currently registerable-available at all (direct nav, no Tournament card clicked) — the
+  // select is already empty/disabled in this case; the CTA must say so too instead of the generic
+  // "Đăng ký", which reads as actionable even while the button itself stays disabled. Neutral
+  // wording only — this is an unavailable state, not an error.
+  const noRegisterableTournament =
+    !isTournamentLoading && !cameFromTournamentCard && tournaments.filter((t) => t.registerable).length === 0;
+
+  const canSubmit = canSubmitTournamentRegistration({
+    selectedHorse,
+    selectedHorseState,
+    selectedTournament,
+    isSubmitting,
+    hasExistingRegistration,
+    hasOwnerActiveRegistration,
+  });
 
   return (
     <div className="owner-page owner-tournament-register">
@@ -266,7 +296,7 @@ function OwnerTournamentRegisterPage() {
         <div className="owner-content">
           <section className="page-header">
             <h1>Đăng ký ngựa vào giải đấu</h1>
-            <p>Chọn ngựa, kiểm tra điều kiện và theo dõi từng yêu cầu.</p>
+            <p>Chọn ngựa và giải đấu, kiểm tra điều kiện đăng ký, và theo dõi trạng thái từng yêu cầu đã gửi.</p>
           </section>
 
           <section className="register-grid">
@@ -290,18 +320,32 @@ function OwnerTournamentRegisterPage() {
                 >
                   {isHorseLoading ? (
                     <option value="">
-                      Đang tải danh sách ngựa đã duyệt...
+                      Đang tải danh sách ngựa...
                     </option>
                   ) : horses.length === 0 ? (
-                    <option value="">Không có ngựa đã duyệt nào</option>
+                    <option value="">Không có ngựa khả dụng</option>
                   ) : null}
-                  {horses.map((horse) => (
-                    <option key={horse.id} value={horse.id}>
-                      {horse.name} · Đã duyệt · {horse.age ?? "-"} tuổi
-                    </option>
-                  ))}
+                  {horses.map((horse) => {
+                    const state = getHorseTournamentSelectionState(horse, registrations, selectedTournamentId);
+                    return (
+                      <option key={horse.id} value={horse.id} disabled={!state.selectable}>
+                        {horse.name} · {state.label}
+                        {state.reason ? ` · ${state.reason}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
                 {horseError ? <p className="form-error">{horseError}</p> : null}
+                {selectedHorse ? (
+                  <div className={`horse-registration-state horse-registration-state--${selectedHorseTone}`}>
+                    <span>{selectedHorseState.label}</span>
+                    <strong>{selectedHorse.name}</strong>
+                    <p>
+                      {selectedHorseState.reason ||
+                        "Ngựa đã được duyệt và có thể gửi đăng ký cho giải đấu đã chọn."}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               {/* Task B Final §4: entering from a Tournament card shows that exact Tournament
@@ -362,11 +406,11 @@ function OwnerTournamentRegisterPage() {
                 <div>
                   <span>Ngựa</span>
                   <strong>
-                    {selectedHorse?.name ?? "Không có ngựa đã duyệt"}
+                    {selectedHorse?.name ?? "Không có ngựa đủ điều kiện"}
                   </strong>
                   <p>
                     {selectedHorse
-                      ? `${selectedHorse.age ?? "-"} tuổi · ${selectedHorse.totalWins ?? 0} trận thắng / ${selectedHorse.totalRaces ?? 0} cuộc đua`
+                      ? `${selectedHorseState.label} · ${selectedHorseState.reason || `${selectedHorse.totalWins ?? 0} trận thắng / ${selectedHorse.totalRaces ?? 0} cuộc đua`}`
                       : "Cần có ngựa đã được duyệt."}
                   </p>
                 </div>
@@ -394,18 +438,25 @@ function OwnerTournamentRegisterPage() {
                   type="button"
                   onClick={() => setShowConfirm(true)}
                   disabled={!canSubmit}
+                  aria-disabled={!canSubmit}
                 >
-                  {isSubmitting
+                    {isSubmitting
                     ? "Đang gửi..."
                     : tournamentUnavailable
                       ? unavailableTournamentMessage
-                      : hasExistingRegistration
-                        ? "Đã đăng ký"
-                        : "Đăng ký"}
+                      : noRegisterableTournament
+                        ? "Không có giải đấu để đăng ký"
+                        : hasExistingRegistration || hasOwnerActiveRegistration
+                          ? "Đã đăng ký"
+                          : "Đăng ký"}
                 </button>
                 {hasExistingRegistration ? (
                   <p className="form-error">
                     Ngựa này đã được đăng ký cho giải đấu đã chọn.
+                  </p>
+                ) : hasOwnerActiveRegistration ? (
+                  <p className="form-error">
+                    Bạn đã có một ngựa đang đăng ký hoặc đã được duyệt cho giải này.
                   </p>
                 ) : null}
               </div>
@@ -413,8 +464,11 @@ function OwnerTournamentRegisterPage() {
 
             <div className="eligibility-card">
               <div className="section-heading">
-                <h2>Kiểm tra điều kiện</h2>
-                <p>Xem trước cho lựa chọn hiện tại.</p>
+                <h2>Kiểm tra điều kiện đăng ký</h2>
+                <p>
+                  Một số dòng là yêu cầu bắt buộc, một số phản ánh tình trạng hiện tại của giải
+                  đấu, và dòng cuối cùng còn được hệ thống xác thực lại khi bạn gửi đăng ký.
+                </p>
               </div>
               <div className="eligibility-list">
                 {eligibilityChecks.map((check) => (
@@ -423,7 +477,7 @@ function OwnerTournamentRegisterPage() {
                     className={`eligibility-item eligibility-item--${check.tone}`}
                   >
                     <span>{check.label}</span>
-                    <strong>{check.value}</strong>
+                    <strong>{check.detail}</strong>
                   </div>
                 ))}
               </div>
@@ -440,7 +494,7 @@ function OwnerTournamentRegisterPage() {
           <section className="registration-status">
             <div className="section-heading">
               <h2>Trạng thái đăng ký</h2>
-              <p>Theo dõi yêu cầu giải đấu đã gửi từ chuồng ngựa.</p>
+              <p>Lịch sử các yêu cầu đăng ký giải đấu đã gửi từ chuồng ngựa của bạn.</p>
             </div>
             {withdrawMsg ? (
               <p className={withdrawMsg.startsWith("Lỗi") ? "form-error" : "form-success"}>
@@ -459,40 +513,45 @@ function OwnerTournamentRegisterPage() {
                   const canWithdraw =
                     (registration.statusRaw === "Pending" || registration.statusRaw === "Approved") &&
                     registration.tournamentStatus === "Published";
+                  const tone = getRegistrationTone(registration.statusRaw);
                   return (
-                    <article key={registration.id} className="registration-row">
-                      <div>
-                        <span>Ngựa</span>
-                        <strong>{registration.horse}</strong>
-                      </div>
-                      <div>
-                        <span>Giải đấu</span>
-                        <strong>{registration.tournament}</strong>
-                      </div>
-                      <div>
-                        <span>Đã gửi</span>
-                        <strong>{registration.submitted}</strong>
-                      </div>
-                      <div>
-                        <span>Trạng thái</span>
-                        <strong
-                          className={`registration-status-pill registration-status-pill--${registration.status
-                            .toLowerCase()
-                            .replace(/\s+/g, "-")}`}
-                        >
-                          {registration.status}
-                        </strong>
-                      </div>
-                      {canWithdraw ? (
+                    <article key={registration.id} className={`registration-row registration-row--${tone}`}>
+                      <div className="registration-row__main">
                         <div>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            disabled={withdrawingId === registration.id}
-                            onClick={() => handleWithdraw(registration)}
-                          >
-                            {withdrawingId === registration.id ? "Đang rút..." : "Rút đăng ký"}
-                          </button>
+                          <span>Ngựa</span>
+                          <strong>{registration.horse}</strong>
+                        </div>
+                        <div>
+                          <span>Giải đấu</span>
+                          <strong>{registration.tournament}</strong>
+                        </div>
+                        <div>
+                          <span>Đã gửi</span>
+                          <strong>{registration.submitted}</strong>
+                        </div>
+                        <div>
+                          <span>Trạng thái</span>
+                          <strong className={`registration-status-pill registration-status-pill--${tone}`}>
+                            {registration.status}
+                          </strong>
+                        </div>
+                        {canWithdraw ? (
+                          <div>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              disabled={withdrawingId === registration.id}
+                              onClick={() => handleWithdraw(registration)}
+                            >
+                              {withdrawingId === registration.id ? "Đang rút..." : "Rút đăng ký"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      {tone === "rejected" && registration.note ? (
+                        <div className="registration-row__reason">
+                          <span>Lý do từ chối</span>
+                          <p>{registration.note}</p>
                         </div>
                       ) : null}
                     </article>

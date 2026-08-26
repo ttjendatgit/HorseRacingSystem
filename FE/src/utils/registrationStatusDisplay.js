@@ -12,3 +12,18 @@ export function getRegistrationStatusLabel(status) {
   const key = (status ?? "").toString().trim().toLowerCase();
   return REGISTRATION_STATUS_LABELS[key] ?? "Chờ duyệt";
 }
+
+// Semantic color tone for the same enum — shared across Owner pages so a given status always
+// reads the same way: pass=green (Approved), caution=gold (Pending), fail=red (Rejected),
+// neutral=muted gray (Withdrawn / unknown).
+const REGISTRATION_STATUS_TONES = Object.freeze({
+  pending: "caution",
+  approved: "pass",
+  rejected: "fail",
+  withdrawn: "neutral",
+});
+
+export function getRegistrationStatusTone(status) {
+  const key = (status ?? "").toString().trim().toLowerCase();
+  return REGISTRATION_STATUS_TONES[key] ?? "neutral";
+}

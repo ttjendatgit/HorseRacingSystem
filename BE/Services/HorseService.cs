@@ -89,7 +89,13 @@ public class HorseService : IHorseService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
         }
 
-        var validationError = ValidateHorseStats(request.DateOfBirth, request.Age, request.TotalRaces, request.TotalWins);
+        var validationError = ValidateHorseStats(
+            request.DateOfBirth,
+            request.Age,
+            request.Weight,
+            request.Height,
+            request.TotalRaces,
+            request.TotalWins);
         if (validationError != null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, validationError);
@@ -150,7 +156,15 @@ public class HorseService : IHorseService
             return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Ngựa đã được lưu trữ (archive) và không thể chỉnh sửa.");
         }
 
-        var validationError = ValidateHorseStats(request.DateOfBirth, request.Age, request.TotalRaces, request.TotalWins);
+        var wasRejectedByOwner = !isAdmin && horse.ApprovalStatus == ApprovalStatus.Rejected;
+
+        var validationError = ValidateHorseStats(
+            request.DateOfBirth,
+            request.Age,
+            request.Weight,
+            request.Height,
+            request.TotalRaces,
+            request.TotalWins);
         if (validationError != null)
         {
             return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, validationError);
@@ -167,6 +181,11 @@ public class HorseService : IHorseService
         horse.TotalRaces = request.TotalRaces;
         horse.TotalWins = request.TotalWins;
         horse.ImageUrl = request.ImageUrl;
+        if (wasRejectedByOwner)
+        {
+            horse.ApprovalStatus = ApprovalStatus.Pending;
+            horse.ApprovalNote = null;
+        }
         await _unitOfWork.SaveChangesAsync();
 
         return ServiceResult<object>.Ok(horse);
@@ -877,8 +896,28 @@ public class HorseService : IHorseService
 
     private Task<Owner?> GetOwnerProfileAsync(Guid userId) => _owners.GetByUserIdAsync(userId);
 
-    private static string? ValidateHorseStats(DateTime? dateOfBirth, int age, int totalRaces, int totalWins)
+    private static string? ValidateHorseStats(DateTime? dateOfBirth, int age, decimal? weight, decimal? height, int totalRaces, int totalWins)
     {
+        if (weight is null || weight <= 0)
+        {
+            return "Cân nặng phải lớn hơn 0";
+        }
+
+        if (decimal.Truncate(weight.Value) != weight.Value)
+        {
+            return "Cân nặng chỉ được nhập chữ số";
+        }
+
+        if (height is null || height <= 0)
+        {
+            return "Chiều cao phải lớn hơn 0";
+        }
+
+        if (decimal.Truncate(height.Value) != height.Value)
+        {
+            return "Chiều cao chỉ được nhập chữ số";
+        }
+
         if (dateOfBirth.HasValue)
         {
             var birthDate = dateOfBirth.Value.Date;

@@ -1,5 +1,10 @@
 using System;
+using System.Buffers;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HorseRacing.Dtos;
 
@@ -19,8 +24,10 @@ public class HorseCreateRequest
 
     public int Age { get; set; }
 
+    [JsonConverter(typeof(HorseMeasurementDecimalConverter))]
     public decimal? Weight { get; set; }
 
+    [JsonConverter(typeof(HorseMeasurementDecimalConverter))]
     public decimal? Height { get; set; }
 
     [MaxLength(50)]
@@ -50,8 +57,10 @@ public class HorseUpdateRequest
 
     public int Age { get; set; }
 
+    [JsonConverter(typeof(HorseMeasurementDecimalConverter))]
     public decimal? Weight { get; set; }
 
+    [JsonConverter(typeof(HorseMeasurementDecimalConverter))]
     public decimal? Height { get; set; }
 
     [MaxLength(50)]
@@ -98,4 +107,52 @@ public class OwnerFinalConfirmJockeyRequest
 {
     [Required]
     public Guid InvitationId { get; set; }
+}
+
+public sealed class HorseMeasurementDecimalConverter : JsonConverter<decimal?>
+{
+    public override decimal? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
+        var raw = reader.TokenType switch
+        {
+            JsonTokenType.Number => ReadRawNumber(ref reader),
+            JsonTokenType.String => reader.GetString(),
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(raw) || raw.Any(c => c < '0' || c > '9'))
+        {
+            throw new JsonException("Chỉ được nhập chữ số.");
+        }
+
+        return decimal.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : throw new JsonException("Giá trị đo không hợp lệ.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, decimal? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+        {
+            writer.WriteNumberValue(value.Value);
+            return;
+        }
+
+        writer.WriteNullValue();
+    }
+
+    private static string ReadRawNumber(ref Utf8JsonReader reader)
+    {
+        if (!reader.HasValueSequence)
+        {
+            return Encoding.UTF8.GetString(reader.ValueSpan);
+        }
+
+        return Encoding.UTF8.GetString(reader.ValueSequence.ToArray());
+    }
 }

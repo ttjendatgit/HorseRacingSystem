@@ -108,6 +108,35 @@ public class AdminHorsesRegressionTests
         Assert.Equal("https://example.test/horse-a.jpg", (string?)GetProp(mapped, "ImageUrl"));
     }
 
+    [Fact]
+    public async Task GetAllHorses_RejectedHorseResubmitted_AppearsPendingForAdminReview()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (ownerUserId, _, horseId) = await CreateApprovedOwnerHorseAsync(f, "resubmit-admin");
+        var horse = await f.Db.Horses.FirstAsync(h => h.Id == horseId);
+        horse.ApprovalStatus = ApprovalStatus.Rejected;
+        horse.ApprovalNote = "Sai chỉ số thể chất";
+        await f.Db.SaveChangesAsync();
+
+        var service = BuildHorseService(f);
+        var update = await service.UpdateHorseAsync(ownerUserId, horseId, new HorseUpdateRequest
+        {
+            Name = "Horse resubmit admin",
+            Weight = 482,
+            Height = 167,
+        });
+        Assert.True(update.Result.Success, update.Result.Message);
+
+        var controller = BuildHorsesController(f);
+        var actionResult = await controller.GetAllHorses();
+        var okResult = Assert.IsType<OkObjectResult>(actionResult);
+        var data = GetDataList(okResult.Value);
+        var mapped = data.Single(h => (Guid)GetProp(h, "Id")! == horseId);
+
+        Assert.Equal(ApprovalStatus.Pending, (ApprovalStatus)GetProp(mapped, "ApprovalStatus")!);
+        Assert.Null(GetProp(mapped, "ApprovalNote"));
+    }
+
     private sealed record Scenario(Guid HorseAId, Guid HorseBId, Guid JockeyXId, Guid RaceId);
 
     /// <summary>

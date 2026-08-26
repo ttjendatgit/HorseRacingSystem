@@ -96,6 +96,7 @@ function OwnerHorseListPage() {
     total: horses.length,
     approved: horses.filter(h => (h.approvalStatus ?? h.ApprovalStatus) === 2).length,
     pending: horses.filter(h => (h.approvalStatus ?? h.ApprovalStatus) === 1).length,
+    rejected: horses.filter(h => (h.approvalStatus ?? h.ApprovalStatus) === 3).length,
     winRate: (() => {
       const totalR = horses.reduce((s, h) => s + Number(h.totalRaces ?? h.TotalRaces ?? 0), 0);
       const totalW = horses.reduce((s, h) => s + Number(h.totalWins ?? h.TotalWins ?? 0), 0);
@@ -190,7 +191,7 @@ function OwnerHorseListPage() {
         <div className="oh-stat"><span>Tổng số</span><strong>{stats.total}</strong></div>
         <div className="oh-stat"><span>Đã duyệt</span><strong>{stats.approved}</strong><small>{stats.pending} chờ</small></div>
         <div className="oh-stat"><span>Tỉ lệ thắng</span><strong>{stats.winRate}%</strong></div>
-        <div className="oh-stat"><span>Đang chờ</span><strong>{stats.pending}</strong></div>
+        <div className="oh-stat"><span>Cần sửa</span><strong>{stats.rejected}</strong><small>{stats.pending} chờ duyệt</small></div>
       </div>
 
       {/* Filters */}
@@ -223,6 +224,8 @@ function OwnerHorseListPage() {
             const winRate = totalRaces > 0 ? Math.round((totalWins / totalRaces) * 100) : 0;
             const approvalStatus = h.approvalStatus ?? h.ApprovalStatus ?? 0;
             const statusLabel = approvalStatusMap[approvalStatus] ?? "Chưa xác định";
+            const approvalNote = h.approvalNote ?? h.ApprovalNote ?? "";
+            const isRejected = approvalStatus === 3;
             // Task C1 §1: IsArchived is a distinct axis from ApprovalStatus (admin profile
             // review) — never conflate the two badges.
             const isArchived = h.isArchived ?? h.IsArchived ?? false;
@@ -271,6 +274,12 @@ function OwnerHorseListPage() {
                     <span className="oh-dot" />
                     <span>{age}{typeof age === "number" ? " tuổi" : ""}</span>
                   </div>
+                  {isRejected ? (
+                    <p className="oh-approval-note">
+                      <strong>Lý do từ chối</strong>
+                      <span>{approvalNote || "Admin đã từ chối hồ sơ. Vui lòng cập nhật và gửi duyệt lại."}</span>
+                    </p>
+                  ) : null}
                   <div className="oh-bars">
                     <div className="oh-bar-row"><span className="oh-bar-l">Tốc độ</span><div className="oh-bar"><div className="oh-bar-fill oh-bar-gold" style={{width:speed+"%"}} /></div><span className="oh-bar-r">{speed}%</span></div>
                     <div className="oh-bar-row"><span className="oh-bar-l">Sức bền</span><div className="oh-bar"><div className="oh-bar-fill" style={{width:stamina+"%"}} /></div><span className="oh-bar-r">{stamina}%</span></div>
@@ -296,11 +305,15 @@ function OwnerHorseListPage() {
                       </button>
                     )}
                     {/* Editing an archived Horse is backend-rejected (HorseService.UpdateHorseAsync) — hidden here to match. */}
-                    {canManageHorses && !isArchived && (
+                    {canManageHorses && !isArchived && isRejected ? (
+                      <Link to={`/owner/horses/${id}/edit`} className="oh-btn oh-btn--sm oh-btn--resubmit">
+                        Gửi duyệt lại
+                      </Link>
+                    ) : canManageHorses && !isArchived ? (
                       <Link to={`/owner/horses/${id}/edit`} className="oh-btn-icon" title="Chỉnh sửa">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </Link>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

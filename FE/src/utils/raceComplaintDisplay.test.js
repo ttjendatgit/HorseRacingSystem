@@ -14,6 +14,7 @@ import {
   getRaceComplaintTabCounts,
   getRaceComplaintTypeLabel,
   groupComplaintEvidenceByUploader,
+  hasFinalComplaintRuling,
   mapEligibleRacesToOptions,
   normalizeEvidenceMediaType,
   normalizeRaceComplaintStatus,
@@ -42,19 +43,19 @@ test("status labels map every lifecycle status to its admin tab group", () => {
   });
   assert.deepEqual(getRaceComplaintStatusDetails("Upheld"), {
     status: "Upheld",
-    label: "Chấp nhận khiếu nại",
+    label: "Khiếu nại được chấp nhận",
     variant: "approved",
     group: "resolved",
   });
   assert.deepEqual(getRaceComplaintStatusDetails("Rejected"), {
     status: "Rejected",
-    label: "Bác khiếu nại",
+    label: "Khiếu nại bị bác",
     variant: "rejected",
     group: "resolved",
   });
   assert.deepEqual(getRaceComplaintStatusDetails("Withdrawn"), {
     status: "Withdrawn",
-    label: "Đã rút",
+    label: "Đã rút khiếu nại",
     variant: "inactive",
     group: "resolved",
   });
@@ -125,6 +126,29 @@ test("filer may withdraw only while a complaint is still active", () => {
   assert.equal(canFilerWithdraw("Upheld"), false);
   assert.equal(canFilerWithdraw("Rejected"), false);
   assert.equal(canFilerWithdraw("Withdrawn"), false);
+});
+
+// ── OWNER-DEMO-POLISH-V1.2 §3/§15: the "Mở kết luận" CTA must only appear once Admin has actually
+// ruled (Upheld/Rejected) — never for Withdrawn, which has no ruling at all despite also being a
+// terminal (non-withdrawable) status. This is deliberately NOT the inverse of canFilerWithdraw. ──
+test("hasFinalComplaintRuling is true only for Upheld and Rejected", () => {
+  assert.equal(hasFinalComplaintRuling("Upheld"), true);
+  assert.equal(hasFinalComplaintRuling("Rejected"), true);
+});
+
+test("hasFinalComplaintRuling is false for Withdrawn — a terminal status with no Admin ruling", () => {
+  assert.equal(hasFinalComplaintRuling("Withdrawn"), false);
+});
+
+test("hasFinalComplaintRuling is false for every still-open status", () => {
+  assert.equal(hasFinalComplaintRuling("Pending"), false);
+  assert.equal(hasFinalComplaintRuling("AwaitingRefereeResponse"), false);
+  assert.equal(hasFinalComplaintRuling("UnderReview"), false);
+});
+
+test("Withdrawn is terminal (not withdrawable again) yet still has no ruling — proves this is not just !canFilerWithdraw", () => {
+  assert.equal(canFilerWithdraw("Withdrawn"), false);
+  assert.equal(hasFinalComplaintRuling("Withdrawn"), false);
 });
 
 test("upheld ruling payload requires an explicit boolean AffectsResult", () => {

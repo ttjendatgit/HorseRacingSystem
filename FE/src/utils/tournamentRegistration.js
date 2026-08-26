@@ -87,6 +87,53 @@ export const getTournamentRegistrationState = (tournament, now = new Date()) => 
 export const canRegisterTournament = (tournament, now) =>
   getTournamentRegistrationState(tournament, now).canRegister;
 
+// OWNER-DEMO-POLISH-V1.2 §8: one semantic color system for the registration-state badge shown on
+// /owner/tournaments — green=active/positive (open, or a Tournament that finished), gold=caution
+// (full — closed for a "good" reason), red=blocked (cancelled), neutral=informational/past (closed
+// by deadline, registration window ended because the Tournament moved to Ongoing, unpublished).
+// Tone is derived from the exact same `key` the label text already comes from (getTournamentRegistrationState),
+// so the badge's color and text can never disagree with each other.
+const REGISTRATION_STATE_TONES = Object.freeze({
+  open: "success",
+  full: "gold",
+  closed: "neutral",
+  "registration-ended": "neutral",
+  finished: "success",
+  cancelled: "danger",
+  unpublished: "neutral",
+  unknown: "neutral",
+});
+
+export const getTournamentRegistrationTone = (key) => REGISTRATION_STATE_TONES[key] ?? "neutral";
+
+// OWNER-DEMO-POLISH-V1.3 §1: the "Giải đấu sắp tới" sidebar widget on /owner/tournaments must
+// never surface a Finished/Cancelled Tournament — those are history, not "sắp tới". Prefers the
+// nearest Tournament whose StartDate is still in the future; if none of the eligible Tournaments
+// have a future StartDate (e.g. the only ones left are already Ongoing), falls back to whichever
+// eligible Tournament's StartDate sits closest to `now`, rather than an arbitrary array-order pick
+// (which is exactly how a Finished Tournament could previously end up shown here). Returns null
+// when nothing qualifies, so the caller renders a compact empty state instead of ever falling back
+// to an invalid choice. Expects the same shape OwnerTournamentListPage.mapTournament produces
+// (statusKey from getTournamentRegistrationState, startDate as an ISO string/Date).
+export const selectUpcomingTournament = (tournaments, now = new Date()) => {
+  const list = Array.isArray(tournaments) ? tournaments : [];
+  const eligible = list.filter((t) => t?.statusKey !== "finished" && t?.statusKey !== "cancelled");
+  if (eligible.length === 0) return null;
+
+  const nowMs = now.getTime();
+  const withDates = eligible
+    .map((t) => ({ tournament: t, start: t?.startDate ? new Date(t.startDate).getTime() : NaN }))
+    .filter((entry) => Number.isFinite(entry.start));
+
+  if (withDates.length === 0) return eligible[0];
+
+  const future = withDates.filter((entry) => entry.start >= nowMs).sort((a, b) => a.start - b.start);
+  if (future.length > 0) return future[0].tournament;
+
+  const nearest = [...withDates].sort((a, b) => Math.abs(a.start - nowMs) - Math.abs(b.start - nowMs));
+  return nearest[0].tournament;
+};
+
 // V0/V0.1: Final Round identity is RoundNumber === Tournament.MaxRounds — NEVER AdvanceCount === 0
 // (Draft data may temporarily hold AdvanceCount=0 on a non-final Round). Number() on both sides
 // guards against API/form state carrying either as a string.

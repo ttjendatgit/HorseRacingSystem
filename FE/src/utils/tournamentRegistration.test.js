@@ -10,11 +10,13 @@ import {
   getTournamentCardActions,
   getTournamentLifecycleLabel,
   getTournamentRegistrationState,
+  getTournamentRegistrationTone,
   getTournamentStatusTabCounts,
   getTournamentThumbnailUrl,
   isFinalRound,
   isTournamentCardReadOnly,
   resolveTournamentPageView,
+  selectUpcomingTournament,
 } from "./tournamentRegistration.js";
 
 describe("tournament registration state", () => {
@@ -51,6 +53,93 @@ describe("tournament registration state", () => {
     assert.equal(getTournamentRegistrationState({ statusName: "Ongoing" }).label, "Đã kết thúc đăng ký");
     assert.equal(getTournamentRegistrationState({ statusName: "Finished" }).label, "Giải đã kết thúc");
     assert.equal(getTournamentRegistrationState({ statusName: "Cancelled" }).label, "Giải đã hủy");
+  });
+});
+
+// ── OWNER-DEMO-POLISH-V1.2 §8: Owner Tournament List badge color system ──
+describe("tournament registration tone", () => {
+  test("open and finished are both 'success' (green) — active or positively completed", () => {
+    assert.equal(getTournamentRegistrationTone("open"), "success");
+    assert.equal(getTournamentRegistrationTone("finished"), "success");
+  });
+
+  test("full is 'gold' (caution) — closed for a good reason, not a rejection", () => {
+    assert.equal(getTournamentRegistrationTone("full"), "gold");
+  });
+
+  test("cancelled is 'danger' (red) — the only truly blocked/bad state", () => {
+    assert.equal(getTournamentRegistrationTone("cancelled"), "danger");
+  });
+
+  test("closed / registration-ended / unpublished / unknown are all 'neutral' — informational, not a failure", () => {
+    assert.equal(getTournamentRegistrationTone("closed"), "neutral");
+    assert.equal(getTournamentRegistrationTone("registration-ended"), "neutral");
+    assert.equal(getTournamentRegistrationTone("unpublished"), "neutral");
+    assert.equal(getTournamentRegistrationTone("unknown"), "neutral");
+  });
+
+  test("an unrecognized key falls back to neutral rather than throwing", () => {
+    assert.equal(getTournamentRegistrationTone("something-new"), "neutral");
+    assert.equal(getTournamentRegistrationTone(undefined), "neutral");
+  });
+
+  test("tone always matches the key that produced the label — never derived from the label text", () => {
+    // Every registration-state key the FE actually produces maps to a defined tone bucket, so a
+    // card's badge color can never disagree with its own badge text.
+    const now = new Date("2026-08-19T00:00:00Z");
+    const openState = getTournamentRegistrationState({ statusName: "Published", registrationDeadline: "2026-08-20T00:00:00Z" }, now);
+    const closedState = getTournamentRegistrationState({ statusName: "Published", registrationDeadline: "2026-08-18T00:00:00Z" }, now);
+    const cancelledState = getTournamentRegistrationState({ statusName: "Cancelled" });
+
+    assert.equal(getTournamentRegistrationTone(openState.key), "success");
+    assert.equal(getTournamentRegistrationTone(closedState.key), "neutral");
+    assert.equal(getTournamentRegistrationTone(cancelledState.key), "danger");
+  });
+});
+
+// ── OWNER-DEMO-POLISH-V1.2 §7/§9: /owner/tournaments status filter must only ever expose labels
+// that a real Tournament can actually produce via getTournamentRegistrationState — no invented
+// wording, no drift between the filter dropdown and the actual business states it filters by. ──
+describe("owner tournament list status filter labels", () => {
+  // Mirrors the literal array in OwnerTournamentListPage.jsx — kept here as its own fixture (not
+  // imported) so this test still catches drift if that array is ever hand-edited independently.
+  const OWNER_TOURNAMENT_STATUS_FILTERS = [
+    "Tất cả",
+    "Mở đăng ký",
+    "Đã đủ số lượng tham gia",
+    "Đã đóng đăng ký",
+    "Đã kết thúc đăng ký",
+    "Giải đã kết thúc",
+    "Giải đã hủy",
+  ];
+
+  const now = new Date("2026-08-19T00:00:00Z");
+  const knownLabels = new Set([
+    getTournamentRegistrationState({ statusName: "Published", registrationDeadline: "2026-08-20T00:00:00Z" }, now).label,
+    getTournamentRegistrationState({ statusName: "Published", registrationDeadline: "2026-08-18T00:00:00Z" }, now).label,
+    getTournamentRegistrationState(
+      { statusName: "Published", registrationDeadline: "2026-08-20T00:00:00Z", maxParticipants: 2, approvedRegistrationCount: 2 },
+      now,
+    ).label,
+    getTournamentRegistrationState({ statusName: "Ongoing" }).label,
+    getTournamentRegistrationState({ statusName: "Finished" }).label,
+    getTournamentRegistrationState({ statusName: "Cancelled" }).label,
+  ]);
+
+  test("every non-'Tất cả' filter option is a real registration-state label, not an invented string", () => {
+    for (const filter of OWNER_TOURNAMENT_STATUS_FILTERS) {
+      if (filter === "Tất cả") continue;
+      assert.ok(knownLabels.has(filter), `"${filter}" must be a label getTournamentRegistrationState can actually produce`);
+    }
+  });
+
+  test("the capacity-full state ('Đã đủ số lượng tham gia') is also a real derivable label", () => {
+    const fullState = getTournamentRegistrationState(
+      { statusName: "Published", registrationDeadline: "2026-08-20T00:00:00Z", maxParticipants: 2, approvedRegistrationCount: 2 },
+      now,
+    );
+    assert.equal(fullState.label, "Đã đủ số lượng tham gia");
+    assert.ok(OWNER_TOURNAMENT_STATUS_FILTERS.includes(fullState.label));
   });
 });
 
@@ -360,5 +449,71 @@ describe("isFinalRound (V0/V0.1)", () => {
     assert.equal(isFinalRound({ roundNumber: 1 }, {}), false);
     assert.equal(isFinalRound({ roundNumber: 1 }, null), false);
     assert.equal(isFinalRound(null, { maxRounds: 1 }), false);
+  });
+});
+
+// ── OWNER-DEMO-POLISH-V1.3 §1: /owner/tournaments "Giải đấu sắp tới" sidebar must never select a
+// Finished or Cancelled Tournament, and must prefer the nearest legitimate upcoming one. ──
+describe("selectUpcomingTournament", () => {
+  const now = new Date("2026-08-19T00:00:00Z");
+
+  test("a Finished Tournament is excluded even if it would otherwise be 'nearest'", () => {
+    const tournaments = [
+      { id: "finished-soon", statusKey: "finished", startDate: "2026-08-20T00:00:00Z" },
+      { id: "open-later", statusKey: "open", startDate: "2026-09-01T00:00:00Z" },
+    ];
+    const result = selectUpcomingTournament(tournaments, now);
+    assert.equal(result.id, "open-later");
+  });
+
+  test("a Cancelled Tournament is excluded even if it would otherwise be 'nearest'", () => {
+    const tournaments = [
+      { id: "cancelled-soon", statusKey: "cancelled", startDate: "2026-08-20T00:00:00Z" },
+      { id: "open-later", statusKey: "open", startDate: "2026-09-01T00:00:00Z" },
+    ];
+    const result = selectUpcomingTournament(tournaments, now);
+    assert.equal(result.id, "open-later");
+  });
+
+  test("picks the nearest valid upcoming Tournament by StartDate, not array order", () => {
+    const tournaments = [
+      { id: "far", statusKey: "open", startDate: "2026-12-01T00:00:00Z" },
+      { id: "nearest", statusKey: "open", startDate: "2026-08-25T00:00:00Z" },
+      { id: "middle", statusKey: "full", startDate: "2026-09-15T00:00:00Z" },
+    ];
+    const result = selectUpcomingTournament(tournaments, now);
+    assert.equal(result.id, "nearest");
+  });
+
+  test("falls back to the nearest-by-date eligible Tournament when none have a future StartDate (e.g. only Ongoing left)", () => {
+    const tournaments = [
+      { id: "started-long-ago", statusKey: "registration-ended", startDate: "2026-01-01T00:00:00Z" },
+      { id: "started-recently", statusKey: "registration-ended", startDate: "2026-08-15T00:00:00Z" },
+    ];
+    const result = selectUpcomingTournament(tournaments, now);
+    assert.equal(result.id, "started-recently");
+  });
+
+  test("no valid Tournament (all Finished/Cancelled) => null, so the caller can render the empty state", () => {
+    const tournaments = [
+      { id: "a", statusKey: "finished", startDate: "2026-09-01T00:00:00Z" },
+      { id: "b", statusKey: "cancelled", startDate: "2026-09-05T00:00:00Z" },
+    ];
+    assert.equal(selectUpcomingTournament(tournaments, now), null);
+  });
+
+  test("an empty or non-array input also resolves to null, never throws", () => {
+    assert.equal(selectUpcomingTournament([], now), null);
+    assert.equal(selectUpcomingTournament(null, now), null);
+    assert.equal(selectUpcomingTournament(undefined, now), null);
+  });
+
+  test("never falls back to a Finished Tournament even when it is the only one with a parsable StartDate", () => {
+    const tournaments = [
+      { id: "finished", statusKey: "finished", startDate: "2026-08-18T00:00:00Z" },
+      { id: "open-no-date", statusKey: "open", startDate: null },
+    ];
+    const result = selectUpcomingTournament(tournaments, now);
+    assert.equal(result.id, "open-no-date");
   });
 });

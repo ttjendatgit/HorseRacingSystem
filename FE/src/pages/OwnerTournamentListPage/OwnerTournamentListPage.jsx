@@ -1,14 +1,20 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerTournaments } from "../../services/ownerApi";
 import { getPrizesByTournament } from "../../services/managementApi";
-import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
+import { getTournamentRegistrationState, getTournamentRegistrationTone, selectUpcomingTournament } from "../../utils/tournamentRegistration";
+import { OWNER_REQUIREMENT_LABELS } from "../../utils/ownerDemoDisplay";
 import { isJockeyRole } from "../../services/authRoleUtils";
+import { apiToVNDisplay } from "../../utils/vnDateTime";
+import { RaceButton, RaceModalShell } from "../../components/ui/RaceUi";
 import PrizeBreakdown from "../../components/PrizeBreakdown";
 import "../../components/PrizeBreakdown.css";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentListPage.css";
 
+// Kept in sync with the labels getTournamentRegistrationState can actually produce for a
+// Published/Ongoing/Finished/Cancelled Tournament — see tournamentRegistration.test.js's
+// "owner tournament list status filter labels" suite, which pins this against that source of truth.
 const statusFilters = ["Tất cả", "Mở đăng ký", "Đã đủ số lượng tham gia", "Đã đóng đăng ký", "Đã kết thúc đăng ký", "Giải đã kết thúc", "Giải đã hủy"];
 
 const formatDate = (value) => {
@@ -27,6 +33,7 @@ const mapTournament = (tournament) => {
     startDate: tournament?.startDate ?? tournament?.StartDate,
     endDate: tournament?.endDate ?? tournament?.EndDate,
     dates: `${formatDate(tournament?.startDate ?? tournament?.StartDate)} - ${formatDate(tournament?.endDate ?? tournament?.EndDate)}`,
+    registrationDeadline: tournament?.registrationDeadline ?? tournament?.RegistrationDeadline,
     status: registrationState.label,
     statusKey: registrationState.key,
     canRegister: registrationState.canRegister,
@@ -35,7 +42,8 @@ const mapTournament = (tournament) => {
     prizePool: tournament?.prizePool ?? tournament?.PrizePool ?? 0,
     venue: tournament?.venue ?? tournament?.Venue ?? "",
     surfaceType: tournament?.surfaceType ?? tournament?.SurfaceType ?? "",
-    imageUrl: tournament?.imageUrl ?? tournament?.ImageUrl,
+    maxParticipants: tournament?.maxParticipants ?? tournament?.MaxParticipants ?? null,
+    approvedRegistrationCount: tournament?.approvedRegistrationCount ?? tournament?.ApprovedRegistrationCount ?? 0,
   };
 };
 
@@ -90,47 +98,44 @@ function OwnerTournamentListPage() {
   const totalOpen = tournaments.filter(t => t.canRegister).length;
   const totalClosed = tournaments.filter(t => !t.canRegister).length;
 
-  const statusClass = (key) => {
-    if (key === "open") return "open";
-    if (key === "registration-ended") return "live";
-    if (key === "full") return "full";
-    return "closed";
-  };
+  // Sourced from the FULL Tournament list (never the search/status-filtered one) — this widget
+  // answers "what's coming up next" regardless of what the Owner currently has typed/selected in
+  // the filters above it, and must never surface a Finished/Cancelled Tournament (§1 fix).
+  const upcomingTournament = useMemo(() => selectUpcomingTournament(tournaments), [tournaments]);
+
+  const goToRegister = (tournamentId) => navigate(`/owner/register-tournament?tournamentId=${tournamentId}`);
 
   return (
-    <div className="otl-page">
-      {/* Hero */}
-      <section className="otl-hero">
-        <div className="otl-hero__overlay" />
-        <div className="otl-hero__content">
-          <div>
-            <span className="pill" style={{ background: "rgba(215,170,77,0.2)", color: "#f2d28b" }}>Giải đấu</span>
-            <h1>Giải đấu của chủ ngựa</h1>
-            <p>Tìm kiếm giải đấu và lên kế hoạch đăng ký.</p>
-          </div>
-          <div className="otl-hero__stats">
-            <div><span>Tổng số</span><strong>{tournaments.length}</strong></div>
-            <div><span>Đang mở</span><strong>{totalOpen}</strong></div>
-            <div><span>Đã đóng</span><strong>{totalClosed}</strong></div>
-          </div>
-        </div>
+    <div className="owner-page otl-page">
+      <section className="page-header">
+        <h1>Giải đấu</h1>
+        <p>Tìm giải đấu đang mở đăng ký, xem thông tin chi tiết và cơ cấu giải thưởng trước khi đăng ký ngựa.</p>
       </section>
 
-      {/* Filters */}
-      <section className="otl-filters">
-        <div className="filter-group">
-          <label className="label-required">Tìm kiếm</label>
-          <input className="form-input" type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm theo tên giải đấu" />
+      <div className="otl-summary">
+        <div className="otl-stat"><span>Tổng số</span><strong>{tournaments.length}</strong></div>
+        <div className="otl-stat"><span>Đang mở đăng ký</span><strong>{totalOpen}</strong></div>
+        <div className="otl-stat"><span>Đã đóng</span><strong>{totalClosed}</strong></div>
+      </div>
+
+      {/* Controls */}
+      <div className="otl-toolbar">
+        <div className="otl-field">
+          <label htmlFor="otl-search" className="otl-field-label">Tìm kiếm</label>
+          <div className="otl-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+            <input id="otl-search" type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm theo tên giải đấu" />
+          </div>
         </div>
-        <div className="filter-group">
-          <label className="label-required">Trạng thái</label>
-          <select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <div className="otl-field">
+          <label htmlFor="otl-status" className="otl-field-label">Trạng thái</label>
+          <select id="otl-status" className="otl-select" value={status} onChange={(e) => setStatus(e.target.value)}>
             {statusFilters.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
-      </section>
+      </div>
 
-      {/* Layout 2 cột */}
+      {/* Main */}
       <div className="otl-layout">
         <div className="otl-main">
           {isLoading ? (
@@ -143,48 +148,23 @@ function OwnerTournamentListPage() {
             <div className="otl-grid">
               {filteredTournaments.map((t) => (
                 <article key={t.id} className="otl-card">
-                  <div
-                    className="otl-card__banner"
-                    style={
-                      (t.imageUrl ?? t.ImageUrl)
-                        ? { backgroundImage: `url(${t.imageUrl ?? t.ImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                        : {}
-                    }
-                  >
-                    <div className="otl-card__banner-top">
-                      <span className={`otl-badge otl-badge--${statusClass(t.statusKey)}`}>{t.status}</span>
-                      <div className="otl-card__banner-right">
-                        {t.statusKey !== "closed" && (
-                          <span className="otl-countdown">{t.raceCount} cuộc đua</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="otl-card__banner-info">
-                      <h4>Giải đấu</h4>
-                      <p>{t.name}</p>
-                    </div>
-                    {t.statusKey === "registration-ended" && (
-                      <div className="otl-card__progress">
-                        <div className="otl-card__progress-fill" style={{ width: "60%" }} />
-                      </div>
-                    )}
+                  <div className="otl-card__top">
+                    <h3>{t.name}</h3>
+                    <span className={`otl-badge otl-badge--${getTournamentRegistrationTone(t.statusKey)}`}>{t.status}</span>
                   </div>
-                  <div className="otl-card__body">
-                    <div>
-                      <h3>{t.name}</h3>
-                      <p>{t.description}</p>
-                      <span className="otl-card__dates">{t.dates}</span>
-                    </div>
-                    <div className="otl-card__stats">
-                      <div><span>Ngựa</span><strong>{t.raceCount}</strong></div>
-                      <div><span>Vòng</span><strong>{t.roundCount}</strong></div>
-                      <div><span>Giải thưởng</span><strong>{(t.prizePool || 0).toLocaleString()}đ</strong></div>
-                      <div><span>Địa điểm</span><strong>{t.venue || "--"}</strong></div>
-                    </div>
+                  <p className="otl-card__desc">{t.description}</p>
+                  <div className="otl-card__meta">
+                    <span>{t.dates}</span>
+                    <span>{t.raceCount} cuộc đua</span>
+                    {t.roundCount ? <span>{t.roundCount} vòng</span> : null}
+                    {t.venue ? <span>{t.venue}</span> : null}
+                  </div>
+                  <div className="otl-card__footer">
+                    <span className="otl-card__prize">Quỹ thưởng {(t.prizePool || 0).toLocaleString("vi-VN")}đ</span>
                     <div className="otl-card__actions">
-                      <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(t)}>Chi tiết</button>
+                      <button type="button" className="ghost-button" onClick={() => setActiveTournament(t)}>Chi tiết</button>
                       {t.canRegister && canRegisterAsOwner && (
-                        <button className="otl-btn otl-btn--primary" onClick={() => navigate(`/owner/register-tournament?tournamentId=${t.id}`)}>Đăng ký</button>
+                        <button type="button" className="primary-button" onClick={() => goToRegister(t.id)}>Đăng ký</button>
                       )}
                     </div>
                   </div>
@@ -194,59 +174,75 @@ function OwnerTournamentListPage() {
           )}
         </div>
 
-        {/* Sidebar */}
         <aside className="otl-sidebar">
-          {filteredTournaments.length > 0 && (
-            <div className="otl-widget">
-              <h4>Giải đấu sắp tới</h4>
+          <div className="otl-widget">
+            <h4>Giải đấu sắp tới</h4>
+            {upcomingTournament ? (
               <div className="otl-widget__race">
-                <h5>{filteredTournaments[0].name}</h5>
-                <p>{filteredTournaments[0].dates}</p>
-                <p className="muted">{filteredTournaments[0].raceCount} cuộc đua</p>
+                <h5>{upcomingTournament.name}</h5>
+                <p>{upcomingTournament.dates}</p>
+                <p className="otl-widget__muted">{upcomingTournament.raceCount} cuộc đua</p>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="otl-widget__empty">
+                <p>Chưa có giải đấu sắp tới.</p>
+                <p className="otl-widget__muted">Hãy quay lại sau khi có giải đấu mới được công bố.</p>
+              </div>
+            )}
+          </div>
           <div className="otl-widget">
             <h4>Thông tin</h4>
-            <p style={{ fontSize: 13, color: "#5B6475", margin: 0, lineHeight: 1.6 }}>
-              Đăng ký ngựa của bạn tham gia các giải đấu để tranh tài và giành giải thưởng hấp dẫn.
+            <p className="otl-widget__muted">
+              Đăng ký ngựa của bạn tham gia các giải đấu để tranh tài và giành giải thưởng theo cơ cấu đã công bố.
             </p>
           </div>
         </aside>
       </div>
 
-      {/* Modal */}
+      {/* Detail modal */}
       {activeTournament && (
-        <div className="otl-modal-overlay" onClick={() => setActiveTournament(null)}>
-          <div className="otl-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="otl-modal__header">
-              <div>
-                <span className={`otl-badge otl-badge--${statusClass(activeTournament.status)}`}>{activeTournament.status}</span>
-                <h3>{activeTournament.name}</h3>
-                <p className="muted" style={{ fontSize: 13, color: "#5B6475", margin: 0 }}>{activeTournament.description}</p>
-              </div>
-            </div>
-            <div className="otl-modal__body">
-              <div><h4>Ngày</h4><p>{activeTournament.dates}</p></div>
-              <div><h4>Cuộc đua</h4><p>{activeTournament.raceCount}</p></div>
-              <div><h4>Vòng</h4><p>{activeTournament.roundCount}</p></div>
-              <div><h4>Giải thưởng</h4><p>{(activeTournament.prizePool || 0).toLocaleString()}đ</p></div>
-              <div><h4>Địa điểm</h4><p>{activeTournament.venue || "--"}</p></div>
-              <div><h4>Loại mặt đường</h4><p>{activeTournament.surfaceType || "--"}</p></div>
-            </div>
-            {activePrizes.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <PrizeBreakdown prizes={activePrizes} />
-              </div>
+        <RaceModalShell
+          title={activeTournament.name}
+          description={activeTournament.description}
+          onClose={() => setActiveTournament(null)}
+          footer={<>
+            <RaceButton variant="ghost" onClick={() => setActiveTournament(null)}>Đóng</RaceButton>
+            {activeTournament.canRegister && canRegisterAsOwner && (
+              <RaceButton onClick={() => { const id = activeTournament.id; setActiveTournament(null); goToRegister(id); }}>
+                Đăng ký ngay
+              </RaceButton>
             )}
-            <div className="otl-modal__actions">
-              <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(null)}>Đóng</button>
-              {activeTournament.canRegister && canRegisterAsOwner && (
-                <button className="otl-btn otl-btn--primary" onClick={() => { const id = activeTournament.id; setActiveTournament(null); navigate(`/owner/register-tournament?tournamentId=${id}`); }}>Đăng ký ngay</button>
-              )}
-            </div>
+          </>}
+        >
+          <div className="otl-modal-status">
+            <span className={`otl-badge otl-badge--${getTournamentRegistrationTone(activeTournament.statusKey)}`}>{activeTournament.status}</span>
           </div>
-        </div>
+          <div className="otl-modal-grid">
+            <div><span>Thời gian</span><strong>{activeTournament.dates}</strong></div>
+            <div><span>Hạn đăng ký</span><strong>{apiToVNDisplay(activeTournament.registrationDeadline) || "Chưa thiết lập"}</strong></div>
+            <div><span>Cuộc đua</span><strong>{activeTournament.raceCount}</strong></div>
+            <div><span>Vòng đấu</span><strong>{activeTournament.roundCount}</strong></div>
+            <div>
+              <span>Sức chứa</span>
+              <strong>{activeTournament.maxParticipants ? `${activeTournament.approvedRegistrationCount}/${activeTournament.maxParticipants} ngựa` : "Không giới hạn"}</strong>
+            </div>
+            <div><span>Địa điểm</span><strong>{activeTournament.venue || "--"}</strong></div>
+            <div><span>Loại mặt đường</span><strong>{activeTournament.surfaceType || "--"}</strong></div>
+            <div><span>Quỹ thưởng</span><strong className="otl-modal-prize">{(activeTournament.prizePool || 0).toLocaleString("vi-VN")}đ</strong></div>
+          </div>
+
+          {activePrizes.length > 0 && <PrizeBreakdown prizes={activePrizes} />}
+
+          <div className="otl-requirements">
+            <h4>Điều kiện đăng ký</h4>
+            <ul>
+              {OWNER_REQUIREMENT_LABELS.slice(0, 4).map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+            <p>Hệ thống kiểm tra trùng đăng ký và lịch giải khi Chủ ngựa gửi yêu cầu.</p>
+          </div>
+        </RaceModalShell>
       )}
     </div>
   );

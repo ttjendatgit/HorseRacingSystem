@@ -300,7 +300,7 @@ public class HorseArchiveTests
         var adminUserId = await CreateAdminUserAsync(f);
 
         var service = BuildHorseService(f);
-        var result = await service.UpdateHorseAsync(adminUserId, horseId, new HorseUpdateRequest { Name = "Renamed by admin" }, isAdmin: true);
+        var result = await service.UpdateHorseAsync(adminUserId, horseId, new HorseUpdateRequest { Name = "Renamed by admin", Weight = 480, Height = 165 }, isAdmin: true);
         Assert.True(result.Result.Success, result.Result.Message);
 
         var horse = await f.Db.Horses.AsNoTracking().FirstAsync(h => h.Id == horseId);
