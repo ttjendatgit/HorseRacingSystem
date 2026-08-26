@@ -47,14 +47,7 @@ public class ManagementController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> GetPrizesByRace(Guid rid)
         => OkR(await _prize.GetByRaceAsync(rid));
-    [HttpPut("prizes/{id:guid}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<ActionResult> UpdatePrize(Guid id, UpdatePrizeRequest r)
-        => OkR(await _prize.UpdateAsync(id, r));
-    [HttpGet("prizes/tournament/{tid:guid}/allocation")]
-    [Authorize(Roles = "Admin")]
-    public async Task<ActionResult> GetPrizeAllocation(Guid tid)
-=> OkR(await _prize.GetAllocationSummaryAsync(tid));
+
     [HttpDelete("prizes/{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> DeletePrize(Guid id)

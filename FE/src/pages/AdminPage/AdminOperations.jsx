@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  getPrizes, createPrize, updatePrize, deletePrize,   // + updatePrize
+  getPrizes, createPrize, deletePrize,
   getPendingProtests, ruleProtest,
   getPendingTransfers, approveTransfer, rejectTransfer,
   getContracts,
   getInjuries,
 } from "../../services/managementApi";
 import { getAdminTournaments } from "../../services/adminApi";
-
 
 const fDate = (v) => v ? new Date(v).toLocaleDateString("vi-VN", { dateStyle: "medium" }) : "-";
 
@@ -30,102 +29,33 @@ function Modal({ title, children, onClose }) {
 export function PrizeManagement() {
   const [items, setItems] = useState([]);
   const [msg, setMsg] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({
-    name: "", percentageOfPool: "", position: 1,
-    currency: "VND", tournamentId: "", raceId: "", sponsorName: "",
-  });
+  const [form, setForm] = useState({ name: "", amount: 0, position: 1, currency: "USD", tournamentId: "", raceId: "", sponsorName: "" });
   const [tournaments, setTournaments] = useState([]);
-
   const load = () => getPrizes().then((d) => setItems(Array.isArray(d) ? d : [])).catch((e) => setMsg(e.message));
   useEffect(() => { load(); getAdminTournaments().then((d) => setTournaments(Array.isArray(d) ? d : [])); }, []);
 
-  const selectedTournament = tournaments.find((t) => (t.id ?? t.Id) === form.tournamentId);
-  const pool = selectedTournament?.prizePool ?? selectedTournament?.PrizePool ?? 0;
-  const previewAmount = pool && form.percentageOfPool
-    ? Math.round((pool * Number(form.percentageOfPool)) / 100)
-    : 0;
-
-  const resetForm = () => {
-    setEditingId(null);
-    setForm({ name: "", percentageOfPool: "", position: 1, currency: "VND", tournamentId: "", raceId: "", sponsorName: "" });
-  };
-
-  const submit = async (ev) => {
-    ev.preventDefault();
-    try {
-      const payload = {
-        name: form.name,
-        percentageOfPool: Number(form.percentageOfPool),
-        position: Number(form.position),
-        currency: form.currency,
-        tournamentId: form.tournamentId || null,
-        raceId: form.raceId || null,
-        sponsorName: form.sponsorName,
-      };
-      if (editingId) {
-        await updatePrize(editingId, payload);
-        setMsg("Đã cập nhật giải thưởng.");
-      } else {
-        await createPrize(payload);
-        setMsg("Đã tạo giải thưởng.");
-      }
-      resetForm();
-      load();
-    } catch (e) { setMsg(e.message); }
-  };
-
-  const edit = (p) => {
-    setEditingId(p.id);
-    setForm({
-      name: p.name, percentageOfPool: p.percentageOfPool, position: p.position,
-      currency: p.currency, tournamentId: p.tournamentId ?? "", raceId: p.raceId ?? "",
-      sponsorName: p.sponsorName ?? "",
-    });
-  };
-
+  const submit = async (ev) => { ev.preventDefault(); try { await createPrize({ ...form, amount: Number(form.amount), position: Number(form.position), tournamentId: form.tournamentId || null, raceId: form.raceId || null }); setMsg("Đã tạo giải thưởng."); load(); } catch (e) { setMsg(e.message); } };
   const remove = async (id) => { if (!confirm("Xóa?")) return; try { await deletePrize(id); load(); } catch (e) { setMsg(e.message); } };
 
   return (
     <div>
       <h2>Tiền thưởng</h2>
-      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>
-        Cấu hình tỉ lệ (%) tổng giải thưởng cho từng vị trí — số tiền được tính tự động từ Tổng giải thưởng của giải đấu.
-      </p>
+      <p style={{ color: "var(--hr-muted)", marginBottom: 16 }}>Quản lý phân phối tiền thưởng cho giải đấu và cuộc đua.</p>
       {msg && <p className="admin-notice">{msg}</p>}
       <form onSubmit={submit} className="admin-form" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
         <input placeholder="Tên giải thưởng" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })} required>
-          <option value="">Chọn giải đấu</option>
+        <input type="number" placeholder="Số tiền" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+        <input type="number" placeholder="Vị trí (1,2,3...)" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+        <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })}>
+          <option value="">Giải đấu (tùy chọn)</option>
           {tournaments.map((t) => <option key={t.id ?? t.Id} value={t.id ?? t.Id}>{t.name ?? t.Name}</option>)}
         </select>
-        <input type="number" placeholder="Vị trí (1,2,3...)" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} min="1" required />
-        <input type="number" placeholder="Tỉ lệ % (vd: 50)" value={form.percentageOfPool} onChange={(e) => setForm({ ...form, percentageOfPool: e.target.value })} min="0.01" max="100" step="0.01" required />
         <input placeholder="Nhà tài trợ" value={form.sponsorName} onChange={(e) => setForm({ ...form, sponsorName: e.target.value })} />
-        {!!pool && (
-          <span style={{ alignSelf: "center", color: "var(--hr-muted)" }}>
-            = {previewAmount.toLocaleString("vi-VN")} VNĐ (trên tổng {pool.toLocaleString("vi-VN")} VNĐ)
-          </span>
-        )}
-        <button className="primary-button" type="submit">{editingId ? "Cập nhật" : "Thêm giải thưởng"}</button>
-        {editingId && <button type="button" className="ghost-button" onClick={resetForm}>Hủy</button>}
+        <button className="primary-button" type="submit">Thêm giải thưởng</button>
       </form>
       <div className="admin-table-wrap"><table className="admin-table">
-        <thead><tr><th>Tên</th><th>Tỉ lệ %</th><th>Số tiền</th><th>Vị trí</th><th>Nhà tài trợ</th><th>Đã phân phối</th><th>Thao tác</th></tr></thead>
-        <tbody>{items.map((p) => (
-          <tr key={p.id}>
-            <td>{p.name}</td>
-            <td>{p.percentageOfPool ? `${p.percentageOfPool}%` : "-"}</td>
-            <td>{p.amount?.toLocaleString("vi-VN")} {p.currency}</td>
-            <td>#{p.position}</td>
-            <td>{p.sponsorName || "-"}</td>
-            <td>{p.isDistributed ? "Có" : "Không"}</td>
-            <td>
-              {!p.isDistributed && <button onClick={() => edit(p)}>Sửa</button>}
-              <button onClick={() => remove(p.id)}>Xóa</button>
-            </td>
-          </tr>
-        ))}</tbody>
+        <thead><tr><th>Tên</th><th>Số tiền</th><th>Vị trí</th><th>Nhà tài trợ</th><th>Đã phân phối</th><th>Thao tác</th></tr></thead>
+        <tbody>{items.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.amount} {p.currency}</td><td>#{p.position}</td><td>{p.sponsorName || "-"}</td><td>{p.isDistributed ? "Có" : "Không"}</td><td><button onClick={() => remove(p.id)}>Xóa</button></td></tr>)}</tbody>
       </table></div>
     </div>
   );

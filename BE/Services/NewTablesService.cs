@@ -14,143 +14,21 @@ namespace HorseRacing.Services;
 public class PrizeService : IPrizeService
 {
     private readonly IPrizeRepository _repo;
-    private readonly ITournamentRepository _tournamentRepo;   // ADD
     private readonly IUnitOfWork _uow;
+    public PrizeService(IPrizeRepository repo, IUnitOfWork uow) { _repo = repo; _uow = uow; }
 
-    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow)
-    {
-        _repo = repo;
-        _tournamentRepo = tournamentRepo;                     // ADD
-        _uow = uow;
-    }
-    public async Task<ServiceResult<PrizeAllocationResponse>> GetAllocationSummaryAsync(Guid tournamentId)
-    {
-        var tournament = await _tournamentRepo.GetByIdAsync(tournamentId);
-        if (tournament == null) return ServiceResult<PrizeAllocationResponse>.Fail(404, "Không tìm thấy giải đấu");
-
-        var prizes = await _repo.GetByTournamentAsync(tournamentId);
-        var totalPercent = prizes.Sum(p => p.PercentageOfPool);
-
-        return ServiceResult<PrizeAllocationResponse>.Ok(new PrizeAllocationResponse
-        {
-            TotalPrizePool = tournament.PrizePool,
-            AllocatedPercent = totalPercent,
-            RemainingPercent = 100 - totalPercent,
-            AllocatedAmount = tournament.PrizePool * totalPercent / 100m,
-            RemainingAmount = tournament.PrizePool * (100 - totalPercent) / 100m
-        });
-    }
     public async Task<ServiceResult<PrizeResponse>> CreateAsync(CreatePrizeRequest r)
     {
-        decimal computedAmount;
-
-        if (r.TournamentId.HasValue)
-        {
-            // ── Percentage-based path: the tournament's total pool decides the amount ──
-            var tournament = await _tournamentRepo.GetByIdAsync(r.TournamentId.Value);
-            if (tournament == null)
-                return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải đấu");
-
-            if (tournament.PrizePool <= 0)
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    "Giải đấu chưa có tổng giá trị giải thưởng (PrizePool). Vui lòng cập nhật giải đấu trước.");
-
-            if (r.PercentageOfPool <= 0 || r.PercentageOfPool > 100)
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    "Phần trăm giải thưởng phải lớn hơn 0 và không vượt quá 100.");
-
-            var existing = (await _repo.GetByTournamentAsync(r.TournamentId.Value)).ToList();
-
-            // Position must be unique within a tournament — one config per finishing place.
-            if (existing.Any(p => p.Position == r.Position))
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    $"Vị trí #{r.Position} đã được cấu hình cho giải đấu này. Vui lòng sửa thay vì tạo mới.");
-
-            // Sum of all percentages for this tournament must not exceed 100%.
-            var totalAllocated = existing.Sum(p => p.PercentageOfPool) + r.PercentageOfPool;
-            if (totalAllocated > 100)
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    $"Tổng phần trăm giải thưởng ({totalAllocated}%) vượt quá 100%. Còn lại {100 - existing.Sum(p => p.PercentageOfPool)}% có thể phân bổ.");
-
-            computedAmount = Math.Round(tournament.PrizePool * r.PercentageOfPool / 100m, 2, MidpointRounding.AwayFromZero);
-        }
-        else
-        {
-            // ── Race-only bonus prize (no tournament pool to derive from) — keep manual amount ──
-            if (r.Amount <= 0)
-                return ServiceResult<PrizeResponse>.Fail(400, "Số tiền giải thưởng phải lớn hơn 0.");
-            computedAmount = r.Amount;
-        }
-
         var prize = new Prize
         {
-            Id = Guid.NewGuid(),
-            TournamentId = r.TournamentId,
-            RaceId = r.RaceId,
-            Name = r.Name,
-            Amount = computedAmount,
-            Currency = r.Currency,
-            Position = r.Position,
-            PercentageOfPool = r.TournamentId.HasValue ? r.PercentageOfPool : 0,
-            SponsorName = r.SponsorName,
-            Description = r.Description,
+            Id = Guid.NewGuid(), TournamentId = r.TournamentId, RaceId = r.RaceId,
+            Name = r.Name, Amount = r.Amount, Currency = r.Currency, Position = r.Position,
+            PercentageOfPool = r.PercentageOfPool, SponsorName = r.SponsorName, Description = r.Description,
             CreatedAt = DateTime.UtcNow
         };
         await _repo.AddAsync(prize);
         await _uow.SaveChangesAsync();
         return ServiceResult<PrizeResponse>.Success(Map(prize), 201);
-    }
-
-    // ADD — new method
-    public async Task<ServiceResult<PrizeResponse>> UpdateAsync(Guid id, UpdatePrizeRequest r)
-    {
-        var prize = await _repo.GetByIdAsync(id);
-        if (prize == null)
-            return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải thưởng");
-
-        if (prize.IsDistributed)
-            return ServiceResult<PrizeResponse>.Fail(400, "Không thể sửa giải thưởng đã được phân phối.");
-
-        if (prize.TournamentId.HasValue)
-        {
-            var tournament = await _tournamentRepo.GetByIdAsync(prize.TournamentId.Value);
-            if (tournament == null)
-                return ServiceResult<PrizeResponse>.Fail(404, "Không tìm thấy giải đấu");
-
-            if (r.PercentageOfPool <= 0 || r.PercentageOfPool > 100)
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    "Phần trăm giải thưởng phải lớn hơn 0 và không vượt quá 100.");
-
-            var existing = (await _repo.GetByTournamentAsync(prize.TournamentId.Value))
-                .Where(p => p.Id != id).ToList();
-
-            if (r.Position.HasValue && existing.Any(p => p.Position == r.Position.Value))
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    $"Vị trí #{r.Position} đã được cấu hình cho giải đấu này.");
-
-            var totalAllocated = existing.Sum(p => p.PercentageOfPool) + r.PercentageOfPool;
-            if (totalAllocated > 100)
-                return ServiceResult<PrizeResponse>.Fail(400,
-                    $"Tổng phần trăm giải thưởng ({totalAllocated}%) vượt quá 100%.");
-
-            prize.PercentageOfPool = r.PercentageOfPool;
-            prize.Amount = Math.Round(tournament.PrizePool * r.PercentageOfPool / 100m, 2, MidpointRounding.AwayFromZero);
-        }
-        else if (r.Amount.HasValue)
-        {
-            if (r.Amount.Value <= 0)
-                return ServiceResult<PrizeResponse>.Fail(400, "Số tiền giải thưởng phải lớn hơn 0.");
-            prize.Amount = r.Amount.Value;
-        }
-
-        if (r.Position.HasValue) prize.Position = r.Position.Value;
-        if (r.Name != null) prize.Name = r.Name;
-        if (r.SponsorName != null) prize.SponsorName = r.SponsorName;
-        if (r.Description != null) prize.Description = r.Description;
-
-        await _repo.UpdateAsync(prize);
-        await _uow.SaveChangesAsync();
-        return ServiceResult<PrizeResponse>.Ok(Map(prize));
     }
 
     public async Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByTournamentAsync(Guid tid) =>
@@ -166,18 +44,10 @@ public class PrizeService : IPrizeService
 
     private static PrizeResponse Map(Prize p) => new()
     {
-        Id = p.Id,
-        TournamentId = p.TournamentId,
-        RaceId = p.RaceId,
-        Name = p.Name,
-        Amount = p.Amount,
-        Currency = p.Currency,
-        Position = p.Position,
-        PercentageOfPool = p.PercentageOfPool,
-        SponsorName = p.SponsorName,
-        Description = p.Description,
-        IsDistributed = p.IsDistributed,
-        CreatedAt = p.CreatedAt
+        Id = p.Id, TournamentId = p.TournamentId, RaceId = p.RaceId, Name = p.Name,
+        Amount = p.Amount, Currency = p.Currency, Position = p.Position,
+        PercentageOfPool = p.PercentageOfPool, SponsorName = p.SponsorName, Description = p.Description,
+        IsDistributed = p.IsDistributed, CreatedAt = p.CreatedAt
     };
 }
 
@@ -191,14 +61,9 @@ public class ProtestService : IProtestService
     {
         var protest = new Protest
         {
-            Id = Guid.NewGuid(),
-            RaceId = r.RaceId,
-            FiledByUserId = userId,
-            AgainstEntryId = r.AgainstEntryId,
-            Reason = r.Reason,
-            Evidence = r.Evidence,
-            Status = ProtestStatus.Pending,
-            FiledAt = DateTime.UtcNow
+            Id = Guid.NewGuid(), RaceId = r.RaceId, FiledByUserId = userId,
+            AgainstEntryId = r.AgainstEntryId, Reason = r.Reason, Evidence = r.Evidence,
+            Status = ProtestStatus.Pending, FiledAt = DateTime.UtcNow
         };
         await _repo.AddAsync(protest);
         await _uow.SaveChangesAsync();
@@ -228,21 +93,11 @@ public class ProtestService : IProtestService
 
     private static ProtestResponse Map(Protest p) => new()
     {
-        Id = p.Id,
-        RaceId = p.RaceId,
-        RaceName = p.Race?.Name,
-        FiledByUserId = p.FiledByUserId,
-        FiledByName = p.FiledByUser?.FullName,
-        AgainstEntryId = p.AgainstEntryId,
-        AgainstHorseName = p.AgainstEntry?.Horse?.Name,
-        Reason = p.Reason,
-        Evidence = p.Evidence,
-        Status = p.Status.ToString(),
-        Ruling = p.Ruling,
-        Resolution = p.Resolution,
-        RuledByUserId = p.RuledByUserId,
-        FiledAt = p.FiledAt,
-        RuledAt = p.RuledAt
+        Id = p.Id, RaceId = p.RaceId, RaceName = p.Race?.Name, FiledByUserId = p.FiledByUserId,
+        FiledByName = p.FiledByUser?.FullName, AgainstEntryId = p.AgainstEntryId,
+        AgainstHorseName = p.AgainstEntry?.Horse?.Name, Reason = p.Reason, Evidence = p.Evidence,
+        Status = p.Status.ToString(), Ruling = p.Ruling, Resolution = p.Resolution,
+        RuledByUserId = p.RuledByUserId, FiledAt = p.FiledAt, RuledAt = p.RuledAt
     };
 }
 
@@ -256,15 +111,9 @@ public class HorseTransferService : IHorseTransferService
     {
         var transfer = new HorseTransfer
         {
-            Id = Guid.NewGuid(),
-            HorseId = r.HorseId,
-            FromOwnerId = fromOwnerId,
-            ToOwnerId = r.ToOwnerId,
-            TransferType = Enum.Parse<TransferType>(r.TransferType),
-            Price = r.Price,
-            Reason = r.Reason,
-            Status = TransferStatus.Pending,
-            RequestedAt = DateTime.UtcNow
+            Id = Guid.NewGuid(), HorseId = r.HorseId, FromOwnerId = fromOwnerId, ToOwnerId = r.ToOwnerId,
+            TransferType = Enum.Parse<TransferType>(r.TransferType), Price = r.Price, Reason = r.Reason,
+            Status = TransferStatus.Pending, RequestedAt = DateTime.UtcNow
         };
         await _repo.AddAsync(transfer);
         await _uow.SaveChangesAsync();
@@ -306,20 +155,11 @@ public class HorseTransferService : IHorseTransferService
 
     private static HorseTransferResponse Map(HorseTransfer t) => new()
     {
-        Id = t.Id,
-        HorseId = t.HorseId,
-        HorseName = t.Horse?.Name,
-        FromOwnerId = t.FromOwnerId,
-        FromOwnerName = t.FromOwner?.User?.FullName,
-        ToOwnerId = t.ToOwnerId,
-        ToOwnerName = t.ToOwner?.User?.FullName,
-        TransferType = t.TransferType.ToString(),
-        Price = t.Price,
-        Reason = t.Reason,
-        Status = t.Status.ToString(),
-        AdminNotes = t.AdminNotes,
-        RequestedAt = t.RequestedAt,
-        CompletedAt = t.CompletedAt
+        Id = t.Id, HorseId = t.HorseId, HorseName = t.Horse?.Name, FromOwnerId = t.FromOwnerId,
+        FromOwnerName = t.FromOwner?.User?.FullName, ToOwnerId = t.ToOwnerId,
+        ToOwnerName = t.ToOwner?.User?.FullName, TransferType = t.TransferType.ToString(),
+        Price = t.Price, Reason = t.Reason, Status = t.Status.ToString(), AdminNotes = t.AdminNotes,
+        RequestedAt = t.RequestedAt, CompletedAt = t.CompletedAt
     };
 }
 
@@ -333,19 +173,10 @@ public class ContractService : IContractService
     {
         var c = new Contract
         {
-            Id = Guid.NewGuid(),
-            OwnerId = r.OwnerId,
-            JockeyId = r.JockeyId,
-            HorseId = r.HorseId,
-            Title = r.Title,
-            Status = ContractStatus.Draft,
-            StartDate = r.StartDate,
-            EndDate = r.EndDate,
-            BaseFee = r.BaseFee,
-            WinBonusPercent = r.WinBonusPercent,
-            PerRaceFee = r.PerRaceFee,
-            TermsAndConditions = r.TermsAndConditions,
-            CreatedAt = DateTime.UtcNow
+            Id = Guid.NewGuid(), OwnerId = r.OwnerId, JockeyId = r.JockeyId, HorseId = r.HorseId,
+            Title = r.Title, Status = ContractStatus.Draft, StartDate = r.StartDate, EndDate = r.EndDate,
+            BaseFee = r.BaseFee, WinBonusPercent = r.WinBonusPercent, PerRaceFee = r.PerRaceFee,
+            TermsAndConditions = r.TermsAndConditions, CreatedAt = DateTime.UtcNow
         };
         await _repo.AddAsync(c);
         await _uow.SaveChangesAsync();
@@ -385,24 +216,12 @@ public class ContractService : IContractService
 
     private static ContractResponse Map(Contract c) => new()
     {
-        Id = c.Id,
-        OwnerId = c.OwnerId,
-        OwnerName = c.Owner?.User?.FullName,
-        JockeyId = c.JockeyId,
-        JockeyName = c.Jockey?.User?.FullName,
-        HorseId = c.HorseId,
-        HorseName = c.Horse?.Name,
-        Title = c.Title,
-        Status = c.Status.ToString(),
-        StartDate = c.StartDate,
-        EndDate = c.EndDate,
-        BaseFee = c.BaseFee,
-        WinBonusPercent = c.WinBonusPercent,
-        PerRaceFee = c.PerRaceFee,
-        TermsAndConditions = c.TermsAndConditions,
-        SignedByOwnerAt = c.SignedByOwnerAt,
-        SignedByJockeyAt = c.SignedByJockeyAt,
-        CreatedAt = c.CreatedAt
+        Id = c.Id, OwnerId = c.OwnerId, OwnerName = c.Owner?.User?.FullName, JockeyId = c.JockeyId,
+        JockeyName = c.Jockey?.User?.FullName, HorseId = c.HorseId, HorseName = c.Horse?.Name,
+        Title = c.Title, Status = c.Status.ToString(), StartDate = c.StartDate, EndDate = c.EndDate,
+        BaseFee = c.BaseFee, WinBonusPercent = c.WinBonusPercent, PerRaceFee = c.PerRaceFee,
+        TermsAndConditions = c.TermsAndConditions, SignedByOwnerAt = c.SignedByOwnerAt,
+        SignedByJockeyAt = c.SignedByJockeyAt, CreatedAt = c.CreatedAt
     };
 }
 
@@ -416,20 +235,12 @@ public class InjuryRecordService : IInjuryRecordService
     {
         var record = new InjuryRecord
         {
-            Id = Guid.NewGuid(),
-            HorseId = r.HorseId,
-            InjuryType = r.InjuryType,
-            Description = r.Description,
-            Severity = Enum.Parse<InjurySeverity>(r.Severity),
-            BodyPart = r.BodyPart,
-            Treatment = r.Treatment,
-            Medication = r.Medication,
-            VeterinarianName = r.VeterinarianName,
-            ExpectedRecoveryDate = r.ExpectedRecoveryDate,
-            RequiresSurgery = r.RequiresSurgery,
-            ReportedByUserId = reportedByUserId,
-            DiagnosedAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
+            Id = Guid.NewGuid(), HorseId = r.HorseId, InjuryType = r.InjuryType,
+            Description = r.Description, Severity = Enum.Parse<InjurySeverity>(r.Severity),
+            BodyPart = r.BodyPart, Treatment = r.Treatment, Medication = r.Medication,
+            VeterinarianName = r.VeterinarianName, ExpectedRecoveryDate = r.ExpectedRecoveryDate,
+            RequiresSurgery = r.RequiresSurgery, ReportedByUserId = reportedByUserId,
+            DiagnosedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow
         };
         await _repo.AddAsync(record);
         await _uow.SaveChangesAsync();
@@ -466,20 +277,10 @@ public class InjuryRecordService : IInjuryRecordService
 
     private static InjuryRecordResponse Map(InjuryRecord r) => new()
     {
-        Id = r.Id,
-        HorseId = r.HorseId,
-        HorseName = r.Horse?.Name,
-        Severity = r.Severity.ToString(),
-        Status = r.Status.ToString(),
-        InjuryType = r.InjuryType,
-        Description = r.Description,
-        BodyPart = r.BodyPart,
-        Treatment = r.Treatment,
-        VeterinarianName = r.VeterinarianName,
-        DiagnosedAt = r.DiagnosedAt,
-        ExpectedRecoveryDate = r.ExpectedRecoveryDate,
-        RecoveredAt = r.RecoveredAt,
-        ClearedToRace = r.ClearedToRace,
-        ClearedAt = r.ClearedAt
+        Id = r.Id, HorseId = r.HorseId, HorseName = r.Horse?.Name, Severity = r.Severity.ToString(),
+        Status = r.Status.ToString(), InjuryType = r.InjuryType, Description = r.Description,
+        BodyPart = r.BodyPart, Treatment = r.Treatment, VeterinarianName = r.VeterinarianName,
+        DiagnosedAt = r.DiagnosedAt, ExpectedRecoveryDate = r.ExpectedRecoveryDate,
+        RecoveredAt = r.RecoveredAt, ClearedToRace = r.ClearedToRace, ClearedAt = r.ClearedAt
     };
 }
