@@ -9,6 +9,7 @@ using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
 using HorseRacing.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Services;
@@ -23,6 +24,7 @@ public class RaceComplaintService : IRaceComplaintService
     };
 
     private readonly IRaceComplaintRepository _repo;
+    private readonly IRaceComplaintEvidenceRepository _evidenceRepo;
     private readonly IRaceRepository _raceRepo;
     private readonly IRaceResultRepository _raceResultRepo;
     private readonly IRaceEntryRepository _entryRepo;
@@ -32,11 +34,13 @@ public class RaceComplaintService : IRaceComplaintService
     private readonly IRefereeAssignmentRepository _assignmentRepo;
     private readonly IUnitOfWork _uow;
     private readonly ApplicationDbContext _db;
+    private readonly ICloudStorageService _cloudStorage;
     private readonly INotificationService? _notifications;
     private readonly IAuditLogService? _auditLogs;
 
     public RaceComplaintService(
         IRaceComplaintRepository repo,
+        IRaceComplaintEvidenceRepository evidenceRepo,
         IRaceRepository raceRepo,
         IRaceResultRepository raceResultRepo,
         IRaceEntryRepository entryRepo,
@@ -46,10 +50,12 @@ public class RaceComplaintService : IRaceComplaintService
         IRefereeAssignmentRepository assignmentRepo,
         IUnitOfWork uow,
         ApplicationDbContext db,
+        ICloudStorageService cloudStorage,
         INotificationService? notifications = null,
         IAuditLogService? auditLogs = null)
     {
         _repo = repo;
+        _evidenceRepo = evidenceRepo;
         _raceRepo = raceRepo;
         _raceResultRepo = raceResultRepo;
         _entryRepo = entryRepo;
@@ -59,6 +65,7 @@ public class RaceComplaintService : IRaceComplaintService
         _assignmentRepo = assignmentRepo;
         _uow = uow;
         _db = db;
+        _cloudStorage = cloudStorage;
         _notifications = notifications;
         _auditLogs = auditLogs;
     }
@@ -336,6 +343,137 @@ public class RaceComplaintService : IRaceComplaintService
         return ServiceResult<RaceComplaintResponse>.Ok(Map(await _repo.GetByIdAsync(id) ?? complaint));
     }
 
+    // COMPLAINT-EVIDENCE-V1.1: max 5 files per side, counted from persisted EvidenceSource rows —
+    // backend-authoritative, independent of whatever the client's own gallery count shows.
+    private const int MaxEvidencePerSource = 5;
+
+    // COMPLAINT-EVIDENCE-V1: the original filer (Owner/Jockey) may attach evidence while their
+    // complaint is still active; the assigned Referee may attach supplementary evidence only up to
+    // submitting their response (COMPLAINT-EVIDENCE-V1.1: not during UnderReview — once the referee
+    // has responded, admin review must operate on a stable evidence set). Neither role can attach
+    // evidence to someone else's complaint, and uploading is never itself a ruling action.
+    public async Task<ServiceResult<RaceComplaintEvidenceResponse>> UploadEvidenceAsync(Guid id, IFormFile file, Guid uploaderUserId)
+    {
+        if (file == null || file.Length == 0)
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(400, "Không có file nào được tải lên.");
+
+        var complaint = await _repo.GetByIdAsync(id);
+        if (complaint == null)
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(404, "Race complaint not found.");
+
+        var isFiler = complaint.FiledByUserId == uploaderUserId;
+        var isAssignedReferee = complaint.AssignedRefereeAssignment?.Referee?.UserId == uploaderUserId;
+
+        if (!isFiler && !isAssignedReferee)
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(403, "You are not permitted to upload evidence for this complaint.");
+
+        if (isFiler && !ActiveStatuses.Contains(complaint.Status))
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(400, "This complaint is no longer active.");
+
+        if (isAssignedReferee && complaint.Status != RaceComplaintStatus.AwaitingRefereeResponse)
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(400, "You can only add evidence before submitting your response.");
+
+        // Source is derived from the caller's verified relationship to the complaint above, never
+        // from anything the client sends — the filer branch is checked first so a user who happens
+        // to be both the filer and the assigned referee (different races) is recorded as Filer here.
+        var source = isFiler ? EvidenceSource.Filer : EvidenceSource.Referee;
+
+        var existingCount = await _evidenceRepo.CountBySourceAsync(id, source);
+        if (existingCount >= MaxEvidencePerSource)
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(400, $"Đã đạt giới hạn tối đa {MaxEvidencePerSource} tệp minh chứng.");
+
+        MediaUploadResult upload;
+        try
+        {
+            upload = await _cloudStorage.UploadMediaAsync(file, "race-complaint-evidence");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<RaceComplaintEvidenceResponse>.Fail(400, ex.Message);
+        }
+
+        var mediaType = string.Equals(upload.ResourceType, "video", StringComparison.OrdinalIgnoreCase)
+            ? ComplaintEvidenceMediaType.Video
+            : ComplaintEvidenceMediaType.Image;
+
+        var evidence = new RaceComplaintEvidence
+        {
+            Id = Guid.NewGuid(),
+            RaceComplaintId = id,
+            UploadedByUserId = uploaderUserId,
+            FileUrl = upload.Url,
+            MediaType = mediaType,
+            EvidenceSource = source,
+            FileName = file.FileName,
+            PublicId = upload.PublicId,
+            FileSizeBytes = upload.FileSizeBytes,
+            UploadedAt = DateTime.UtcNow,
+        };
+
+        await _evidenceRepo.AddAsync(evidence);
+        await _uow.SaveChangesAsync();
+
+        var uploader = await _userRepo.GetByIdAsync(uploaderUserId);
+        return ServiceResult<RaceComplaintEvidenceResponse>.Success(new RaceComplaintEvidenceResponse
+        {
+            Id = evidence.Id,
+            RaceComplaintId = id,
+            FileUrl = evidence.FileUrl,
+            MediaType = evidence.MediaType.ToString(),
+            EvidenceSource = evidence.EvidenceSource.ToString(),
+            FileName = evidence.FileName,
+            UploadedByUserId = uploaderUserId,
+            UploadedByName = uploader?.FullName ?? uploader?.Email,
+            UploadedByRole = uploader?.Role.ToString(),
+            FileSizeBytes = evidence.FileSizeBytes,
+            UploadedAt = evidence.UploadedAt,
+        }, 201);
+    }
+
+    // COMPLAINT-EVIDENCE-V1.1: mirrors UploadEvidenceAsync's ownership/lifecycle rules exactly, plus
+    // the extra constraint that a side may only ever delete its own evidence. Referee evidence
+    // becomes read-only the moment a response is submitted (Status leaves AwaitingRefereeResponse),
+    // matching the narrower upload window above, so admin review always sees a stable evidence set.
+    public async Task<ServiceResult<bool>> DeleteEvidenceAsync(Guid id, Guid evidenceId, Guid requestingUserId)
+    {
+        var complaint = await _repo.GetByIdAsync(id);
+        if (complaint == null)
+            return ServiceResult<bool>.Fail(404, "Race complaint not found.");
+
+        var evidence = await _evidenceRepo.GetByIdAsync(evidenceId);
+        if (evidence == null || evidence.RaceComplaintId != id)
+            return ServiceResult<bool>.Fail(404, "Evidence not found.");
+
+        // Only the original uploader may ever delete a row: since a row can only ever have been
+        // created by the verified filer or the verified assigned referee (see UploadEvidenceAsync),
+        // this single check also covers "filer cannot delete referee evidence", "referee cannot
+        // delete filer evidence", and "unrelated user forbidden" without needing separate checks.
+        if (evidence.UploadedByUserId != requestingUserId)
+            return ServiceResult<bool>.Fail(403, "You can only delete your own evidence.");
+
+        if (evidence.EvidenceSource == EvidenceSource.Filer)
+        {
+            if (!ActiveStatuses.Contains(complaint.Status))
+                return ServiceResult<bool>.Fail(400, "This complaint is no longer active.");
+        }
+        else
+        {
+            if (complaint.Status != RaceComplaintStatus.AwaitingRefereeResponse)
+                return ServiceResult<bool>.Fail(400, "Your evidence is read-only after your response has been submitted.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(evidence.PublicId))
+        {
+            var resourceType = evidence.MediaType == ComplaintEvidenceMediaType.Video ? "video" : "image";
+            await _cloudStorage.DeleteAsync(evidence.PublicId, resourceType);
+        }
+
+        await _evidenceRepo.RemoveAsync(evidence);
+        await _uow.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     private async Task<bool> HasFilingStandingAsync(User user, Guid raceId)
     {
         if (user.Role == UserRole.HorseOwner)
@@ -460,6 +598,23 @@ public class RaceComplaintService : IRaceComplaintService
                     })
                     .ToList() ?? new List<RaceComplaintAssignmentOption>()
                 : new List<RaceComplaintAssignmentOption>(),
+            Evidence = c.Evidence
+                .OrderBy(e => e.UploadedAt)
+                .Select(e => new RaceComplaintEvidenceResponse
+                {
+                    Id = e.Id,
+                    RaceComplaintId = e.RaceComplaintId,
+                    FileUrl = e.FileUrl,
+                    MediaType = e.MediaType.ToString(),
+                    EvidenceSource = e.EvidenceSource.ToString(),
+                    FileName = e.FileName,
+                    UploadedByUserId = e.UploadedByUserId,
+                    UploadedByName = e.UploadedByUser?.FullName ?? e.UploadedByUser?.Email,
+                    UploadedByRole = e.UploadedByUser?.Role.ToString(),
+                    FileSizeBytes = e.FileSizeBytes,
+                    UploadedAt = e.UploadedAt,
+                })
+                .ToList(),
         };
     }
 }

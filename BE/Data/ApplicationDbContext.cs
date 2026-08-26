@@ -32,6 +32,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Prize> Prizes => Set<Prize>();
     public DbSet<Protest> Protests => Set<Protest>();
     public DbSet<RaceComplaint> RaceComplaints => Set<RaceComplaint>();
+    public DbSet<RaceComplaintEvidence> RaceComplaintEvidence => Set<RaceComplaintEvidence>();
     public DbSet<HorseTransfer> HorseTransfers => Set<HorseTransfer>();
     public DbSet<InjuryRecord> InjuryRecords => Set<InjuryRecord>();
     public DbSet<Contract> Contracts => Set<Contract>();
@@ -447,6 +448,33 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<RaceComplaint>()
             .HasIndex(c => c.AssignedRefereeAssignmentId);
+
+        // RaceComplaintEvidence Model (COMPLAINT-EVIDENCE-V1)
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasOne(e => e.RaceComplaint)
+            .WithMany(c => c.Evidence)
+            .HasForeignKey(e => e.RaceComplaintId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasOne(e => e.UploadedByUser)
+            .WithMany()
+            .HasForeignKey(e => e.UploadedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .Property(e => e.MediaType)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .Property(e => e.EvidenceSource)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasIndex(e => e.RaceComplaintId);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasIndex(e => new { e.RaceComplaintId, e.EvidenceSource });
 
         // HorseTransfer Model
         modelBuilder.Entity<HorseTransfer>()

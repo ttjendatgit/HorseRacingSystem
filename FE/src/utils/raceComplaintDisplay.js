@@ -159,3 +159,75 @@ export const mapEligibleRacesToOptions = (races) => {
     scheduledAt: race.scheduledAt ?? race.ScheduledAt ?? null,
   }));
 };
+
+// ── COMPLAINT-EVIDENCE-V1 ──
+
+// Mirrors CloudinaryStorageService.UploadMediaAsync's accepted types/size ceilings — client-side
+// pre-check only, never a substitute for the backend's own re-validation.
+const EVIDENCE_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+const EVIDENCE_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo", "video/3gpp"];
+const EVIDENCE_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const EVIDENCE_MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
+export const EVIDENCE_ACCEPT_ATTR = [...EVIDENCE_IMAGE_TYPES, ...EVIDENCE_VIDEO_TYPES].join(",");
+
+// COMPLAINT-EVIDENCE-V1.1: backend-authoritative cap (RaceComplaintService.MaxEvidencePerSource) —
+// mirrored here only so the uploader UI can show "N/5" and pre-disable the picker at the limit.
+export const MAX_EVIDENCE_PER_SOURCE = 5;
+
+// Returns { valid, error } — never throws, so callers can validate a whole FileList in a loop
+// and report one message per rejected file without a try/catch per file.
+export const validateEvidenceFile = (file) => {
+  if (!file) return { valid: false, error: "Không có file nào được chọn." };
+  const type = String(file.type || "").toLowerCase();
+  const isImage = EVIDENCE_IMAGE_TYPES.includes(type);
+  const isVideo = EVIDENCE_VIDEO_TYPES.includes(type);
+  if (!isImage && !isVideo) {
+    return { valid: false, error: `Định dạng không được hỗ trợ: ${file.name}` };
+  }
+  const maxBytes = isVideo ? EVIDENCE_MAX_VIDEO_BYTES : EVIDENCE_MAX_IMAGE_BYTES;
+  if (file.size > maxBytes) {
+    return { valid: false, error: `${file.name} quá lớn (tối đa ${isVideo ? "50MB cho video" : "10MB cho ảnh"}).` };
+  }
+  return { valid: true, error: null };
+};
+
+export const normalizeEvidenceMediaType = (mediaType) => {
+  const key = normalizeText(mediaType);
+  return key === "video" ? "Video" : "Image";
+};
+
+// Groups one complaint's Evidence list into who it belongs to, so the UI can show "Bằng chứng
+// của người khiếu nại" and "Bằng chứng của trọng tài" as separate galleries — this is exactly
+// what lets Admin "xem hai phía" (review both sides) instead of one flat mixed list.
+//
+// COMPLAINT-EVIDENCE-V1.1: keys off the persisted evidenceSource field only — never inferred from
+// uploadedByUserId/uploadedByRole, which used to require the caller to also pass filedByUserId.
+export const groupComplaintEvidenceByUploader = (evidence) => {
+  const list = Array.isArray(evidence) ? evidence : [];
+  const filerEvidence = [];
+  const refereeEvidence = [];
+  const otherEvidence = [];
+  list.forEach((item) => {
+    const source = item.evidenceSource ?? item.EvidenceSource;
+    if (source === "Filer") {
+      filerEvidence.push(item);
+    } else if (source === "Referee") {
+      refereeEvidence.push(item);
+    } else {
+      otherEvidence.push(item);
+    }
+  });
+  return { filerEvidence, refereeEvidence, otherEvidence };
+};
+
+// COMPLAINT-EVIDENCE-V1.1: narrowed from "AwaitingRefereeResponse OR UnderReview" — once the
+// referee has submitted their response, their evidence set must stay stable for admin review, so
+// this is now also the single source of truth for the Referee-side mutation (upload/delete) window.
+export const canRefereeUploadEvidence = (status) =>
+  normalizeRaceComplaintStatus(status) === "AwaitingRefereeResponse";
+
+// The filer may add/remove their own evidence for as long as the complaint is still active —
+// identical window to canFilerWithdraw, kept as its own named predicate for readability at call
+// sites that are about evidence, not withdrawal.
+export const canFilerMutateEvidence = (status) => canFilerWithdraw(status);

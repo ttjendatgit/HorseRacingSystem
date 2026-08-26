@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
+using Microsoft.AspNetCore.Http;
 
 namespace HorseRacing.Services.Interfaces;
 
@@ -38,6 +39,8 @@ public interface IRaceComplaintService
     Task<ServiceResult<RaceComplaintResponse>> RespondAsync(Guid id, RespondRaceComplaintRequest request, Guid refereeUserId);
     Task<ServiceResult<RaceComplaintResponse>> RuleAsync(Guid id, RuleRaceComplaintRequest request, Guid ruledByUserId);
     Task<ServiceResult<RaceComplaintResponse>> WithdrawAsync(Guid id, Guid requestingUserId);
+    Task<ServiceResult<RaceComplaintEvidenceResponse>> UploadEvidenceAsync(Guid id, IFormFile file, Guid uploaderUserId);
+    Task<ServiceResult<bool>> DeleteEvidenceAsync(Guid id, Guid evidenceId, Guid requestingUserId);
 }
 
 public interface IHorseTransferService

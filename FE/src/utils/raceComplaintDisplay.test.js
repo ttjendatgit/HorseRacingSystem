@@ -1,18 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  MAX_EVIDENCE_PER_SOURCE,
   buildRuleRaceComplaintPayload,
+  canFilerMutateEvidence,
   canFilerWithdraw,
   canRefereeRespond,
+  canRefereeUploadEvidence,
   filterRaceComplaintsByTab,
   getAvailableAdminRaceComplaintActions,
   getDefaultRaceComplaintTab,
   getRaceComplaintStatusDetails,
   getRaceComplaintTabCounts,
   getRaceComplaintTypeLabel,
+  groupComplaintEvidenceByUploader,
   mapEligibleRacesToOptions,
+  normalizeEvidenceMediaType,
   normalizeRaceComplaintStatus,
   normalizeRaceComplaintType,
+  validateEvidenceFile,
 } from "./raceComplaintDisplay.js";
 
 test("status labels map every lifecycle status to its admin tab group", () => {
@@ -159,4 +165,92 @@ test("eligible races map to picker options without exposing RaceEntry selection"
     { value: "r2", label: "Vòng loại 2 — Sấm Sét", tournamentName: null, scheduledAt: null },
   ]);
   assert.deepEqual(mapEligibleRacesToOptions(null), []);
+});
+
+// ── COMPLAINT-EVIDENCE-V1 ──
+
+test("validateEvidenceFile accepts supported image/video types under their size ceiling", () => {
+  assert.deepEqual(validateEvidenceFile({ name: "a.jpg", type: "image/jpeg", size: 1024 }), { valid: true, error: null });
+  assert.deepEqual(validateEvidenceFile({ name: "b.mp4", type: "video/mp4", size: 1024 }), { valid: true, error: null });
+});
+
+test("validateEvidenceFile rejects unsupported file types", () => {
+  const result = validateEvidenceFile({ name: "doc.pdf", type: "application/pdf", size: 1024 });
+  assert.equal(result.valid, false);
+  assert.match(result.error, /doc\.pdf/);
+});
+
+test("validateEvidenceFile rejects oversized images (>10MB) and videos (>50MB) with distinct messages", () => {
+  const bigImage = validateEvidenceFile({ name: "big.png", type: "image/png", size: 11 * 1024 * 1024 });
+  assert.equal(bigImage.valid, false);
+  assert.match(bigImage.error, /10MB/);
+
+  const bigVideo = validateEvidenceFile({ name: "big.mp4", type: "video/mp4", size: 51 * 1024 * 1024 });
+  assert.equal(bigVideo.valid, false);
+  assert.match(bigVideo.error, /50MB/);
+});
+
+test("validateEvidenceFile rejects a missing file without throwing", () => {
+  assert.equal(validateEvidenceFile(null).valid, false);
+  assert.equal(validateEvidenceFile(undefined).valid, false);
+});
+
+test("normalizeEvidenceMediaType tolerates casing and always resolves to Image or Video", () => {
+  assert.equal(normalizeEvidenceMediaType("Video"), "Video");
+  assert.equal(normalizeEvidenceMediaType("video"), "Video");
+  assert.equal(normalizeEvidenceMediaType("Image"), "Image");
+  assert.equal(normalizeEvidenceMediaType(""), "Image");
+  assert.equal(normalizeEvidenceMediaType(undefined), "Image");
+});
+
+// COMPLAINT-EVIDENCE-V1.1: grouping now keys off the persisted evidenceSource field, never off
+// uploadedByUserId/uploadedByRole — those fields are still present on the DTO for display but are
+// no longer read by this function.
+test("groupComplaintEvidenceByUploader separates Filer evidence from Referee evidence by evidenceSource — lets Admin review both sides", () => {
+  const evidence = [
+    { evidenceSource: "Filer", fileName: "filer1.jpg" },
+    { evidenceSource: "Referee", fileName: "referee1.jpg" },
+    { EvidenceSource: "Filer", FileName: "filer2.jpg" },
+  ];
+
+  const grouped = groupComplaintEvidenceByUploader(evidence);
+  assert.equal(grouped.filerEvidence.length, 2);
+  assert.equal(grouped.refereeEvidence.length, 1);
+  assert.equal(grouped.otherEvidence.length, 0);
+  assert.deepEqual(grouped.filerEvidence.map((e) => e.fileName ?? e.FileName), ["filer1.jpg", "filer2.jpg"]);
+});
+
+test("groupComplaintEvidenceByUploader puts unrecognized/missing evidenceSource in otherEvidence rather than guessing", () => {
+  const grouped = groupComplaintEvidenceByUploader([{ fileName: "no-source.jpg" }]);
+  assert.equal(grouped.filerEvidence.length, 0);
+  assert.equal(grouped.refereeEvidence.length, 0);
+  assert.equal(grouped.otherEvidence.length, 1);
+});
+
+test("groupComplaintEvidenceByUploader never crashes on missing/non-array evidence", () => {
+  assert.deepEqual(groupComplaintEvidenceByUploader(null), { filerEvidence: [], refereeEvidence: [], otherEvidence: [] });
+  assert.deepEqual(groupComplaintEvidenceByUploader(undefined), { filerEvidence: [], refereeEvidence: [], otherEvidence: [] });
+});
+
+// COMPLAINT-EVIDENCE-V1.1: narrowed from "awaiting response OR under review" — once the referee
+// has submitted their response, their evidence set must stay stable for admin review.
+test("canRefereeUploadEvidence only before the referee's response is submitted", () => {
+  assert.equal(canRefereeUploadEvidence("AwaitingRefereeResponse"), true);
+  assert.equal(canRefereeUploadEvidence("UnderReview"), false);
+  assert.equal(canRefereeUploadEvidence("Pending"), false);
+  assert.equal(canRefereeUploadEvidence("Upheld"), false);
+  assert.equal(canRefereeUploadEvidence("Rejected"), false);
+});
+
+test("canFilerMutateEvidence matches canFilerWithdraw's active-complaint window", () => {
+  assert.equal(canFilerMutateEvidence("Pending"), true);
+  assert.equal(canFilerMutateEvidence("AwaitingRefereeResponse"), true);
+  assert.equal(canFilerMutateEvidence("UnderReview"), true);
+  assert.equal(canFilerMutateEvidence("Upheld"), false);
+  assert.equal(canFilerMutateEvidence("Rejected"), false);
+  assert.equal(canFilerMutateEvidence("Withdrawn"), false);
+});
+
+test("MAX_EVIDENCE_PER_SOURCE mirrors the backend's per-side cap", () => {
+  assert.equal(MAX_EVIDENCE_PER_SOURCE, 5);
 });

@@ -267,6 +267,8 @@ public class PrizeV1_1Tests
         public Task<ServiceResult<RaceComplaintResponse>> RespondAsync(Guid id, RespondRaceComplaintRequest request, Guid refereeUserId) => throw new NotSupportedException();
         public Task<ServiceResult<RaceComplaintResponse>> RuleAsync(Guid id, RuleRaceComplaintRequest request, Guid ruledByUserId) => throw new NotSupportedException();
         public Task<ServiceResult<RaceComplaintResponse>> WithdrawAsync(Guid id, Guid requestingUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<RaceComplaintEvidenceResponse>> UploadEvidenceAsync(Guid id, IFormFile file, Guid uploaderUserId) => throw new NotSupportedException();
+        public Task<ServiceResult<bool>> DeleteEvidenceAsync(Guid id, Guid evidenceId, Guid requestingUserId) => throw new NotSupportedException();
     }
 
     private sealed class ThrowingTransferService : IHorseTransferService

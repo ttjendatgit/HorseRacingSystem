@@ -10,6 +10,7 @@ import {
   RaceTabs,
 } from "../../components/ui/RaceUi";
 import { getRaceComplaints, routeRaceComplaint, ruleRaceComplaint } from "../../services/managementApi";
+import ComplaintEvidenceGallery from "../../components/ComplaintEvidenceGallery";
 import {
   ADMIN_RACE_COMPLAINT_TABS,
   buildRuleRaceComplaintPayload,
@@ -140,6 +141,7 @@ export function AdminRaceComplaintManagement() {
         actions={renderActions(complaint)}
       >
         <p className="rm-data-row__reason">{complaint.reason}</p>
+        <ComplaintEvidenceGallery evidence={complaint.evidence} filedByUserId={complaint.filedByUserId} />
       </RaceDataRow>
     );
   };

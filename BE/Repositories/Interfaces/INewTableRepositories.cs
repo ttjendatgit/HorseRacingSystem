@@ -47,6 +47,17 @@ public interface IRaceComplaintRepository
     Task UpdateAsync(RaceComplaint complaint);
 }
 
+// COMPLAINT-EVIDENCE-V1
+public interface IRaceComplaintEvidenceRepository
+{
+    Task<RaceComplaintEvidence?> GetByIdAsync(Guid id);
+    // COMPLAINT-EVIDENCE-V1.1: backend-authoritative max-5-per-side enforcement counts persisted
+    // rows by EvidenceSource rather than trusting anything the client claims about upload count.
+    Task<int> CountBySourceAsync(Guid raceComplaintId, EvidenceSource source);
+    Task AddAsync(RaceComplaintEvidence evidence);
+    Task RemoveAsync(RaceComplaintEvidence evidence);
+}
+
 public interface IHorseTransferRepository
 {
     Task<HorseTransfer?> GetByIdAsync(Guid id);
