@@ -1,4 +1,4 @@
-﻿using HorseRacing.Data;
+using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
@@ -32,6 +32,15 @@ public class RaceEntryService : IRaceEntryService
 
     private static bool DirectRaceRegistrationDisabled => true;
 
+    /// <summary>
+    /// Đăng ký ngựa và kỵ thủ tham gia vào cuộc đua cụ thể (Chế độ đăng ký trực tiếp).
+    /// Kiểm tra điều kiện phê duyệt của ngựa, thời hạn giải đấu và lịch thi đấu của kỵ thủ.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng đăng ký.</param>
+    /// <param name="horseId">Mã định danh con ngựa thi đấu.</param>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <param name="request">Yêu cầu đăng ký thi đấu.</param>
+    /// <returns>Kết quả đăng ký tham gia cuộc đua.</returns>
     public async Task<ServiceResult<object>> RegisterAsync(Guid userId, Guid horseId, Guid raceId, RaceRegistrationRequest request)
     {
         if (DirectRaceRegistrationDisabled)
@@ -88,6 +97,11 @@ public class RaceEntryService : IRaceEntryService
         return ServiceResult<object>.Ok(entry);
     }
 
+    /// <summary>
+    /// Phê duyệt một hồ sơ đăng ký thi đấu của ngựa vào cuộc đua (dành cho Ban tổ chức).
+    /// </summary>
+    /// <param name="entryId">Mã định danh hồ sơ đăng ký cuộc đua.</param>
+    /// <returns>Kết quả phê duyệt đăng ký.</returns>
     public async Task<ServiceResult<bool>> ApproveAsync(Guid entryId)
     {
         var entry = await _entries.GetByIdAsync(entryId);

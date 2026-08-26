@@ -20,6 +20,11 @@ public class NotificationService : INotificationService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Tạo mới và lưu trữ một thông báo hệ thống gửi đến người dùng cụ thể.
+    /// </summary>
+    /// <param name="dto">Thông tin nội dung thông báo.</param>
+    /// <returns>Thông tin chi tiết thông báo đã khởi tạo thành công.</returns>
     public async Task<ServiceResult<NotificationDto>> CreateNotificationAsync(CreateNotificationDto dto)
     {
         try
@@ -69,6 +74,11 @@ public class NotificationService : INotificationService
         }
     }
 
+    /// <summary>
+    /// Truy xuất tất cả danh sách thông báo hệ thống cá nhân của người dùng.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng.</param>
+    /// <returns>Danh sách thông báo cá nhân.</returns>
     public async Task<ServiceResult<List<NotificationDto>>> GetUserNotificationsAsync(Guid userId)
     {
         try

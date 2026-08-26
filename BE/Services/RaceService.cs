@@ -24,6 +24,10 @@ public class RaceService : IRaceService
         _raceManagement = raceManagement;
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả các cuộc đua trong hệ thống kèm thông tin tóm tắt.
+    /// </summary>
+    /// <returns>Danh sách tóm tắt tất cả cuộc đua.</returns>
     public async Task<ServiceResult<object>> GetRacesAsync()
     {
         var races = await _races.GetAllAsync();
@@ -46,6 +50,11 @@ public class RaceService : IRaceService
         return ServiceResult<object>.Ok(summaries);
     }
 
+    /// <summary>
+    /// Lấy thông tin chi tiết của một cuộc đua theo mã định danh.
+    /// </summary>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <returns>Thông tin chi tiết cuộc đua kèm danh sách ngựa tham gia.</returns>
     public async Task<ServiceResult<object>> GetRaceAsync(System.Guid raceId)
     {
         var race = await _races.GetByIdAsync(raceId);
@@ -57,6 +66,11 @@ public class RaceService : IRaceService
         return ServiceResult<object>.Ok(RaceDetailResponseMapper.ToDetailResponse(race));
     }
 
+    /// <summary>
+    /// Lấy kết quả thi đấu và bảng xếp hạng chính thức của một cuộc đua.
+    /// </summary>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <returns>Kết quả thi đấu kèm thông tin ngựa về nhất và bảng xếp hạng.</returns>
     public async Task<ServiceResult<object>> GetRaceResultAsync(System.Guid raceId)
     {
         var result = await _results.GetByRaceIdAsync(raceId);

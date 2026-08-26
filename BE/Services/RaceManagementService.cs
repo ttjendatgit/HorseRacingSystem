@@ -58,6 +58,12 @@ public class RaceManagementService : IRaceManagementService
         _db = db;
     }
 
+    /// <summary>
+    /// Khởi tạo một cuộc đua mới thuộc giải đấu và vòng đua chỉ định.
+    /// Kiểm tra thời gian khởi tranh, sức chứa đường đua và trạng thái bản nháp của giải đấu.
+    /// </summary>
+    /// <param name="request">Thông tin cấu hình cuộc đua mới.</param>
+    /// <returns>Chi tiết cuộc đua vừa khởi tạo thành công.</returns>
     public async Task<ServiceResult<RaceDetailResponse>> CreateRaceAsync(CreateRaceRequest request)
     {
         try

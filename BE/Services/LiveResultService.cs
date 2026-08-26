@@ -41,6 +41,11 @@ public class LiveResultService : ILiveResultService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Lấy dữ liệu diễn biến kết quả thi đấu trực tiếp (Live Race Stream) của cuộc đua đang diễn ra.
+    /// </summary>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <returns>Dữ liệu thời gian trực tiếp và vị trí tạm thời của các ngựa đua.</returns>
     public async Task<ServiceResult<LiveRaceResultResponse>> GetLiveRaceResultAsync(Guid raceId)
     {
         try
@@ -90,6 +95,11 @@ public class LiveResultService : ILiveResultService
         }
     }
 
+    /// <summary>
+    /// Lấy bảng xếp hạng điểm và thứ hạng về đích của các ngựa tham gia cuộc đua.
+    /// </summary>
+    /// <param name="raceId">Mã định danh cuộc đua.</param>
+    /// <returns>Bảng xếp hạng thứ hạng và thời gian về đích.</returns>
     public async Task<ServiceResult<RaceRankingResponse>> GetRaceRankingAsync(Guid raceId)
     {
         try
