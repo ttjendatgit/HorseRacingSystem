@@ -7,6 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacing.Controllers;
 
+/// <summary>
+/// Quản lý số dư và các truy vấn ví của người dùng.
+/// </summary>
 [ApiController]
 [Route("api/wallet")]
 [Authorize]
@@ -19,6 +22,10 @@ public class WalletController : ControllerBase
         _walletService = walletService;
     }
 
+    /// <summary>
+    /// Truy vấn số dư ví hiện tại của người dùng đang đăng nhập.
+    /// </summary>
+    /// <returns>Thông tin số dư khả dụng (balance).</returns>
     [HttpGet("balance")]
     public async Task<ActionResult> GetBalance()
     {
