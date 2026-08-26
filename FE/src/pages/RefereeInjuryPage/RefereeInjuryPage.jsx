@@ -9,6 +9,20 @@ import { getRaceEntries } from "../../services/refereeApi";
 import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
 import "./RefereeInjuryPage.css";
 
+const SEVERITY_COLORS = {
+  Minor: "#4ade80",
+  Moderate: "#facc15",
+  Severe: "#fb923c",
+  Critical: "#f87171",
+};
+
+const SEVERITY_BG = {
+  Minor: "rgba(74,222,128,0.15)",
+  Moderate: "rgba(250,204,21,0.15)",
+  Severe: "rgba(251,146,60,0.15)",
+  Critical: "rgba(248,113,113,0.15)",
+};
+
 const SEVERITY_OPTIONS = [
   { value: "Minor", label: "Nhẹ" },
   { value: "Moderate", label: "Trung bình" },
@@ -43,29 +57,26 @@ const BODY_PARTS = [
   "Fetlock-Right",
 ];
 
-const SEVERITY_COLORS = {
-  Minor: "#22c55e",
-  Moderate: "#eab308",
-  Severe: "#f97316",
-  Critical: "#ef4444",
-};
-
-const SEVERITY_BG = {
-  Minor: "rgba(34,197,94,0.15)",
-  Moderate: "rgba(234,179,8,0.15)",
-  Severe: "rgba(249,115,22,0.15)",
-  Critical: "rgba(239,68,68,0.15)",
-};
-
-//Convert severity string to a numeric value for comparison
 function severityToNumber(s) {
   const map = { Minor: 0, Moderate: 1, Severe: 3, Critical: 4 };
   return map[s] ?? 0;
 }
 
+//SVG for empty state
+function InjuryEmptySVG() {
+  return (
+    <svg className="ri-empty-svg" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M40 90 L160 90" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
+      <path d="M60 90 L60 40 C60 30 70 20 80 20 L120 20 C130 20 140 30 140 40 L140 90" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.4" />
+      <path d="M90 55 L110 55 M100 45 L100 65" stroke="var(--ri-green)" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+    </svg>
+  );
+}
+
 function RefereeInjuryPage() {
   const [injuries, setInjuries] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -84,7 +95,7 @@ function RefereeInjuryPage() {
     treatment: "",
   });
 
-  //Fetch API data for assignments
+  //Fetch API get assignments
   useEffect(() => {
     let ignore = false;
     getMyAssignments()
@@ -96,7 +107,7 @@ function RefereeInjuryPage() {
     return () => { ignore = true; };
   }, []);
 
-  //Fetch API data for race entries
+  //Fetch API get race entries
   useEffect(() => {
     if (!selectedRaceId) { setEntries([]); return; }
     let ignore = false;
@@ -109,28 +120,26 @@ function RefereeInjuryPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  //Derive unique assigned races from assignments
+  //Get unique assigned races from assignments
   const assignedRaces = useMemo(
     () => [...new Map(assignments.map((a) => [a.raceId, a])).values()],
     [assignments]
   );
 
-  //Fetch API data for injuries
-  const loadInjuries = async () => {
-    setLoading(true);
+  //Fetch API get injuries
+  const loadInjuries = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
       const data = await getInjuries();
-      const list = Array.isArray(data?.data)
-        ? data.data
-        : Array.isArray(data)
-          ? data
-          : [];
+      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
       setInjuries(list);
     } catch (e) {
       setError("Không thể tải danh sách chấn thương: " + e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -138,23 +147,14 @@ function RefereeInjuryPage() {
     loadInjuries();
   }, []);
 
-  //Count active injuries
   const activeCount = injuries.filter(
-    (i) =>
-      !i.recoveredAt &&
-      i.status !== "Recovered" &&
-      i.status !== "ClearedToRace"
+    (i) => !i.recoveredAt && i.status !== "Recovered" && i.status !== "ClearedToRace"
   ).length;
 
-  //Count recovered injuries
   const recoveredCount = injuries.filter(
-    (i) =>
-      i.recoveredAt ||
-      i.status === "Recovered" ||
-      i.status === "ClearedToRace"
+    (i) => i.recoveredAt || i.status === "Recovered" || i.status === "ClearedToRace"
   ).length;
 
-  //Derive body parts injuries
   const injuredParts = {};
   injuries.forEach((i) => {
     if (i.bodyPart) {
@@ -186,21 +186,14 @@ function RefereeInjuryPage() {
       setSuccessMsg("Đã ghi nhận chấn thương thành công.");
       setShowForm(false);
       setSelectedRaceId("");
-      setForm({
-        horseId: "",
-        injuryType: "Fracture",
-        description: "",
-        severity: "Minor",
-        bodyPart: "",
-        treatment: "",
-      });
+      setForm({ horseId: "", injuryType: "Fracture", description: "", severity: "Minor", bodyPart: "", treatment: "" });
       loadInjuries();
     } catch (e) {
-      setError(e.message || "Có lỗi xảy ra.");
+      setError("Lỗi: " + (e.message || "Có lỗi xảy ra."));
     }
   };
 
-  //Handle marking an injury as recovered
+  //Handle marking injury as recovered
   const handleRecover = async (id) => {
     if (!window.confirm("Xác nhận chấn thương này đã bình phục?")) return;
     setError("");
@@ -210,46 +203,37 @@ function RefereeInjuryPage() {
       setSuccessMsg("Đã đánh dấu bình phục thành công.");
       loadInjuries();
     } catch (e) {
-      setError(e.message);
+      setError("Lỗi: " + e.message);
     }
   };
 
-  //Handle clicking on a body part in the horse body map
+  //Handle clicking on a body part in the map
   const handlePartClick = (partName) => {
     setSelectedPart(partName === selectedPart ? null : partName);
     if (!showForm) setShowForm(true);
     setForm((p) => ({ ...p, bodyPart: partName }));
   };
 
-  //Get the status label for an injury
   const getStatusLabel = (inj) => {
     if (inj.recoveredAt || inj.status === "Recovered") return "Đã hồi phục";
     if (inj.status === "ClearedToRace") return "Đủ điều kiện";
     return "Đang điều trị";
   };
 
-  //Get the CSS class for an injury's status
   const getStatusClass = (inj) => {
-    if (inj.recoveredAt || inj.status === "Recovered" || inj.status === "ClearedToRace")
-      return "recovered";
+    if (inj.recoveredAt || inj.status === "Recovered" || inj.status === "ClearedToRace") return "recovered";
     return "active";
   };
 
-  //Get the label for a severity value
   const getSeverityLabel = (s) => {
     const opt = SEVERITY_OPTIONS.find((o) => o.value === s);
     return opt ? opt.label : s;
   };
 
-  //Helper function to format a date string into Vietnamese date
   const formatDate = (d) => {
     if (!d) return "-";
     try {
-      return new Date(d).toLocaleDateString("vi-VN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
+      return new Date(d).toLocaleDateString("vi-VN", { year: "numeric", month: "2-digit", day: "2-digit" });
     } catch {
       return "-";
     }
@@ -261,14 +245,23 @@ function RefereeInjuryPage() {
       <div className="ri-header">
         <div className="ri-header-left">
           <h1 className="ri-title">Quản lý chấn thương</h1>
-          <p className="ri-sub">Theo dõi và ghi nhận tình trạng chấn thương của ngựa</p>
+          <p className="ri-sub">Theo dõi và ghi nhận tình trạng y tế khẩn cấp của ngựa.</p>
         </div>
-        <button
-          className="ri-btn ri-btn-gold"
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "Hủy" : "+ Ghi nhận chấn thương"}
-        </button>
+        <div className="ri-header-actions">
+          <button 
+            className="ri-btn ri-btn-outline" 
+            onClick={() => loadInjuries(true)}
+            disabled={refreshing}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.58 3.69"/>
+            </svg>
+            {refreshing ? "Đang tải..." : "Làm mới"}
+          </button>
+          <button className="ri-btn ri-btn-gold" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Hủy ghi nhận" : "+ Ghi nhận chấn thương"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="ri-alert ri-alert-error">{error}</div>}
@@ -278,15 +271,15 @@ function RefereeInjuryPage() {
       <div className="ri-kpi-row">
         <div className="ri-kpi ri-kpi-gold">
           <span className="ri-kpi-num">{injuries.length}</span>
-          <span className="ri-kpi-label">Hồ sơ</span>
+          <span className="ri-kpi-label">Tổng Hồ Sơ</span>
         </div>
         <div className="ri-kpi ri-kpi-red">
           <span className="ri-kpi-num">{activeCount}</span>
-          <span className="ri-kpi-label">Đang điều trị</span>
+          <span className="ri-kpi-label">Đang Điều Trị</span>
         </div>
         <div className="ri-kpi ri-kpi-green">
           <span className="ri-kpi-num">{recoveredCount}</span>
-          <span className="ri-kpi-label">Đã phục hồi</span>
+          <span className="ri-kpi-label">Đã Phục Hồi</span>
         </div>
       </div>
 
@@ -307,11 +300,12 @@ function RefereeInjuryPage() {
         <div className="ri-list-col">
           {showForm && (
             <form className="ri-form" onSubmit={handleSubmit}>
-              <h3 className="ri-form-title">Ghi nhận chấn thương</h3>
+              <h3 className="ri-form-title">Ghi nhận chấn thương mới</h3>
               <div className="ri-form-grid">
                 <div className="ri-fgroup">
-                  <label>Cuộc đua</label>
+                  <label>Cuộc đua / Vòng loại</label>
                   <select
+                    className="ri-form-input"
                     value={selectedRaceId}
                     onChange={(e) => {
                       setSelectedRaceId(e.target.value);
@@ -327,12 +321,11 @@ function RefereeInjuryPage() {
                   </select>
                 </div>
                 <div className="ri-fgroup">
-                  <label>Ngựa</label>
+                  <label>Ngựa gặp chấn thương</label>
                   <select
+                    className="ri-form-input"
                     value={form.horseId}
-                    onChange={(e) =>
-                      setForm({ ...form, horseId: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, horseId: e.target.value })}
                     disabled={!selectedRaceId}
                     required
                   >
@@ -347,75 +340,67 @@ function RefereeInjuryPage() {
                 <div className="ri-fgroup">
                   <label>Loại chấn thương</label>
                   <select
+                    className="ri-form-input"
                     value={form.injuryType}
-                    onChange={(e) =>
-                      setForm({ ...form, injuryType: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, injuryType: e.target.value })}
                   >
                     {INJURY_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
+                      <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>
                 <div className="ri-fgroup">
-                  <label>Vị trí cơ thể</label>
+                  <label>Vị trí trên cơ thể</label>
                   <select
+                    className="ri-form-input"
                     value={form.bodyPart}
-                    onChange={(e) =>
-                      setForm({ ...form, bodyPart: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, bodyPart: e.target.value })}
                   >
-                    <option value="">-- Chọn --</option>
+                    <option value="">-- Chọn bộ phận --</option>
                     {BODY_PARTS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
+                      <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
                 </div>
                 <div className="ri-fgroup">
-                  <label>Mức độ</label>
+                  <label>Mức độ nghiêm trọng</label>
                   <select
+                    className="ri-form-input"
                     value={form.severity}
-                    onChange={(e) =>
-                      setForm({ ...form, severity: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, severity: e.target.value })}
                   >
                     {SEVERITY_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
+                      <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
                   </select>
                 </div>
               </div>
+              
               <div className="ri-fgroup ri-fgroup-full">
                 <label>Mô tả chi tiết</label>
                 <textarea
+                  className="ri-form-input"
                   rows={3}
-                  placeholder="Mô tả về chấn thương..."
+                  placeholder="Mô tả hoàn cảnh và tình trạng chấn thương..."
                   value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                   required
                 />
               </div>
+              
               <div className="ri-fgroup ri-fgroup-full">
-                <label>Phương pháp điều trị</label>
+                <label>Đề xuất điều trị (Không bắt buộc)</label>
                 <textarea
+                  className="ri-form-input"
                   rows={2}
-                  placeholder="Phương pháp điều trị (không bắt buộc)..."
+                  placeholder="Phương pháp sơ cứu hoặc điều trị..."
                   value={form.treatment}
-                  onChange={(e) =>
-                    setForm({ ...form, treatment: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, treatment: e.target.value })}
                 />
               </div>
+              
               <button type="submit" className="ri-btn ri-btn-gold ri-btn-full">
-                Ghi nhận chấn thương
+                Lưu Hồ Sơ Chấn Thương
               </button>
             </form>
           )}
@@ -425,7 +410,8 @@ function RefereeInjuryPage() {
             <div className="ri-loading">Đang tải dữ liệu...</div>
           ) : injuries.length === 0 ? (
             <div className="ri-empty">
-              <p>Chưa có hồ sơ chấn thương nào.</p>
+              <InjuryEmptySVG />
+              <p style={{ marginTop: "12px" }}>Chưa có hồ sơ chấn thương nào được lưu trong hệ thống.</p>
             </div>
           ) : (
             <div className="ri-table-wrap">
@@ -433,8 +419,8 @@ function RefereeInjuryPage() {
                 <thead>
                   <tr>
                     <th>Ngựa</th>
-                    <th>Ngày</th>
-                    <th>Loại chấn thương</th>
+                    <th>Ngày chẩn đoán</th>
+                    <th>Chấn thương</th>
                     <th>Vị trí</th>
                     <th>Mức độ</th>
                     <th>Trạng thái</th>
@@ -454,31 +440,25 @@ function RefereeInjuryPage() {
                         <span
                           className="ri-badge"
                           style={{
-                            background: SEVERITY_BG[inj.severity] || "rgba(100,116,139,0.15)",
-                            color: SEVERITY_COLORS[inj.severity] || "#94a3b8",
+                            background: SEVERITY_BG[inj.severity] || "rgba(255,255,255,0.1)",
+                            color: SEVERITY_COLORS[inj.severity] || "var(--ri-muted)",
+                            border: `1px solid ${SEVERITY_COLORS[inj.severity] || "var(--ri-muted)"}40`
                           }}
                         >
                           {getSeverityLabel(inj.severity)}
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={`ri-status ri-status--${getStatusClass(inj)}`}
-                        >
+                        <span className={`ri-status ri-status--${getStatusClass(inj)}`}>
                           {getStatusLabel(inj)}
                         </span>
                       </td>
                       <td>
-                        {!inj.recoveredAt &&
-                          inj.status !== "Recovered" &&
-                          inj.status !== "ClearedToRace" && (
-                            <button
-                              className="ri-btn ri-btn-sm"
-                              onClick={() => handleRecover(inj.id)}
-                            >
-                              Hồi phục
-                            </button>
-                          )}
+                        {!inj.recoveredAt && inj.status !== "Recovered" && inj.status !== "ClearedToRace" && (
+                          <button className="ri-btn ri-btn-sm" onClick={() => handleRecover(inj.id)}>
+                            Hồi phục
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -488,6 +468,10 @@ function RefereeInjuryPage() {
           )}
         </div>
       </div>
+      
+      <style dangerouslySetContent={{__html: `
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+      `}} />
     </div>
   );
 }
