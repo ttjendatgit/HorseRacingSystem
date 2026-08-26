@@ -1,7 +1,9 @@
 import { request } from "./apiClient";
 
 /**
- * Gửi yêu cầu đăng nhập tài khoản hệ thống
+ * [ROLE: All Roles]
+ * Gửi yêu cầu đăng nhập tài khoản hệ thống (Nhận JWT Token và thông tin vai trò).
+ * Endpoint: POST /api/auth/login
  * @param {Object} payload - { email, password }
  */
 export function login(payload) {
@@ -12,7 +14,9 @@ export function login(payload) {
 }
 
 /**
- * Gửi yêu cầu đăng ký tài khoản mới (Chủ ngựa / Nài ngựa / Khán giả)
+ * [ROLE: Khán Giả / Chủ Ngựa / Kỵ Sĩ]
+ * Gửi yêu cầu đăng ký tài khoản mới vào hệ thống.
+ * Endpoint: POST /api/auth/register
  * @param {Object} payload - Thông tin đăng ký tài khoản
  */
 export function register(payload) {
@@ -23,7 +27,9 @@ export function register(payload) {
 }
 
 /**
- * Tải lên tài liệu hoặc chứng chỉ đăng ký nài ngựa
+ * [ROLE: Kỵ Sĩ / Jockey]
+ * Tải lên tệp tài liệu bằng cấp hoặc chứng chỉ đăng ký nài ngựa.
+ * Endpoint: POST /api/auth/upload-document
  * @param {File} file - Tệp tài liệu (PDF, JPG, PNG)
  */
 export function uploadDocument(file) {
@@ -36,7 +42,9 @@ export function uploadDocument(file) {
 }
 
 /**
- * Cập nhật thông tin hồ sơ người dùng
+ * [ROLE: All Roles]
+ * Cập nhật thông tin chi tiết hồ sơ cá nhân của người dùng.
+ * Endpoint: PUT /api/auth/profile
  * @param {Object} payload - { fullName, phoneNumber, ... }
  */
 export function updateProfile(payload) {
@@ -47,7 +55,9 @@ export function updateProfile(payload) {
 }
 
 /**
- * Đổi mật khẩu tài khoản
+ * [ROLE: All Roles]
+ * Thay đổi mật khẩu tài khoản người dùng đang đăng nhập.
+ * Endpoint: POST /api/auth/change-password
  * @param {Object} payload - { currentPassword, newPassword }
  */
 export function changePassword(payload) {
@@ -57,13 +67,19 @@ export function changePassword(payload) {
   });
 }
 
-/** Lấy thông tin hồ sơ tài khoản hiện tại */
+/**
+ * [ROLE: All Roles]
+ * Truy vấn thông tin hồ sơ tài khoản cá nhân hiện tại.
+ * Endpoint: GET /api/auth/profile
+ */
 export function getProfile() {
   return request("/api/auth/profile");
 }
 
 /**
- * Tạo giao dịch nạp tiền qua cổng SePay
+ * [ROLE: Khán Giả / User]
+ * Khởi tạo mã QR chuyển khoản và tạo đơn nạp tiền qua cổng SePay.
+ * Endpoint: POST /api/sepay/deposit
  * @param {number} amount - Số tiền VNĐ muốn nạp
  */
 export function createDeposit(amount) {
@@ -74,20 +90,28 @@ export function createDeposit(amount) {
 }
 
 /**
- * Kiểm tra trạng thái hoàn thành của giao dịch nạp tiền
- * @param {string} transactionId - ID giao dịch
+ * [ROLE: Khán Giả / User]
+ * Tra cứu kiểm tra trạng thái xử lý của một đơn nạp tiền SePay.
+ * Endpoint: GET /api/sepay/check
+ * @param {string} transactionId - Mã GUID giao dịch
  */
 export function checkDeposit(transactionId) {
   return request(`/api/sepay/check?transactionId=${transactionId}`);
 }
 
-/** Lấy danh sách lịch sử nạp tiền của người dùng */
+/**
+ * [ROLE: Khán Giả / User]
+ * Lấy lịch sử tất cả các đơn nạp tiền SePay của người dùng.
+ * Endpoint: GET /api/sepay/history
+ */
 export function getDepositHistory() {
   return request("/api/sepay/history");
 }
 
 /**
- * Gửi yêu cầu quên mật khẩu
+ * [ROLE: All Roles]
+ * Gửi yêu cầu nhận Email chứa liên kết khôi phục mật khẩu.
+ * Endpoint: POST /api/auth/forgot-password
  * @param {string} email - Địa chỉ email đăng ký tài khoản
  */
 export function forgotPassword(email) {
@@ -98,7 +122,9 @@ export function forgotPassword(email) {
 }
 
 /**
- * Đặt lại mật khẩu mới bằng mã resetToken
+ * [ROLE: All Roles]
+ * Đặt lại mật khẩu mới thông qua mã resetToken nhận được qua Email.
+ * Endpoint: POST /api/auth/reset-password
  * @param {Object} payload - { email, token, newPassword }
  */
 export function resetPassword(payload) {
