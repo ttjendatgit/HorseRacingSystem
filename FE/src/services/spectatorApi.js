@@ -2,46 +2,95 @@ import { request } from "./apiClient";
 
 const unwrap = (response) => response?.data ?? response?.Data ?? response;
 
-/** Lấy danh sách tất cả các giải đấu công khai */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy danh sách tất cả các giải đấu công khai trong hệ thống.
+ * Endpoint: GET /api/tournaments
+ */
 export const getTournaments = async () => unwrap(await request("/api/tournaments"));
 
-/** Lấy danh sách các giải đấu đang diễn ra/hoạt động */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy danh sách các giải đấu đang diễn ra hoặc mở đăng ký cược.
+ * Endpoint: GET /api/tournaments/active
+ */
 export const getActiveTournaments = async () =>
   unwrap(await request("/api/tournaments/active"));
 
-/** Lấy thông tin chi tiết của một giải đấu theo ID */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy thông tin chi tiết của một giải đấu theo mã GUID.
+ * Endpoint: GET /api/tournaments/{id}
+ * @param {string} id - Mã GUID giải đấu
+ */
 export const getTournament = async (id) =>
   unwrap(await request(`/api/tournaments/${id}`));
 
-/** Lấy danh sách các vòng đấu thuộc một giải đấu */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy danh sách các vòng thi đấu thuộc về một giải đấu.
+ * Endpoint: GET /api/tournaments/{tournamentId}/rounds
+ * @param {string} tournamentId - Mã GUID giải đấu
+ */
 export const getRoundsByTournament = (tournamentId) =>
   request(`/api/tournaments/${tournamentId}/rounds`).then(unwrap);
 
-/** Lấy danh sách tất cả các cuộc đua */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy danh sách tất cả các trận đua ngựa công khai.
+ * Endpoint: GET /api/races
+ */
 export const getRaces = async () => unwrap(await request("/api/races"));
 
-/** Lấy chi tiết thông tin một cuộc đua theo ID */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy thông tin chi tiết một trận đua ngựa theo mã GUID.
+ * Endpoint: GET /api/races/{id}
+ * @param {string} id - Mã GUID trận đua
+ */
 export const getRace = async (id) => unwrap(await request(`/api/races/${id}`));
 
-/** Lấy kết quả chính thức của một cuộc đua */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy kết quả thi đấu chính thức và bảng thứ hạng sau khi trận đua kết thúc.
+ * Endpoint: GET /api/races/{id}/result
+ * @param {string} id - Mã GUID trận đua
+ */
 export const getRaceResult = async (id) =>
   unwrap(await request(`/api/races/${id}/result`));
 
-/** Lấy kết quả trực tiếp thời gian thực của cuộc đua */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy kết quả trực tiếp thời gian thực của trận đua đang diễn ra.
+ * Endpoint: GET /api/live-results/race/{raceId}
+ * @param {string} raceId - Mã GUID trận đua
+ */
 export const getLiveRaceResult = (raceId) =>
   request(`/api/live-results/race/${raceId}`).then(unwrap);
 
-/** Lấy vị trí trực tiếp các ngựa trong cuộc đua */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy tọa độ vị trí các con ngựa trên đường đua thời gian thực.
+ * Endpoint: GET /api/live-results/race/{raceId}/positions
+ * @param {string} raceId - Mã GUID trận đua
+ */
 export const getLivePositions = (raceId) =>
   request(`/api/live-results/race/${raceId}/positions`).then(unwrap);
 
-/** Lấy bảng xếp hạng trực tiếp theo thời gian thực */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy bảng xếp hạng thời gian thực của trận đua đang diễn ra.
+ * Endpoint: GET /api/live-results/race/{raceId}/ranking
+ * @param {string} raceId - Mã GUID trận đua
+ */
 export const getLiveRanking = (raceId) =>
   request(`/api/live-results/race/${raceId}/ranking`).then(unwrap);
 
 /**
- * Gửi dự đoán / cược cho cuộc đua
- * @param {Object} payload - { raceId, predictedHorseId, betAmount }
+ * [ROLE: Khán Giả / Spectator]
+ * Đặt phiếu dự đoán / cược cho con ngựa trong trận đua.
+ * Endpoint: POST /api/predictions
+ * @param {Object} payload - { raceId: string, predictedHorseId: string, betAmount: number }
  */
 export const createPrediction = (payload) =>
   request("/api/predictions", {
@@ -49,9 +98,19 @@ export const createPrediction = (payload) =>
     body: JSON.stringify(payload),
   });
 
-/** Lấy lịch sử phiếu dự đoán của người dùng hiện tại */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy lịch sử tất cả các phiếu dự đoán / cược của khán giả đang đăng nhập.
+ * Endpoint: GET /api/predictions/mine
+ */
 export const getMyPredictions = () => request("/api/predictions/mine");
 
-/** Lấy danh sách ngựa & nài ngựa đăng ký tham gia cuộc đua */
+/**
+ * [ROLE: Khán Giả / Spectator]
+ * Lấy danh sách danh sách các con ngựa & kỵ sĩ tham gia trận đua.
+ * Endpoint: GET /api/referees/race/{raceId}/entries
+ * @param {string} raceId - Mã GUID trận đua
+ */
 export const getRaceEntries = async (raceId) =>
   unwrap(await request(`/api/referees/race/${raceId}/entries`));
+
