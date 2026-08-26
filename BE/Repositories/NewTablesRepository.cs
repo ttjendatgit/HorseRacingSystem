@@ -17,14 +17,40 @@ public class PrizeRepository : IPrizeRepository
     public async Task<Prize?> GetByIdAsync(Guid id) =>
         await _context.Prizes.FindAsync(id);
 
+    // PRIZE-V1: ordered by Position ascending — the Admin allocation table and public Tournament-
+    // detail breakdown both render Hạng 1/2/3... in order and rely on this, not a client-side sort.
     public async Task<IEnumerable<Prize>> GetByTournamentAsync(Guid tournamentId) =>
-        await _context.Prizes.Where(p => p.TournamentId == tournamentId).ToListAsync();
+        await _context.Prizes.Where(p => p.TournamentId == tournamentId).OrderBy(p => p.Position).ToListAsync();
 
     public async Task<IEnumerable<Prize>> GetByRaceAsync(Guid raceId) =>
         await _context.Prizes.Where(p => p.RaceId == raceId).ToListAsync();
 
     public async Task<IEnumerable<Prize>> GetAllAsync() =>
         await _context.Prizes.ToListAsync();
+
+    public async Task<bool> ExistsPositionAsync(Guid tournamentId, int position, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId && p.Position == position);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.AnyAsync();
+    }
+
+    public async Task<decimal> GetAllocatedAmountAsync(Guid tournamentId, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.SumAsync(p => (decimal?)p.Amount) ?? 0m;
+    }
+
+    public async Task<decimal> GetAllocatedPercentageAsync(Guid tournamentId, Guid? excludePrizeId)
+    {
+        var query = _context.Prizes.Where(p => p.TournamentId == tournamentId);
+        if (excludePrizeId.HasValue)
+            query = query.Where(p => p.Id != excludePrizeId.Value);
+        return await query.SumAsync(p => (decimal?)p.PercentageOfPool) ?? 0m;
+    }
 
     public async Task AddAsync(Prize prize) => await _context.Prizes.AddAsync(prize);
     public Task UpdateAsync(Prize prize) { _context.Prizes.Update(prize); return Task.CompletedTask; }
@@ -41,17 +67,121 @@ public class ProtestRepository : IProtestRepository
             .Include(p => p.AgainstEntry).ThenInclude(e => e!.Horse).FirstOrDefaultAsync(p => p.Id == id);
 
     public async Task<IEnumerable<Protest>> GetByRaceAsync(Guid raceId) =>
-        await _context.Protests.Where(p => p.RaceId == raceId).ToListAsync();
+        await BaseQuery().Where(p => p.RaceId == raceId).ToListAsync();
+
+    public async Task<IEnumerable<Protest>> GetByFiledByUserAsync(Guid filedByUserId) =>
+        await BaseQuery()
+            .Where(p => p.FiledByUserId == filedByUserId)
+            .OrderByDescending(p => p.FiledAt)
+            .ToListAsync();
 
     public async Task<IEnumerable<Protest>> GetPendingAsync() =>
-        await _context.Protests.Where(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview)
-            .Include(p => p.FiledByUser).Include(p => p.Race).ToListAsync();
+        await BaseQuery()
+            .Where(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview)
+            .OrderByDescending(p => p.FiledAt)
+            .ToListAsync();
 
     public async Task<IEnumerable<Protest>> GetAllAsync() =>
-        await _context.Protests.Include(p => p.FiledByUser).Include(p => p.Race).ToListAsync();
+        await BaseQuery().OrderByDescending(p => p.FiledAt).ToListAsync();
+
+    public async Task<bool> HasActiveByFilerRaceEntryAsync(Guid filedByUserId, Guid raceId, Guid againstEntryId) =>
+        await _context.Protests.AnyAsync(p =>
+            p.FiledByUserId == filedByUserId &&
+            p.RaceId == raceId &&
+            p.AgainstEntryId == againstEntryId &&
+            (p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview));
 
     public async Task AddAsync(Protest protest) => await _context.Protests.AddAsync(protest);
     public Task UpdateAsync(Protest protest) { _context.Protests.Update(protest); return Task.CompletedTask; }
+
+    private IQueryable<Protest> BaseQuery() =>
+        _context.Protests
+            .Include(p => p.FiledByUser)
+            .Include(p => p.Race)
+            .Include(p => p.AgainstEntry)
+                .ThenInclude(e => e!.Horse);
+}
+
+public class RaceComplaintRepository : IRaceComplaintRepository
+{
+    private readonly ApplicationDbContext _context;
+    public RaceComplaintRepository(ApplicationDbContext context) => _context = context;
+
+    public async Task<RaceComplaint?> GetByIdAsync(Guid id) =>
+        await BaseQuery().FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<IEnumerable<RaceComplaint>> GetByRaceAsync(Guid raceId) =>
+        await BaseQuery().Where(c => c.RaceId == raceId).ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetByFiledByUserAsync(Guid filedByUserId) =>
+        await BaseQuery()
+            .Where(c => c.FiledByUserId == filedByUserId)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetByAssignedRefereeUserAsync(Guid refereeUserId) =>
+        await BaseQuery()
+            .Where(c =>
+                c.AssignedRefereeAssignment != null &&
+                c.AssignedRefereeAssignment.Referee != null &&
+                c.AssignedRefereeAssignment.Referee.UserId == refereeUserId)
+            .OrderByDescending(c => c.ResponseRequestedAt ?? c.CreatedAt)
+            .ToListAsync();
+
+    public async Task<IEnumerable<RaceComplaint>> GetAllAsync() =>
+        await BaseQuery().OrderByDescending(c => c.CreatedAt).ToListAsync();
+
+    public async Task<bool> HasActiveByFilerRaceTypeAsync(Guid filedByUserId, Guid raceId, RaceComplaintType type) =>
+        await _context.RaceComplaints.AnyAsync(c =>
+            c.FiledByUserId == filedByUserId &&
+            c.RaceId == raceId &&
+            c.Type == type &&
+            (c.Status == RaceComplaintStatus.Pending ||
+             c.Status == RaceComplaintStatus.AwaitingRefereeResponse ||
+             c.Status == RaceComplaintStatus.UnderReview));
+
+    public async Task AddAsync(RaceComplaint complaint) => await _context.RaceComplaints.AddAsync(complaint);
+    public Task UpdateAsync(RaceComplaint complaint) { _context.RaceComplaints.Update(complaint); return Task.CompletedTask; }
+
+    private IQueryable<RaceComplaint> BaseQuery() =>
+        _context.RaceComplaints
+            .Include(c => c.FiledByUser)
+            .Include(c => c.RuledByUser)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.Tournament)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.Result)
+                    .ThenInclude(rr => rr!.WinningHorse)
+            .Include(c => c.Race)
+                .ThenInclude(r => r!.RefereeAssignments)
+                    .ThenInclude(a => a.Referee)
+                        .ThenInclude(r => r!.User)
+            .Include(c => c.AssignedRefereeAssignment)
+                .ThenInclude(a => a!.Referee)
+                    .ThenInclude(r => r!.User)
+            .Include(c => c.Evidence)
+                .ThenInclude(e => e.UploadedByUser);
+}
+
+// COMPLAINT-EVIDENCE-V1
+public class RaceComplaintEvidenceRepository : IRaceComplaintEvidenceRepository
+{
+    private readonly ApplicationDbContext _context;
+    public RaceComplaintEvidenceRepository(ApplicationDbContext context) => _context = context;
+
+    public async Task<RaceComplaintEvidence?> GetByIdAsync(Guid id) =>
+        await _context.RaceComplaintEvidence.FirstOrDefaultAsync(e => e.Id == id);
+
+    public async Task<int> CountBySourceAsync(Guid raceComplaintId, EvidenceSource source) =>
+        await _context.RaceComplaintEvidence.CountAsync(e => e.RaceComplaintId == raceComplaintId && e.EvidenceSource == source);
+
+    public async Task AddAsync(RaceComplaintEvidence evidence) => await _context.RaceComplaintEvidence.AddAsync(evidence);
+
+    public Task RemoveAsync(RaceComplaintEvidence evidence)
+    {
+        _context.RaceComplaintEvidence.Remove(evidence);
+        return Task.CompletedTask;
+    }
 }
 
 public class HorseTransferRepository : IHorseTransferRepository

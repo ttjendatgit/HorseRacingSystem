@@ -92,6 +92,15 @@ export function getRaceEntries(raceId) {
   return request(`/api/referees/race/${raceId}/entries`);
 }
 
+// ── Gate Assignment (GATE-V1) ──
+
+export function assignGateNumber(raceId, entryId, gateNumber) {
+  return request(`/api/referees/race/${raceId}/entries/${entryId}/gate`, {
+    method: "PUT",
+    body: JSON.stringify({ gateNumber }),
+  });
+}
+
 // ── Submit Race Result ──
 
 export function submitRaceResult(raceId, payload) {

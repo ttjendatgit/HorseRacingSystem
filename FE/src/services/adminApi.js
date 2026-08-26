@@ -28,6 +28,12 @@ export const setUserActive = (id, isActive) =>
     method: "POST",
   });
 
+// J-ADMIN-REVIEW: Admin-only Jockey verification detail (Phone/Address/DateOfBirth/Height/Weight/
+// IdCardNumber/LicenseFile/ApprovalNote/CreatedAt) — distinct from getAvailableJockeys(), which
+// intentionally never exposes those fields to non-Admin callers.
+export const getJockeyAdminDetail = async (id) =>
+  unwrap(await request(`/api/admin/jockeys/${id}`));
+
 export const approveJockey = (id) =>
   request(`/api/admin/jockeys/${id}/approve`, {
     method: "POST",
@@ -70,6 +76,13 @@ export const updateRound = (roundId, payload) =>
   request(`/api/tournaments/rounds/${roundId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+
+// Q1: server derives qualifiers/round-robin/Jockey carry-forward entirely — this call passes
+// only the current Round's identity, nothing else.
+export const generateNextRound = (roundId) =>
+  request(`/api/tournaments/rounds/${roundId}/generate-next`, {
+    method: "POST",
   });
 
 export const getTournamentRaces = async (tournamentId) =>

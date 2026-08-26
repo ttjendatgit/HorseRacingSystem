@@ -1,0 +1,64 @@
+.jab {
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.jab__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.jab__text {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* ── Pending: informational, not alarming ── */
+.jab--pending {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+.jab--pending .jab__title { color: #92600a; }
+.jab--pending .jab__text { color: #7a5209; }
+
+/* ── Approved: quiet positive confirmation ── */
+.jab--approved {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.jab--approved .jab__title { color: #0f7a5a; }
+
+/* ── Rejected: clear but not alarmist ── */
+.jab--rejected {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.jab--rejected .jab__title { color: #b91c1c; }
+.jab--rejected .jab__text { color: #9a2323; }
+
+/* ── Compact variant (small pill, e.g. Approved on Dashboard) ── */
+.jab--compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  width: fit-content;
+}
+.jab--compact .jab__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.jab__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.jab--approved.jab--compact .jab__dot { background: #10b981; }
+.jab--pending.jab--compact .jab__dot { background: #f59e0b; }
+.jab--rejected.jab--compact .jab__dot { background: #ef4444; }

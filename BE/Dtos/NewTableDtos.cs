@@ -1,34 +1,56 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+using HorseRacing.Models;
 
 namespace HorseRacing.Dtos;
 
-// ── Prize ──
+// ── Prize (PRIZE-V1.2) ────────────────────────────────────────────────────────────────────
+// Tournament.PrizePool = total prize budget; Prize rows = allocation of that budget by FINAL
+// Tournament ranking Position. Config/display only — no wallet payout, no recipient, no
+// distribution workflow exists in this contract. RaceId/IsDistributed/DistributedAt remain on
+// the Prize entity (BE/Models/Prize.cs) for backward compatibility but are intentionally NOT
+// part of this contract: RaceId is always null for V1 writes (a Prize row is a Tournament
+// allocation, never Race-specific), and IsDistributed/DistributedAt are never set by this
+// workflow (no payout mechanism exists) and are not exposed to keep the API from implying a
+// distribution feature that doesn't exist.
+//
+// PRIZE-V1.2: Admin configures PercentageOfPool, never Amount directly — Amount is entirely
+// backend-derived (see PrizeAmountCalculator) from PercentageOfPool * Tournament.PrizePool / 100.
+// Amount is deliberately absent from both write DTOs below (not merely ignored-if-present) —
+// there is no compatibility need to keep it, since PRIZE-V1/V1.1 were never committed to a
+// released API consumer outside this same codebase (see PRIZE-V1.2 report §6).
 public class CreatePrizeRequest
 {
     public Guid? TournamentId { get; set; }
-    public Guid? RaceId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = "USD";
     public int Position { get; set; } = 1;
     public decimal PercentageOfPool { get; set; }
+    public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
-    public string? Description { get; set; }
+}
+
+// TournamentId is deliberately absent — immutable after creation (Part 9). To move a Prize row
+// to a different Tournament, delete it while the original Tournament is still Draft and create a
+// new one under the target Tournament.
+public class UpdatePrizeRequest
+{
+    public int Position { get; set; }
+    public decimal PercentageOfPool { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? SponsorName { get; set; }
 }
 
 public class PrizeResponse
 {
     public Guid Id { get; set; }
     public Guid? TournamentId { get; set; }
-    public Guid? RaceId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = string.Empty;
     public int Position { get; set; }
     public decimal PercentageOfPool { get; set; }
+    /// <summary>Backend-derived (PercentageOfPool * Tournament.PrizePool / 100, VND-rounded) —
+    /// never client-controlled. See PrizeAmountCalculator.</summary>
+    public decimal Amount { get; set; }
+    public string Name { get; set; } = string.Empty;
     public string? SponsorName { get; set; }
-    public string? Description { get; set; }
-    public bool IsDistributed { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -43,6 +65,8 @@ public class CreateProtestRequest
 
 public class RuleProtestRequest
 {
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ProtestStatus? Outcome { get; set; }
     public string Ruling { get; set; } = string.Empty;
     public string? Resolution { get; set; }
     public string? AdminNotes { get; set; }
@@ -63,11 +87,127 @@ public class ProtestResponse
     public string? Ruling { get; set; }
     public Guid? RuledByUserId { get; set; }
     public string? Resolution { get; set; }
+    public string? AdminNotes { get; set; }
     public DateTime FiledAt { get; set; }
     public DateTime? RuledAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
 }
 
 // ── HorseTransfer ──
+public class CreateRaceComplaintRequest
+{
+    public Guid RaceId { get; set; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RaceComplaintType Type { get; set; }
+
+    public string Reason { get; set; } = string.Empty;
+    public string? EvidenceDescription { get; set; }
+}
+
+public class RouteRaceComplaintRequest
+{
+    public Guid RefereeAssignmentId { get; set; }
+}
+
+public class RespondRaceComplaintRequest
+{
+    public string Response { get; set; } = string.Empty;
+}
+
+public class RuleRaceComplaintRequest
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RaceComplaintStatus? Outcome { get; set; }
+
+    public string Ruling { get; set; } = string.Empty;
+    public bool? AffectsResult { get; set; }
+}
+
+public class RaceComplaintAssignmentOption
+{
+    public Guid Id { get; set; }
+    public Guid RefereeId { get; set; }
+    public string? RefereeName { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+}
+
+public class RaceComplaintEligibleRaceResponse
+{
+    public Guid RaceId { get; set; }
+    public string RaceName { get; set; } = string.Empty;
+    public Guid? EntryId { get; set; }
+    public Guid? HorseId { get; set; }
+    public string? HorseName { get; set; }
+    public string? TournamentName { get; set; }
+    public DateTime ScheduledAt { get; set; }
+    public string RaceStatus { get; set; } = string.Empty;
+    public string? ResultStatus { get; set; }
+}
+
+public class RaceComplaintResultSummary
+{
+    public Guid RaceId { get; set; }
+    public string? ResultStatus { get; set; }
+    public Guid? WinningHorseId { get; set; }
+    public string? WinningHorseName { get; set; }
+    public string? RankingsJson { get; set; }
+    public string? RejectedReason { get; set; }
+}
+
+public class RaceComplaintResponse
+{
+    public Guid Id { get; set; }
+    public Guid RaceId { get; set; }
+    public string? RaceName { get; set; }
+    public string? TournamentName { get; set; }
+    public DateTime? ScheduledAt { get; set; }
+    public Guid FiledByUserId { get; set; }
+    public string? FiledByName { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string? EvidenceDescription { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public Guid? AssignedRefereeAssignmentId { get; set; }
+    public Guid? AssignedRefereeId { get; set; }
+    public string? AssignedRefereeName { get; set; }
+    public string? AssignedRefereeRole { get; set; }
+    public DateTime? ResponseRequestedAt { get; set; }
+    public string? RefereeResponse { get; set; }
+    public DateTime? RefereeRespondedAt { get; set; }
+    public Guid? RuledByUserId { get; set; }
+    public string? RuledByName { get; set; }
+    public string? Ruling { get; set; }
+    public bool? AffectsResult { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public RaceComplaintResultSummary? CurrentResult { get; set; }
+    public List<RaceComplaintAssignmentOption> ConfirmedRefereeAssignments { get; set; } = new();
+    public List<RaceComplaintEvidenceResponse> Evidence { get; set; } = new();
+}
+
+// COMPLAINT-EVIDENCE-V1
+public class RaceComplaintEvidenceResponse
+{
+    public Guid Id { get; set; }
+    public Guid RaceComplaintId { get; set; }
+    public string FileUrl { get; set; } = string.Empty;
+    public string MediaType { get; set; } = string.Empty;
+    // COMPLAINT-EVIDENCE-V1.1: persisted at upload time from the caller's verified relationship to
+    // the complaint — the FE gallery must group/gate on this, not on UploadedByRole.
+    public string EvidenceSource { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public Guid UploadedByUserId { get; set; }
+    public string? UploadedByName { get; set; }
+    public string? UploadedByRole { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public DateTime UploadedAt { get; set; }
+}
+
 public class CreateHorseTransferRequest
 {
     public Guid HorseId { get; set; }

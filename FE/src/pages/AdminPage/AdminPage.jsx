@@ -1,13 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  approveJockey,
   assignHorseToRace,
   cancelRace,
   createRound,
-  createTournament,
-  deleteTournament,
   endRace,
+  generateNextRound,
   getAdminDashboard,
   getAdminUser,
   getAdminUsers,
@@ -22,31 +20,33 @@ import {
   getPendingRaceEntries,
   approveRaceEntry,
   rejectRaceEntry,
-  rejectJockey,
   setUserActive,
   startRace,
   updateOwnerHorseStatus,
   updateRound,
-  updateTournament,
 } from "../../services/adminApi";
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { request } from "../../services/apiClient";
-import { getTournamentLifecycleLabel } from "../../utils/tournamentRegistration";
+import { isFinalRound } from "../../utils/tournamentRegistration";
+import { buildRankingDisplayList } from "../../utils/raceResultDisplay";
+import RaceRankingPanel from "../../components/RaceRankingPanel";
+import { groupJockeysByApprovalStatus } from "../../utils/jockeyAdminReview";
+import JockeyReviewModal from "../../components/JockeyReviewModal";
 import {
-  PrizeManagement,
   ProtestManagement,
   TransferManagement,
   ContractManagement,
   InjuryManagement,
 } from "./AdminOperations";
+import { AdminRaceComplaintManagement } from "./AdminRaceComplaintManagement";
+import { PrizeManagement } from "./PrizeManagement";
 import { AuditLogViewer, NotificationManager } from "./AdminAudit";
-import TournamentForm from "../../components/TournamentForm";
 import RaceForm from "../../components/RaceForm";
 import RaceResultsPage from "./pages/RaceResultsPage";
 import HorseManagementPage from "./pages/HorseManagementPage";
 import RefereeManagementPage from "./pages/RefereeManagementPage";
-import TournamentDetail from "./pages/TournamentDetail";
+import TournamentManagementPage from "./pages/TournamentManagementPage";
 import PredictionsManagementPage from "./pages/PredictionsManagementPage";
 import { apiToVNInput, apiToVNDisplay, apiToVNDate, apiToUtcDate, vnInputToApiUtc, vnNowInput } from "../../utils/vnDateTime";
 import "./AdminPage.css";
@@ -98,7 +98,7 @@ const navGroups = [
   ] },
   { label: "Operations", items: [
     { to: "/admin/prizes", label: "Tiền thưởng", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { to: "/admin/protests", label: "Khiếu nại", icon: "M3 21l4-4V5a2 2 0 012-2h6a2 2 0 012 2v12l4 4" },
+    { to: "/admin/race-complaints", label: "Khiếu nại cuộc đua", icon: "M3 21l4-4V5a2 2 0 012-2h6a2 2 0 012 2v12l4 4" },
     { to: "/admin/transfers", label: "Chuyển nhượng", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
     { to: "/admin/contracts", label: "Hợp đồng", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
     { to: "/admin/injuries", label: "Chấn thương", icon: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
@@ -690,9 +690,18 @@ function HorseDetail() {
   );
 }
 
+const JOCKEY_TAB_EMPTY_MESSAGE = {
+  pending: "Không có kỵ sĩ nào đang chờ duyệt.",
+  approved: "Chưa có kỵ sĩ nào được duyệt.",
+  rejected: "Chưa có kỵ sĩ nào bị từ chối.",
+  all: "Không tìm thấy tài khoản kỵ sĩ nào.",
+};
+
 function Roles() {
   const [jockeys, setJockeys] = useState([]);
   const [message, setMessage] = useState("");
+  const [reviewJockeyId, setReviewJockeyId] = useState(null);
+  const [activeTab, setActiveTab] = useState("pending");
 
   const loadJockeys = () =>
     getAvailableJockeys()
@@ -703,33 +712,65 @@ function Roles() {
     loadJockeys();
   }, []);
 
-  const updateJockeyStatus = async (jockey, approved) => {
-    try {
-      if (approved) {
-        await approveJockey(jockey.id);
-      } else {
-        const reason = window.prompt("Lý do từ chối kỵ sĩ này?");
-        if (reason === null) return;
-        await rejectJockey(jockey.id, reason || "Bị từ chối bởi quản trị viên");
-      }
+  // J-ADMIN-REVIEW: Approve/Reject now happen inside JockeyReviewModal, not directly on a table
+  // row — this table is a triage view (who needs a decision, filtered by tab), not the decision
+  // UI itself. Default tab is Pending so the verification queue is what Admin sees first.
+  const groups = groupJockeysByApprovalStatus(jockeys);
+  const TABS = [
+    { key: "pending", label: "Chờ duyệt", list: groups.pending },
+    { key: "approved", label: "Đã duyệt", list: groups.approved },
+    { key: "rejected", label: "Từ chối", list: groups.rejected },
+    { key: "all", label: "Tất cả", list: groups.all },
+  ];
+  const activeList = TABS.find((t) => t.key === activeTab)?.list ?? [];
 
-      setMessage(
-        `${jockey.fullName} ${approved ? "đã phê duyệt" : "đã từ chối"} thành công.`,
-      );
-      loadJockeys();
-    } catch (err) {
-      setMessage(err.message);
-    }
+  const closeReview = () => setReviewJockeyId(null);
+  const onReviewChanged = () => {
+    setMessage("Đã cập nhật trạng thái kỵ sĩ.");
+    loadJockeys();
   };
 
   return (
     <>
       <Notice message={message} />
+
       <section className="admin-panel">
         <div className="admin-panel__heading">
-          <span>Quản lý kỵ sĩ</span>
-          <h2>Phê duyệt kỵ sĩ</h2>
+          <span>Xác minh hồ sơ</span>
+          <h2>Quản lý kỵ sĩ</h2>
         </div>
+
+        <div className="admin-stat-grid">
+          <div className="admin-stat-card">
+            <p>Chờ duyệt</p>
+            <h3>{groups.pending.length}</h3>
+          </div>
+          <div className="admin-stat-card">
+            <p>Đã duyệt</p>
+            <h3>{groups.approved.length}</h3>
+          </div>
+          <div className="admin-stat-card">
+            <p>Từ chối</p>
+            <h3>{groups.rejected.length}</h3>
+          </div>
+        </div>
+
+        <div className="jrx-tabs" role="tablist" aria-label="Lọc kỵ sĩ theo trạng thái phê duyệt">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              className={`jrx-tab${activeTab === tab.key ? " jrx-tab--active" : ""}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+              <span className="jrx-tab__count">{tab.list.length}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
@@ -741,222 +782,40 @@ function Roles() {
               </tr>
             </thead>
             <tbody>
-              {jockeys.map((jockey) => {
+              {activeList.map((jockey) => {
                 const status = jockey.approvalStatusName || "Không xác định";
                 return (
                   <tr key={jockey.id}>
                     <td>
-                      <strong>{jockey.fullName}</strong>
-                      <small>{jockey.email}</small>
+                      <div className="jrx-cell-name">
+                        <strong>{jockey.fullName}</strong>
+                        <small>{jockey.email}</small>
+                      </div>
                     </td>
-                    <td>{jockey.licenseNumber || "-"}</td>
+                    <td>{jockey.licenseNumber || "—"}</td>
                     <td>
-                      <span className={`status status--${status.toLowerCase()}`}>
-                        {status}
-                      </span>
+                      <span className={`status status--${status.toLowerCase()}`}>{status}</span>
                     </td>
                     <td>
                       <div className="admin-actions">
-                        <button
-                          disabled={status === "Approved"}
-                          onClick={() => updateJockeyStatus(jockey, true)}
-                        >
-                          Phê duyệt
-                        </button>
-                        <button
-                          className="admin-danger"
-                          disabled={status === "Rejected"}
-                          onClick={() => updateJockeyStatus(jockey, false)}
-                        >
-                          Từ chối
-                        </button>
+                        <button onClick={() => setReviewJockeyId(jockey.id)}>Xem hồ sơ</button>
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {jockeys.length === 0 ? (
+              {activeList.length === 0 ? (
                 <tr>
-                  <td colSpan="4">Không tìm thấy tài khoản kỵ sĩ nào.</td>
+                  <td colSpan="4">{JOCKEY_TAB_EMPTY_MESSAGE[activeTab]}</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
       </section>
-    </>
-  );
-}
 
-function TournamentManagement() {
-  const [items, setItems] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState("");
-  const [editingStatus, setEditingStatus] = useState(null);
-  const [message, setMessage] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10 });
-  const load = () => getAdminTournaments().then((data) => setItems(Array.isArray(data) ? data : [])).catch((err) => setMessage(err.message));
-  useEffect(() => {
-    load();
-  }, []);
-
-  const handleUpload = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await request("/api/auth/upload-document", { method: "POST", body: formData });
-      const d = res?.data ?? res;
-      setForm((prev) => ({ ...prev, imageUrl: d?.url ?? "" }));
-    } catch (e) {
-      setMessage("Tải ảnh thất bại: " + (e.message ?? ""));
-    }
-    setUploading(false);
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    try {
-      // Phase4B: when editing a Published tournament, omit immutable fields from the payload
-      // so the BE never sees them. Draft edits send everything.
-      const isPublished = editingId && editingStatus === 1; // TournamentStatus.Published == 1
-      const payload = {
-        name: form.name,
-        description: form.description,
-        imageUrl: form.imageUrl,
-      };
-      if (!isPublished) {
-        payload.startDate = vnInputToApiUtc(form.startDate);
-        payload.endDate = vnInputToApiUtc(form.endDate);
-        payload.minParticipants = Number(form.minParticipants);
-        payload.maxParticipants = Number(form.maxParticipants);
-      }
-      if (editingId) await updateTournament(editingId, payload);
-      else {
-        payload.startDate = vnInputToApiUtc(form.startDate);
-        payload.endDate = vnInputToApiUtc(form.endDate);
-        payload.minParticipants = Number(form.minParticipants);
-        payload.maxParticipants = Number(form.maxParticipants);
-        await createTournament(payload);
-      }
-      setMessage(`Giải đấu ${editingId ? "đã cập nhật" : "đã tạo"} thành công.`);
-      setShowForm(false); setEditingId(""); setEditingStatus(null); load();
-    } catch (err) { setMessage(err.message); }
-  };
-  const edit = (item) => {
-    setEditingId(item.id ?? item.Id);
-    setEditingStatus(item.status ?? item.Status ?? null);
-    setForm({
-      name: item.name ?? item.Name ?? "",
-      description: item.description ?? item.Description ?? "",
-      startDate: apiToVNInput(item.startDate ?? item.StartDate),
-      endDate: apiToVNInput(item.endDate ?? item.EndDate),
-      imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
-      minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
-      maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
-    });
-    setShowForm(true);
-  };
-  const remove = async (id) => {
-    if (!window.confirm("Xóa giải đấu này?")) return;
-    try { await deleteTournament(id); setMessage("Đã xóa giải đấu."); load(); } catch (err) { setMessage(err.message); }
-  };
-
-  const viewT = async (item) => {
-    setSelectedT(item);
-  };
-
-  // TournamentStatus.Cancelled backend enum value (BE/Models/Enums.cs) — NextTransitionDto.Status
-  // serializes as the raw int (no global string enum converter).
-  const CANCELLED_STATUS = 4;
-
-  const changeStatus = async (id, newStatus) => {
-    try {
-      const body = { newStatus };
-      if (newStatus === CANCELLED_STATUS) {
-        const reason = window.prompt("Nhập lý do hủy giải đấu:");
-        if (reason === null) return; // dismissed — do not call the API
-        if (!reason.trim()) { setMessage("Lý do hủy giải đấu không được để trống."); return; }
-        body.reason = reason.trim();
-      }
-      await request(`/api/tournaments/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setMessage("Đã cập nhật trạng thái giải đấu.");
-      load();
-    } catch (err) { setMessage(err.message); }
-  };
-
-  return (
-    <>
-      <PageTitle eyebrow="Quản lý giải đấu" title="Giải đấu" description="Tạo giải đấu và điều phối vòng đấu, cuộc đua." action={<button className="primary-button" onClick={() => { setEditingId(""); setShowForm(true); }}>Tạo giải đấu</button>} />
-      <Notice message={message} />
-      {showForm && !editingId && (
-        <TournamentForm
-          onClose={() => setShowForm(false)}
-          onSuccess={() => {
-            setShowForm(false);
-            setMessage("Giải đấu đã tạo thành công.");
-            load();
-          }}
-        />
-      )}
-      {showForm && editingId && <form className="admin-form" onSubmit={submit}>
-        {editingStatus === 1 && <p style={{ color: "var(--hr-gold-soft)", fontSize: 13, marginBottom: 8 }}>⚠ Giải đấu đã công bố — chỉ có thể sửa Tên, Mô tả và Ảnh bìa.</p>}
-        <input placeholder="Tên giải đấu" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input placeholder="Mô tả" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
-          Thời gian bắt đầu *
-          <input type="datetime-local" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
-        </label>
-        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
-          Thời gian kết thúc *
-          <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
-        </label>
-        {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
-        <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
-        <input type="number" placeholder="Số người tham gia tối đa" required min="1" value={form.maxParticipants} onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} disabled={editingStatus === 1} />
-        <label style={{ fontSize: 13, color: "var(--hr-muted)" }}>Ảnh bìa giải đấu (tỉ lệ 3:1, đề xuất 1200×400px):
-          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} style={{ display: "block", marginTop: 4 }} />
-          {uploading ? <span style={{ color: "var(--hr-gold-soft)", fontSize: 12 }}>Đang tải ảnh...</span> : null}
-        </label>
-        {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ width: 120, borderRadius: 8, marginTop: 4 }} />}
-        <button className="primary-button" disabled={uploading}>Lưu giải đấu</button>
-      </form>}
-      <section className="admin-card-grid admin-tournament-grid">{items.map((item) => {
-        const id = item.id ?? item.Id;
-        const lifecycleStatus = (item.statusName ?? item.StatusName ?? item.status ?? item.Status ?? "").toString().toLowerCase();
-        const lifecycleClass = lifecycleStatus === "published" || lifecycleStatus === "ongoing" || lifecycleStatus === "1" || lifecycleStatus === "2" ? "status--active" : "status--inactive";
-        return <article key={id} className="admin-tournament-card" role="button" tabIndex={0} style={{ position: "relative", overflow: "hidden", cursor:"pointer" }} onClick={() => viewT(item)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); viewT(item); } }}>
-          {item.imageUrl ?? item.ImageUrl ? <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${(item.imageUrl ?? item.ImageUrl)})`, backgroundSize: "cover", backgroundPosition: "center", opacity: 0.15, pointerEvents: "none" }} /> : null}
-          <div style={{ position: "relative", zIndex: 1 }}><span className={`status ${lifecycleClass}`}>{getTournamentLifecycleLabel(item)}</span><h3>{item.name ?? item.Name}</h3><p>{item.description ?? item.Description ?? "Không có mô tả"}</p></div><dl style={{ position: "relative", zIndex: 1 }}><div><dt>Bắt đầu</dt><dd>{formatDateTime(item.startDate ?? item.StartDate)}</dd></div><div><dt>Kết thúc</dt><dd>{formatDateTime(item.endDate ?? item.EndDate)}</dd></div><div><dt>Vòng đấu</dt><dd>{item.roundCount ?? item.RoundCount ?? 0}</dd></div><div><dt>Cuộc đua</dt><dd>{item.raceCount ?? item.RaceCount ?? 0}</dd></div></dl><div className="admin-actions" style={{ position: "relative", zIndex: 1 }}>
-            {(item.nextTransitions ?? item.NextTransitions ?? []).map((t) => (
-              <button
-                key={t.status}
-                style={t.isPrimary
-                  ? { background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }
-                  : { background: "transparent", color: "var(--hr-text)", border: "1px solid var(--hr-border-soft)" }}
-                onClick={(e) => { e.stopPropagation(); changeStatus(id, t.status); }}
-              >
-                {t.label}
-              </button>
-            ))}
-            <button onClick={() => edit(item)}>Sửa</button><button className="admin-danger" onClick={() => remove(id)}>Xóa</button>
-          </div></article>;
-      })}</section>
-      {selectedT && (
-        <TournamentDetail
-          t={selectedT}
-          onBack={() => setSelectedT(null)}
-          setMessage={setMessage}
-          getTournamentRaces={getTournamentRaces}
-          getTournamentRounds={getTournamentRounds}
-        />
+      {reviewJockeyId && (
+        <JockeyReviewModal jockeyId={reviewJockeyId} onClose={closeReview} onChanged={onReviewChanged} />
       )}
     </>
   );
@@ -1109,6 +968,18 @@ function ScheduleManagement({ type }) {
   const cancelEditRound = () => {
     setEditingRoundId("");
     setForm(defaultRoundForm);
+  };
+
+  // Q1: server is the sole source of truth for readiness — this only sends the current Round's
+  // id, never Horse IDs, rankings, or target assignments.
+  const generateNextRoundForRound = async (roundId) => {
+    try {
+      const result = await generateNextRound(roundId);
+      const data = result?.data ?? result?.Data ?? {};
+      const generated = data.generatedEntries ?? data.GeneratedEntries;
+      setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
+      setItems(await getTournamentRounds(selected));
+    } catch (err) { setMessage(err.message); }
   };
 
   const submit = async (event) => {
@@ -1330,20 +1201,41 @@ function ScheduleManagement({ type }) {
           <option value="">Chọn cuộc đua để phân công ngựa</option>
           {items.map((item) => <option key={item.id ?? item.Id} value={item.id ?? item.Id}>{item.name ?? item.Name}</option>)}
         </select>
-        <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
-          <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
-          {visibleHorses.map((horse) => {
-            const horseId = horse.id ?? horse.Id;
-            const isInThisRace = assignedHorseIds.has(horseId);
-            const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
-            const isDisabled = isInThisRace || isBusyElsewhere;
-            const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
-            return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
-              {horse.name ?? horse.Name}{label}
-            </option>;
-          })}
-        </select>
-        <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+        {(() => {
+          const selectedRace = items.find((item) => (item.id ?? item.Id) === assignment.raceId);
+          const selectedRoundNumber = selectedRace ? (selectedRace.roundNumber ?? selectedRace.RoundNumber) : null;
+          // Q1-UX: manual Horse->Race assignment is only valid for RoundNumber == 1 — the backend
+          // already rejects it for Round2+ (those RaceEntries can only come from
+          // POST rounds/{roundId}/generate-next). Hide the ENTIRE Horse-selection flow rather than
+          // filtering eliminated horses, so no horse — including a genuine qualifier — is ever
+          // manually assignable to Round2+.
+          if (assignment.raceId && selectedRoundNumber != null && selectedRoundNumber > 1) {
+            return (
+              <p style={{margin:"8px 0",padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)",color:"var(--hr-success)",fontSize:13}}>
+                Ngựa ở vòng này được xác định tự động từ kết quả chính thức của vòng trước.<br />
+                Không thể phân công ngựa thủ công.
+              </p>
+            );
+          }
+          return (
+            <>
+              <select className="admin-select" required value={assignment.horseId} onChange={(e) => selectHorse(e.target.value)}>
+                <option value="">Chọn ngựa đã được duyệt đăng ký giải đấu</option>
+                {visibleHorses.map((horse) => {
+                  const horseId = horse.id ?? horse.Id;
+                  const isInThisRace = assignedHorseIds.has(horseId);
+                  const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
+                  const isDisabled = isInThisRace || isBusyElsewhere;
+                  const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
+                  return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
+                    {horse.name ?? horse.Name}{label}
+                  </option>;
+                })}
+              </select>
+              <button className="primary-button" disabled={!assignment.raceId || !assignment.horseId}>Phân công ngựa vào cuộc đua</button>
+            </>
+          );
+        })()}
       </form>}
 
       <section className="admin-card-grid">{items.map((item) => {
@@ -1353,13 +1245,16 @@ function ScheduleManagement({ type }) {
 
         if (type === "round") {
           const roundNumber = item.roundNumber ?? item.RoundNumber;
-          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value (Final Round
-          // hint below) and must never be treated as "not set".
+          // Nullish coalescing only — AdvanceCount = 0 is a real, meaningful value and must
+          // never be treated as "not set".
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
+          // V0/V0.1: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount
+          // alone — Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+          const isFinal = isFinalRound(item, selectedTournament);
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>
-              {advanceCount === 0 && (
+              {isFinal && (
                 <span className="badge" style={{ marginLeft: 4, background: "rgba(184,134,59,0.16)", color: "var(--hr-gold-soft)" }}>Vòng chung kết</span>
               )}
               <h3>{item.name ?? item.Name}</h3>
@@ -1371,6 +1266,14 @@ function ScheduleManagement({ type }) {
               {isDraftTournament && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
                   <button onClick={() => startEditRound(item)}>Sửa</button>
+                </div>
+              )}
+              {/* Q1: only offered for a non-final Round of a non-Draft Tournament — the backend
+                  remains authoritative on actual readiness (every source Race Finished with an
+                  Official result); this button just avoids offering it somewhere it can never work. */}
+              {!isDraftTournament && !isFinal && (
+                <div className="admin-actions" style={{ marginTop: 8 }}>
+                  <button onClick={() => generateNextRoundForRound(itemId)}>Tạo vòng tiếp theo</button>
                 </div>
               )}
             </article>
@@ -1435,15 +1338,13 @@ function ScheduleManagement({ type }) {
                 {itemStatus === "finished" && !itemResultStatus && (
                   <span style={{ fontSize: 12, color: "var(--hr-muted)", alignSelf: "center" }}>Đã kết thúc — chờ trọng tài nộp kết quả.</span>
                 )}
+                {/* RESULT-APPROVAL-REVIEW-UX: Duyệt KQ/Từ chối no longer live in this
+                    always-visible header — Admin must open the card (below) to review the full
+                    provisional ranking first; the buttons now live directly under that ranking. */}
                 {itemStatus === "finished" && itemResultStatus === "provisional" && (
-                  <>
-                    <button style={{ background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", border: "1px solid rgba(112,139,104,0.35)" }} onClick={() => handleRaceAction(itemId, "approve")}>
-                      Duyệt KQ
-                    </button>
-                    <button style={{ background: "rgba(201,105,90,0.16)", color: "var(--hr-danger)", border: "1px solid rgba(201,105,90,0.35)" }} onClick={() => handleRaceAction(itemId, "reject")}>
-                      Từ chối
-                    </button>
-                  </>
+                  <span style={{ fontSize: 12, color: "var(--hr-warning)", fontWeight: 600, alignSelf: "center" }}>
+                    Chờ duyệt — xem bảng xếp hạng bên dưới
+                  </span>
                 )}
                 {itemStatus === "finished" && itemResultStatus === "official" && (
                   <span style={{ fontSize: 12, color: "var(--hr-success)", fontWeight: 600, alignSelf: "center" }}>✓ Chính thức</span>
@@ -1541,20 +1442,34 @@ function ScheduleManagement({ type }) {
               {itemStatus === "finished" && raceResult && (() => {
                 const resultStatusVal = (raceResult.resultStatus ?? raceResult.ResultStatus ?? "").toLowerCase();
                 const isOfficial = resultStatusVal === "official";
-                const winnerHorseId = raceResult.winningHorseId ?? raceResult.WinningHorseId;
-                const winnerEntry = raceEntries.find(e => (e.horseId ?? e.HorseId) === winnerHorseId);
+                const isProvisional = resultStatusVal === "provisional";
+
+                // RESULT-APPROVAL-REVIEW-UX: full ranking, sourced from RaceResultResponse.Rankings
+                // (the backend's own parse of the canonical RaceResult.RankingsJson), built the
+                // SAME way regardless of Provisional/Official — Admin must review every position
+                // before approving, not just the winner. Never derived from RaceEntry.FinishPosition.
+                const rankings = raceResult.rankings ?? raceResult.Rankings ?? [];
+                const rankingRows = buildRankingDisplayList(rankings, raceEntries);
+                const rejectedReason = raceResult.rejectedReason ?? raceResult.RejectedReason;
+
                 return (
-                  <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`}}>
-                    <h4 style={{fontSize:14,margin:"0 0 6px",color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>
-                      {isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời (chưa duyệt)"}
-                    </h4>
-                    <p style={{margin:0,fontSize:13,color:"var(--hr-paper)"}}>
-                      {isOfficial ? "🏆" : "⏳"} <strong>{winnerEntry?.horseName ?? winnerEntry?.HorseName ?? "Chưa xác định"}</strong>
-                      {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName ? <span> — Kỵ sĩ: {winnerEntry?.jockeyName ?? winnerEntry?.JockeyName}</span> : null}
-                      {raceResult.notes ?? raceResult.Notes ? <span style={{display:"block",fontSize:12,color:"var(--hr-muted)",marginTop:4}}>Ghi chú: {raceResult.notes ?? raceResult.Notes}</span> : null}
-                      {(raceResult.rejectedReason ?? raceResult.RejectedReason) ? <span style={{display:"block",fontSize:12,color:"var(--hr-danger)",marginTop:4}}>Đã bị từ chối trước đó: {raceResult.rejectedReason ?? raceResult.RejectedReason}</span> : null}
-                    </p>
-                  </div>
+                  <RaceRankingPanel
+                    title={isOfficial ? "Kết quả chính thức" : "Kết quả tạm thời"}
+                    rows={rankingRows}
+                    isOfficial={isOfficial}
+                    rejectedReason={isProvisional ? rejectedReason : null}
+                    notes={raceResult.notes ?? raceResult.Notes}
+                    actions={isProvisional ? (
+                      <>
+                        <button style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "1px solid rgba(201,105,90,.4)", background: "rgba(201,105,90,0.16)", color: "var(--hr-danger)", cursor: "pointer", fontWeight: 600 }} onClick={() => handleRaceAction(itemId, "reject")}>
+                          Từ chối
+                        </button>
+                        <button style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "1px solid rgba(112,139,104,.4)", background: "rgba(112,139,104,0.16)", color: "var(--hr-success)", cursor: "pointer", fontWeight: 600 }} onClick={() => handleRaceAction(itemId, "approve")}>
+                          Duyệt KQ
+                        </button>
+                      </>
+                    ) : null}
+                  />
                 );
               })()}
               {raceReport && (
@@ -1667,7 +1582,7 @@ function AdminPage() {
   else if (location.pathname.includes("/horses/")) content = <HorseDetail />;
   else if (location.pathname.startsWith("/admin/users/")) content = <UserDetail />;
   else if (location.pathname === "/admin/roles") content = <Roles />;
-  else if (location.pathname === "/admin/tournaments") content = <TournamentManagement />;
+  else if (location.pathname === "/admin/tournaments") content = <TournamentManagementPage />;
   else if (location.pathname === "/admin/race-results") content = <RaceResultsPage />;
   else if (location.pathname === "/admin/horses") content = <HorseManagementPage />;
   else if (location.pathname === "/admin/referees") content = <RefereeManagementPage />;
@@ -1676,6 +1591,7 @@ function AdminPage() {
   else if (location.pathname === "/admin/races") content = <ScheduleManagement type="race" />;
   else if (location.pathname === "/admin/prizes") content = <PrizeManagement />;
   else if (location.pathname === "/admin/protests") content = <ProtestManagement />;
+  else if (location.pathname === "/admin/race-complaints") content = <AdminRaceComplaintManagement />;
   else if (location.pathname === "/admin/transfers") content = <TransferManagement />;
   else if (location.pathname === "/admin/contracts") content = <ContractManagement />;
   else if (location.pathname === "/admin/injuries") content = <InjuryManagement />;

@@ -4,6 +4,7 @@ import { deleteHorse, getMyHorses, inviteJockeyToHorse, removeJockeyFromHorse } 
 import { getAvailableJockeys } from "../../services/jockeyApi";
 import { resolveApiUrl } from "../../services/apiClient";
 import { isJockeyRole } from "../../services/authRoleUtils";
+import { isInvitationOfficial } from "../../utils/jockeyAssignmentDisplay";
 import "./OwnerHorseListPage.css";
 
 const approvalStatusMap = { 1: "Chờ duyệt", 2: "Đã duyệt", 3: "Từ chối" };
@@ -230,7 +231,16 @@ function OwnerHorseListPage() {
             const stamina = Math.min(95, 35 + (totalRaces - totalWins) * 4);
             const imageUrl = resolveApiUrl(h.imageUrl ?? h.ImageUrl ?? "");
             const invitations = h.jockeyInvitations ?? h.JockeyInvitations ?? [];
-            const hasAcceptedJockey = invitations.some(inv => (inv.status ?? inv.Status) === 2 || String(inv.status ?? inv.Status).toLowerCase() === "accepted");
+            const raceEntriesForHorse = h.raceEntries ?? h.RaceEntries ?? [];
+            // J3.1: once an invitation is the official pairing (RaceEntry.JockeyId match), it is
+            // no longer offered here — Remove is only for a still-non-official Pending/Accepted
+            // candidate. Official-ness is judged by JockeyId match, never by Status alone.
+            const hasCancellableJockey = invitations.some(inv => {
+              const status = String(inv.status ?? inv.Status).toLowerCase();
+              const isPendingOrAccepted = (inv.status ?? inv.Status) === 1 || (inv.status ?? inv.Status) === 2 ||
+                status === "pending" || status === "accepted";
+              return isPendingOrAccepted && !isInvitationOfficial(inv, raceEntriesForHorse);
+            });
 
             return (
               <div key={id} className="oh-card">
@@ -267,7 +277,7 @@ function OwnerHorseListPage() {
                   </div>
                   <div className="oh-actions">
                     <Link to={`/owner/horses/${id}`} className="oh-btn oh-btn--sm oh-btn--primary">Chi tiết</Link>
-                    {hasAcceptedJockey && (
+                    {hasCancellableJockey && (
                       <button className="oh-btn-icon" style={{color: "#ef4444"}} title="Hủy kỵ sĩ" onClick={() => openCancel(h)}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                       </button>
@@ -369,7 +379,8 @@ function OwnerHorseListPage() {
               {(() => {
                 const tourns = [];
                 (cancelHorse.jockeyInvitations ?? cancelHorse.JockeyInvitations ?? [])
-                  .filter(inv => (inv.status ?? inv.Status) === 2 || (inv.status ?? inv.Status) === 1 || String(inv.status ?? inv.Status).toLowerCase() === "accepted" || String(inv.status ?? inv.Status).toLowerCase() === "pending")
+                  .filter(inv => ((inv.status ?? inv.Status) === 2 || (inv.status ?? inv.Status) === 1 || String(inv.status ?? inv.Status).toLowerCase() === "accepted" || String(inv.status ?? inv.Status).toLowerCase() === "pending")
+                    && !isInvitationOfficial(inv, cancelHorse.raceEntries ?? cancelHorse.RaceEntries ?? []))
                   .forEach(inv => {
                     const raceId = inv.raceId ?? inv.RaceId;
                     const entry = (cancelHorse.raceEntries ?? cancelHorse.RaceEntries ?? []).find(e => (e.raceId ?? e.RaceId) === raceId);
@@ -386,7 +397,8 @@ function OwnerHorseListPage() {
             <select value={selectedCancelInvitationId} onChange={e => setSelectedCancelInvitationId(e.target.value)} className="oh-select" disabled={!selectedCancelTournament} style={{marginBottom:"12px"}}>
               <option value="">-- Chọn kỵ sĩ cần hủy --</option>
               {selectedCancelTournament && (cancelHorse.jockeyInvitations ?? cancelHorse.JockeyInvitations ?? [])
-                .filter(inv => (inv.status ?? inv.Status) === 2 || (inv.status ?? inv.Status) === 1 || String(inv.status ?? inv.Status).toLowerCase() === "accepted" || String(inv.status ?? inv.Status).toLowerCase() === "pending")
+                .filter(inv => ((inv.status ?? inv.Status) === 2 || (inv.status ?? inv.Status) === 1 || String(inv.status ?? inv.Status).toLowerCase() === "accepted" || String(inv.status ?? inv.Status).toLowerCase() === "pending")
+                  && !isInvitationOfficial(inv, cancelHorse.raceEntries ?? cancelHorse.RaceEntries ?? []))
                 .map(inv => {
                   const invitationId = inv.id ?? inv.Id;
                   const raceId = inv.raceId ?? inv.RaceId;

@@ -11,6 +11,13 @@ public interface IPrizeRepository
     Task<IEnumerable<Prize>> GetByTournamentAsync(Guid tournamentId);
     Task<IEnumerable<Prize>> GetByRaceAsync(Guid raceId);
     Task<IEnumerable<Prize>> GetAllAsync();
+    // PRIZE-V1: single projected existence/SUM queries for validation — avoids loading full Prize
+    // rows just to check a duplicate Position or compute the allocated total.
+    Task<bool> ExistsPositionAsync(Guid tournamentId, int position, Guid? excludePrizeId);
+    Task<decimal> GetAllocatedAmountAsync(Guid tournamentId, Guid? excludePrizeId);
+    // PRIZE-V1.2: percentage is now the source-of-truth allocation figure (Amount is derived) —
+    // mirrors GetAllocatedAmountAsync's shape exactly.
+    Task<decimal> GetAllocatedPercentageAsync(Guid tournamentId, Guid? excludePrizeId);
     Task AddAsync(Prize prize);
     Task UpdateAsync(Prize prize);
     Task DeleteAsync(Guid id);
@@ -20,10 +27,35 @@ public interface IProtestRepository
 {
     Task<Protest?> GetByIdAsync(Guid id);
     Task<IEnumerable<Protest>> GetByRaceAsync(Guid raceId);
+    Task<IEnumerable<Protest>> GetByFiledByUserAsync(Guid filedByUserId);
     Task<IEnumerable<Protest>> GetPendingAsync();
     Task<IEnumerable<Protest>> GetAllAsync();
+    Task<bool> HasActiveByFilerRaceEntryAsync(Guid filedByUserId, Guid raceId, Guid againstEntryId);
     Task AddAsync(Protest protest);
     Task UpdateAsync(Protest protest);
+}
+
+public interface IRaceComplaintRepository
+{
+    Task<RaceComplaint?> GetByIdAsync(Guid id);
+    Task<IEnumerable<RaceComplaint>> GetByRaceAsync(Guid raceId);
+    Task<IEnumerable<RaceComplaint>> GetByFiledByUserAsync(Guid filedByUserId);
+    Task<IEnumerable<RaceComplaint>> GetByAssignedRefereeUserAsync(Guid refereeUserId);
+    Task<IEnumerable<RaceComplaint>> GetAllAsync();
+    Task<bool> HasActiveByFilerRaceTypeAsync(Guid filedByUserId, Guid raceId, RaceComplaintType type);
+    Task AddAsync(RaceComplaint complaint);
+    Task UpdateAsync(RaceComplaint complaint);
+}
+
+// COMPLAINT-EVIDENCE-V1
+public interface IRaceComplaintEvidenceRepository
+{
+    Task<RaceComplaintEvidence?> GetByIdAsync(Guid id);
+    // COMPLAINT-EVIDENCE-V1.1: backend-authoritative max-5-per-side enforcement counts persisted
+    // rows by EvidenceSource rather than trusting anything the client claims about upload count.
+    Task<int> CountBySourceAsync(Guid raceComplaintId, EvidenceSource source);
+    Task AddAsync(RaceComplaintEvidence evidence);
+    Task RemoveAsync(RaceComplaintEvidence evidence);
 }
 
 public interface IHorseTransferRepository

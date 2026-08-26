@@ -19,6 +19,7 @@ export default function RefereeProfilePage() {
 
   const showMsg = useCallback((type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); }, []);
 
+  //Fetch API to get profile data on component mount
   useEffect(() => {
     getProfile()
       .then((d) => { const p = d?.data ?? d; setProfile(p); setInfo({ fullName: p.fullName ?? p.FullName ?? "", phoneNumber: p.phoneNumber ?? p.PhoneNumber ?? "" }); })
@@ -26,6 +27,7 @@ export default function RefereeProfilePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  //Handle saving updated profile information
   const saveInfo = async () => {
     try {
       const res = await updateProfile({ fullName: info.fullName, phoneNumber: info.phoneNumber });
@@ -37,6 +39,7 @@ export default function RefereeProfilePage() {
     } catch (e) { showMsg("error", e?.message ?? "Cập nhật thất bại."); }
   };
 
+  //Handle saving new password
   const savePassword = async () => {
     if (pw.newPassword !== pw.confirmNewPassword) { showMsg("error", "Mật khẩu mới không khớp."); return; }
     if (pw.newPassword.length < 8) { showMsg("error", "Mật khẩu phải có ít nhất 8 ký tự."); return; }

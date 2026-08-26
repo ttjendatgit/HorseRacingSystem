@@ -1,8 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerTournaments } from "../../services/ownerApi";
+import { getPrizesByTournament } from "../../services/managementApi";
 import { getTournamentRegistrationState } from "../../utils/tournamentRegistration";
 import { isJockeyRole } from "../../services/authRoleUtils";
+import PrizeBreakdown from "../../components/PrizeBreakdown";
+import "../../components/PrizeBreakdown.css";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentListPage.css";
 
@@ -47,6 +50,20 @@ function OwnerTournamentListPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Tất cả");
   const [activeTournament, setActiveTournament] = useState(null);
+  const [activePrizes, setActivePrizes] = useState([]);
+
+  // PRIZE-V1.1 PART 8/9: Owner (and Jockey, which reuses this same page — see canRegisterAsOwner
+  // above) currently see only PrizePool in this modal, not the rank breakdown — fetched lazily
+  // when a Tournament is opened. A Draft Tournament's Prize breakdown is hidden server-side
+  // (404), so a failed fetch here just leaves the section empty rather than erroring the modal.
+  useEffect(() => {
+    if (!activeTournament) { setActivePrizes([]); return; }
+    let cancelled = false;
+    getPrizesByTournament(activeTournament.id)
+      .then((data) => { if (!cancelled) setActivePrizes(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setActivePrizes([]); });
+    return () => { cancelled = true; };
+  }, [activeTournament]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +234,11 @@ function OwnerTournamentListPage() {
               <div><h4>Địa điểm</h4><p>{activeTournament.venue || "--"}</p></div>
               <div><h4>Loại mặt đường</h4><p>{activeTournament.surfaceType || "--"}</p></div>
             </div>
+            {activePrizes.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <PrizeBreakdown prizes={activePrizes} />
+              </div>
+            )}
             <div className="otl-modal__actions">
               <button className="otl-btn otl-btn--outline" onClick={() => setActiveTournament(null)}>Đóng</button>
               {activeTournament.canRegister && canRegisterAsOwner && (

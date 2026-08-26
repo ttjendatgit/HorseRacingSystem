@@ -25,7 +25,7 @@ public class C1FinalDomainCorrectionTests
 
     private static TournamentsController BuildTournamentsController(RaceLifecycleTests.LifecycleFixture f, string? role = null)
     {
-        return new TournamentsController(f.TournamentSvc, f.RoundSvc)
+        return new TournamentsController(f.TournamentSvc, f.RoundSvc, f.RaceManagement)
         {
             ControllerContext = new ControllerContext
             {
@@ -68,7 +68,8 @@ public class C1FinalDomainCorrectionTests
         DateTime start,
         DateTime end,
         DateTime? registrationDeadline = null,
-        int? maxParticipants = 10)
+        int? maxParticipants = 10,
+        int maxRounds = 1)
     {
         var tournament = new Tournament
         {
@@ -79,6 +80,7 @@ public class C1FinalDomainCorrectionTests
             RegistrationDeadline = registrationDeadline,
             MinParticipants = 3,
             MaxParticipants = maxParticipants,
+            MaxRounds = maxRounds,
             Status = status,
             CreatedAt = DateTime.UtcNow
         };
@@ -164,7 +166,7 @@ public class C1FinalDomainCorrectionTests
         RaceLifecycleTests.LifecycleFixture f)
     {
         var start = DateTime.UtcNow.AddDays(10);
-        var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Draft, start, start.AddDays(10), start.AddDays(-1));
+        var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Draft, start, start.AddDays(10), start.AddDays(-1), maxRounds: 2);
         var round1Id = await CreateRoundAsync(f, tournamentId, "Round 1", 1, start, start.AddDays(2), advanceCount: 1);
         var round2Id = await CreateRoundAsync(f, tournamentId, "Final", 2, start.AddDays(2), start.AddDays(4), advanceCount: 0);
         var race1Id = await CreateRaceAsync(f, tournamentId, round1Id, start.AddHours(1), maxParticipants: 4, qualificationSlots: 1);
@@ -568,7 +570,7 @@ public class C1FinalDomainCorrectionTests
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Draft, start, start.AddDays(10), start.AddDays(-1));
+        var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Draft, start, start.AddDays(10), start.AddDays(-1), maxRounds: 2);
         var round1Id = await CreateRoundAsync(f, tournamentId, "Round 1", 1, start, start.AddDays(2), advanceCount: 6);
         var round2Id = await CreateRoundAsync(f, tournamentId, "Final", 2, start.AddDays(2), start.AddDays(4), advanceCount: 0);
         await CreateRaceAsync(f, tournamentId, round1Id, start.AddHours(1), maxParticipants: 8, qualificationSlots: 3);

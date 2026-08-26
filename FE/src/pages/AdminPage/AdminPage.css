@@ -132,24 +132,97 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 .admin-form input, .admin-form select { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--hr-border-soft); background: var(--hr-surface-2); color: var(--hr-text); font-size: 13px; font-family: inherit; color-scheme: dark; }
 .admin-form input::placeholder { color: var(--hr-muted); }
 .admin-form input:focus, .admin-form select:focus { outline: none; border-color: var(--hr-focus); box-shadow: 0 0 0 2px var(--hr-focus-ring); }
-.admin-tournament-card { background: var(--hr-surface); border-radius: 12px; padding: 20px; border: 1px solid var(--hr-border); box-shadow: 0 8px 20px rgba(0,0,0,0.28); display: grid; gap: 12px; transition: all 0.2s; }
-.admin-tournament-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-.admin-tournament-card h3 { margin: 0 0 4px; color: var(--hr-paper); font-size: 16px; }
-.admin-tournament-card p { color: var(--hr-muted); font-size: 13px; margin: 0; }
-.admin-tournament-card dl { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0; }
-.admin-tournament-card dt { font-size: 10px; color: var(--hr-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.admin-tournament-card dd { font-size: 14px; color: var(--hr-paper); font-weight: 600; margin: 0; }
+/* ── Tournament Management (ADMIN-TOURNAMENTS-UI-POLISH) ──
+   Compact operational cards: 3 columns desktop, 2 tablet, 1 mobile — long real Tournament
+   names get room to breathe instead of the old 4-column squeeze. No decorative background
+   imagery; dark/gold surfaces stay the single source of visual truth. */
+.tm-toolbar { margin: 4px 0 16px; }
 
-/* ── Tournament card grid: capped columns so cards never get squeezed too narrow ── */
-.admin-tournament-grid { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 1400px) {
-  .admin-tournament-grid { grid-template-columns: repeat(3, 1fr); }
+.tm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 1100px) {
+  .tm-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 1024px) {
-  .admin-tournament-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 700px) {
+  .tm-grid { grid-template-columns: repeat(1, 1fr); }
 }
-@media (max-width: 640px) {
-  .admin-tournament-grid { grid-template-columns: repeat(1, 1fr); }
+
+.tm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--hr-surface);
+  border: 1px solid var(--hr-border);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tm-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.36); }
+/* Finished/Cancelled are history — quieter presentation, no lifecycle urgency implied. */
+.tm-card--muted { box-shadow: none; }
+.tm-card--muted:hover { transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+
+/* Compact horizontal media strip — fixed aspect/height so every card (with or
+   without a real Tournament image) stays the same height; ADMIN-TOURNAMENTS-
+   REGRESSION-FIX restores identity without going back to full-card wallpaper. */
+.tm-card__media {
+  width: 100%;
+  height: 96px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(184,134,59,0.14), rgba(184,134,59,0.04));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tm-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tm-card__media-placeholder { color: var(--hr-gold-soft); opacity: 0.55; }
+
+/* align-items: flex-start is required here — a flex column's default
+   (stretch) was making RaceStatusBadge fill the card's full width, reading
+   as a progress bar instead of a compact status chip. */
+.tm-card__header { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.tm-card__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--hr-paper);
+  line-height: 1.32;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tm-card__body { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.tm-card__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--hr-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tm-card__dates { margin: 0; font-size: 12px; color: var(--hr-text); }
+.tm-card__counts { margin: 0; font-size: 12px; color: var(--hr-muted); }
+
+.tm-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: auto;
+  border-top: 1px solid var(--hr-border-soft);
 }
 .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .admin-actions button, .admin-actions a { padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--hr-border-soft); cursor: pointer; font-family: inherit; text-decoration: none; transition: all 0.15s; background: transparent; color: var(--hr-text); }
@@ -580,6 +653,37 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 .admin-table th { text-align: left; padding: 10px 14px; font-size: 11px; color: var(--hr-muted); text-transform: uppercase; letter-spacing: 0.5px; background: var(--hr-surface-2); border-bottom: 1px solid var(--hr-border-soft); }
 .admin-table td { padding: 10px 14px; font-size: 13px; color: var(--hr-text); border-bottom: 1px solid var(--hr-border-soft); }
 .admin-table tr:hover td { background: rgba(238,229,212,0.03); }
+
+/* ── Jockey name/email table cell (J-ADMIN-REVIEW UX polish) ──────────────
+   Plain `<strong>` + `<small>` inside a table cell render inline with no line
+   break (e.g. "Kỵ sĩ 6jockey6@gmail.com") — stack them with a muted secondary
+   line instead. */
+.jrx-cell-name { display: flex; flex-direction: column; gap: 2px; }
+.jrx-cell-name strong { color: var(--hr-paper); font-size: 14px; font-weight: 600; line-height: 1.3; }
+.jrx-cell-name small { color: var(--hr-muted); font-size: 12px; line-height: 1.3; }
+
+/* ── Jockey status tabs (Chờ duyệt / Đã duyệt / Từ chối / Tất cả) ───────── */
+.jrx-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.jrx-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 999px;
+  border: 1px solid var(--hr-border-soft);
+  background: var(--hr-surface-2);
+  color: var(--hr-muted);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.jrx-tab:hover { background: rgba(238,229,212,0.06); color: var(--hr-text); }
+.jrx-tab:focus-visible { outline: 2px solid var(--hr-focus); outline-offset: 2px; }
+.jrx-tab--active { background: rgba(184,134,59,0.16); border-color: var(--hr-gold); color: var(--hr-paper); }
+.jrx-tab__count {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(238,229,212,0.1);
+  font-size: 11px; font-weight: 700; text-align: center; line-height: 1.5;
+}
+.jrx-tab--active .jrx-tab__count { background: var(--hr-gold); color: var(--hr-bg-deep); }
+
 .modal-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(8,6,4,0.6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .modal-header h3 { color: var(--hr-paper); font-size: 20px; margin: 0; font-family: var(--font-display); }
@@ -1157,4 +1261,443 @@ scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 :where(.ad-content, .admin-modal-panel) :where(button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ── Prize Management (PRIZE-V1.2) — reuses existing --hr-* tokens/admin-* patterns throughout,
+   no new colors introduced. ── */
+
+.pm-modal {
+  max-width: min(640px, 96vw);
+  width: 100%;
+}
+
+/* Desktop: comfortable 2-column grouping; mobile: single column (see pre-delivery checklist). */
+.pm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+@media (min-width: 640px) {
+  .pm-form-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Percentage input styled as one field with a "%" suffix (PART 14). Mirrors .admin-form input's
+   own border/background/radius so it reads as the same field type, with a focus-within ring
+   matching --hr-focus so keyboard/focus state stays visible per accessibility guidance. */
+.pm-percent-field {
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--hr-border-soft);
+  background: var(--hr-surface-2);
+  overflow: hidden;
+}
+.pm-percent-field input {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  flex: 1;
+  min-width: 0;
+}
+.pm-percent-field:focus-within {
+  border-color: var(--hr-focus);
+  box-shadow: 0 0 0 2px var(--hr-focus-ring);
+}
+.pm-percent-suffix {
+  padding: 0 14px;
+  color: var(--hr-muted);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+/* Preset percentage chips (PART 15) — shortcuts only, reuses the existing .ad-qa-btn pattern. */
+.pm-preset-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pm-preset-chips__label {
+  font-size: 12px;
+  color: var(--hr-muted);
+  margin-right: 2px;
+}
+
+/* Live Amount preview (PART 16) — clearly labeled as a preview, not an authoritative value. */
+.pm-preview {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--hr-muted);
+}
+.pm-preview strong {
+  color: var(--hr-gold-soft);
+}
+
+/* Summary card secondary money line (PART 13) under the primary percentage figure. */
+.pm-stat-secondary {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--hr-muted);
+}
+
+.pm-help-text {
+  font-size: 12px;
+  color: var(--hr-muted);
+  margin: 0;
+}
+
+/* Allocation progress tag (PART 19) — success/warning semantics reuse the existing status token
+   pair, never color-only (label text always accompanies it). */
+.pm-progress-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 99px;
+}
+.pm-progress-tag--complete {
+  background: rgba(112,139,104,0.16);
+  color: var(--hr-success);
+  border: 1px solid rgba(112,139,104,0.32);
+}
+.pm-progress-tag--incomplete {
+  background: rgba(185,138,69,0.16);
+  color: var(--hr-warning);
+  border: 1px solid rgba(185,138,69,0.32);
+}
+
+.pm-empty-state {
+  padding: 32px 20px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px dashed var(--hr-border);
+}
+
+/* Table readability (PART 17/25): numeric columns use tabular figures so percent/amount stay
+   aligned across rows; Name/Sponsor wrap instead of truncating for long values. */
+.pm-table__figure {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pm-table__name,
+.pm-table__sponsor {
+  max-width: 220px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* Race Results: compact operational view */
+.rr-page {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.rr-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+}
+
+.rr-title h1 {
+  margin: 0 0 4px;
+  color: var(--hr-paper);
+  font-size: 32px;
+  line-height: 1.05;
+}
+
+.rr-title p {
+  color: var(--hr-muted);
+  font-size: 13px;
+}
+
+.rr-summary-line {
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(238, 229, 212, 0.045);
+  border: 1px solid var(--hr-border-soft);
+  color: var(--hr-gold-soft) !important;
+  white-space: nowrap;
+}
+
+.rr-state-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--hr-border);
+  background: rgba(238, 229, 212, 0.035);
+}
+
+.rr-state-card strong {
+  color: var(--hr-paper);
+  font-size: 14px;
+}
+
+.rr-state-card span {
+  color: var(--hr-muted);
+  font-size: 13px;
+}
+
+.rr-tournament {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(238, 229, 212, 0.025);
+  border: 1px solid var(--hr-border);
+}
+
+.rr-tournament__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+}
+
+.rr-tournament h2 {
+  margin: 0;
+  color: var(--hr-paper);
+  font-size: 18px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rr-tournament__header p {
+  margin-top: 3px;
+  color: var(--hr-muted);
+  font-size: 12px;
+}
+
+.rr-race-list {
+  display: grid;
+  border-top: 1px solid var(--hr-border-soft);
+}
+
+.rr-race {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hr-border-soft);
+}
+
+.rr-race:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.rr-race__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.rr-round {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--hr-gold-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rr-race h3 {
+  margin: 0;
+  color: var(--hr-paper);
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rr-race__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  color: var(--hr-muted);
+  font-size: 12px;
+}
+
+.rr-race__meta > span:not(.rr-result-status)::after {
+  content: "·";
+  margin-left: 12px;
+  color: rgba(238, 229, 212, 0.22);
+}
+
+.rr-race__meta > span:nth-last-child(2)::after {
+  content: "";
+  margin-left: 0;
+}
+
+.rr-status,
+.rr-result-status,
+.rr-placement {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rr-status {
+  min-height: 22px;
+  padding: 5px 8px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.rr-status--success,
+.rr-result-status--official,
+.rr-placement--success {
+  background: rgba(112, 139, 104, 0.16);
+  border-color: rgba(112, 139, 104, 0.32);
+  color: var(--hr-success);
+}
+
+.rr-status--warning,
+.rr-result-status--provisional {
+  background: rgba(185, 138, 69, 0.16);
+  border-color: rgba(185, 138, 69, 0.32);
+  color: var(--hr-warning);
+}
+
+.rr-status--danger,
+.rr-placement--danger {
+  background: rgba(201, 105, 90, 0.16);
+  border-color: rgba(201, 105, 90, 0.32);
+  color: var(--hr-danger);
+}
+
+.rr-status--live {
+  background: rgba(156, 50, 38, 0.16);
+  border-color: rgba(156, 50, 38, 0.32);
+  color: #de897c;
+}
+
+.rr-status--neutral,
+.rr-result-status--empty,
+.rr-placement--neutral {
+  background: rgba(238, 229, 212, 0.055);
+  border-color: var(--hr-border-soft);
+  color: var(--hr-muted);
+}
+
+.rr-result-status {
+  min-height: 21px;
+  padding: 4px 8px;
+}
+
+.rr-result-list {
+  display: grid;
+  gap: 2px;
+}
+
+.rr-result-row {
+  display: grid;
+  grid-template-columns: 42px minmax(150px, 1fr) minmax(160px, 0.9fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--hr-text);
+  font-size: 12px;
+}
+
+.rr-result-row:nth-child(even) {
+  background: rgba(238, 229, 212, 0.025);
+}
+
+.rr-result-row--winner {
+  background: rgba(184, 134, 59, 0.11) !important;
+  box-shadow: inset 2px 0 0 var(--hr-gold-soft);
+}
+
+.rr-rank {
+  color: var(--hr-gold-soft);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.rr-runner-name {
+  color: var(--hr-paper);
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rr-jockey {
+  color: var(--hr-muted);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rr-placement {
+  min-height: 21px;
+  padding: 4px 8px;
+}
+
+.rr-inline-state {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(238, 229, 212, 0.035);
+  color: var(--hr-muted);
+  font-size: 12px;
+}
+
+.rr-inline-state strong {
+  color: var(--hr-paper);
+}
+
+@media (max-width: 900px) {
+  .rr-title {
+    display: grid;
+    align-items: start;
+  }
+
+  .rr-summary-line {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 680px) {
+  .rr-page {
+    gap: 12px;
+  }
+
+  .rr-title h1 {
+    font-size: 28px;
+  }
+
+  .rr-tournament {
+    padding: 12px;
+  }
+
+  .rr-race__header,
+  .rr-result-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rr-status,
+  .rr-placement {
+    justify-self: start;
+  }
+
+  .rr-race__meta > span:not(.rr-result-status)::after {
+    content: "";
+    margin-left: 0;
+  }
 }
