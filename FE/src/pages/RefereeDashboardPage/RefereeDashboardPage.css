@@ -86,26 +86,28 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 38px;
-  padding: 0 16px;
+  height: 40px;
+  padding: 0 18px;
   border-radius: 10px;
-  border: 1.5px solid var(--rd-border-light);
-  background: transparent;
+  border: 1.5px solid rgba(242, 210, 139, 0.35);
+  background: rgba(242, 210, 139, 0.08);
   color: var(--rd-gold);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 .rd-btn-refresh:hover:not(:disabled) {
   border-color: var(--rd-gold);
   color: #100b06;
-  background: var(--rd-gold);
+  background: linear-gradient(135deg, #f2d28b 0%, #d7aa4d 100%);
   transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(242, 210, 139, 0.25);
 }
 .rd-btn-refresh:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
