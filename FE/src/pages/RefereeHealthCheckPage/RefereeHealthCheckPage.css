@@ -1,9 +1,9 @@
 :root {
   --rh-bg: transparent;
-  --rh-surface: rgba(26, 21, 17, 0.6);
-  --rh-surface-hover: rgba(36, 31, 27, 0.8);
-  --rh-border: rgba(238, 229, 212, 0.08);
-  --rh-border-light: rgba(238, 229, 212, 0.15);
+  --rh-surface: rgba(26, 21, 17, 0.75);
+  --rh-surface-hover: rgba(36, 31, 27, 0.9);
+  --rh-border: rgba(242, 210, 139, 0.16);
+  --rh-border-light: rgba(242, 210, 139, 0.28);
   --rh-gold: #f2d28b;
   --rh-gold-dim: #d7aa4d;
   --rh-green: #10b981;
@@ -11,8 +11,8 @@
   --rh-amber: #f59e0b;
   --rh-text: #eee5d4;
   --rh-muted: #94a3b8;
-  --rh-radius: 12px;
-  --rh-radius-sm: 8px;
+  --rh-radius: 16px;
+  --rh-radius-sm: 10px;
 }
 
 /* Force a dark page background for this Referee surface. */
@@ -35,7 +35,7 @@
   margin: 0 auto;
   padding: 28px 32px 56px;
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* ── Top Bar ── */
@@ -47,16 +47,17 @@
 }
 
 .rh-topbar h1 {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--rh-text);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .rh-topbar-sub {
   color: var(--rh-muted);
-  font-size: 14px;
+  font-size: 14.5px;
+  font-weight: 500;
   margin: 4px 0 0;
 }
 
@@ -66,30 +67,30 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 22px;
+  padding: 11px 24px;
   border: none;
   border-radius: var(--rh-radius-sm);
-  background: var(--rh-gold);
-  color: #1a1d23;
-  font-size: 13px;
-  font-weight: 700;
+  background: linear-gradient(135deg, #e7b55d 0%, #d7aa4d 50%, #8f6420 100%);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(143, 100, 32, 0.25);
 }
 .rh-btn--gold:hover {
-  background: #e8c97a;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(242, 210, 139, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(143, 100, 32, 0.35);
 }
 
 /* ── Compact KPI Bar ── */
 .rh-kpi-bar {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .rh-kpi-card {
@@ -97,31 +98,32 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: var(--rh-radius);
-  padding: 18px 20px;
-  border: 1px solid var(--rh-border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 20px 24px;
+  border: 1.5px solid var(--rh-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
 }
 .rh-kpi-card:hover {
-  border-color: rgba(242, 210, 139, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(-3px);
+  border-color: rgba(242, 210, 139, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
 }
 
 .rh-kpi-label {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.08em;
   color: var(--rh-muted);
-  font-weight: 500;
+  font-weight: 700;
   display: block;
   margin-bottom: 6px;
 }
 
 .rh-kpi-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--rh-text);
   letter-spacing: -0.02em;
   line-height: 1.15;

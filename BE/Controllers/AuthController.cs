@@ -96,6 +96,10 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lấy thông tin hồ sơ chi tiết cá nhân của người dùng đang đăng nhập dựa trên Vai trò (Role).
+    /// </summary>
+    /// <returns>Dữ liệu hồ sơ cá nhân phù hợp theo vai trò.</returns>
     [Authorize]
     [HttpGet("profile")]
     public async Task<ActionResult> GetProfile()
@@ -135,7 +139,10 @@ public class AuthController : ControllerBase
             : new { user.Id, user.Email, user.FullName, Role = "Referee", Type = "Referee", referee.LicenseNumber, referee.Specialization, referee.Rating, referee.TotalOfficiated, referee.Nationality, IsActive = referee.IsActive, user.CreatedAt };
     }
 
-    // Roles
+    /// <summary>
+    /// Lấy danh sách tất cả các Vai trò (Roles) có trong hệ thống.
+    /// </summary>
+    /// <returns>Mảng danh sách vai trò.</returns>
     [HttpGet("roles")]
     public ActionResult<string[]> GetRoles()
     {
@@ -144,7 +151,10 @@ public class AuthController : ControllerBase
         return Ok(roles);
     }
 
-    // Chỉ trả về các role được phép đăng ký công khai (HorseOwner, Jockey, Spectator)
+    /// <summary>
+    /// Lấy danh sách các vai trò cho phép người dùng tự đăng ký công khai (Chủ ngựa, Kỵ sĩ, Khán giả).
+    /// </summary>
+    /// <returns>Mảng danh sách vai trò mở đăng ký.</returns>
     [HttpGet("roles/register")]
     public ActionResult<string[]> GetRegisterRoles()
     {
@@ -158,6 +168,11 @@ public class AuthController : ControllerBase
         return Ok(roles);
     }
 
+    /// <summary>
+    /// Cập nhật thông tin cá nhân (Họ tên, Số điện thoại, Địa chỉ) của người dùng đang đăng nhập.
+    /// </summary>
+    /// <param name="request">Thông tin cập nhật.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả cập nhật.</returns>
     [Authorize]
     [HttpPut("profile")]
     public async Task<ActionResult> UpdateProfile(UpdateProfileRequest request)
@@ -168,6 +183,11 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Đổi mật khẩu tài khoản người dùng đang đăng nhập.
+    /// </summary>
+    /// <param name="request">Thông tin Mật khẩu hiện tại và Mật khẩu mới.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả đổi mật khẩu.</returns>
     [Authorize]
     [HttpPost("change-password")]
     public async Task<ActionResult> ChangePassword(ChangePasswordRequest request)
@@ -178,6 +198,11 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Yêu cầu gửi mã khôi phục mật khẩu qua Email khi người dùng quên mật khẩu.
+    /// </summary>
+    /// <param name="request">Yêu cầu chứa địa chỉ Email.</param>
+    /// <returns>Thông báo xác nhận đã gửi Email.</returns>
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
     public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
@@ -204,13 +229,17 @@ public class AuthController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Gửi email đặt lại mật khẩu thất bại tới {Email}", request.Email.Trim());
-                // Email failed — still return success for security
             }
         }
 
         return Ok(new { message = "Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi" });
     }
 
+    /// <summary>
+    /// Đặt lại mật khẩu mới bằng mã Token khôi phục mật khẩu.
+    /// </summary>
+    /// <param name="request">Thông tin Email, Token khôi phục và Mật khẩu mới.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả đặt lại mật khẩu.</returns>
     [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
     public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
@@ -219,11 +248,11 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
-    // J-REG-FILE: this endpoint is called from RegisterJockeyPage BEFORE the account exists (no
-    // JWT yet) — Jockey license upload is step 1 of registration, not a post-login action. It was
-    // incorrectly marked [Authorize], which made every registration-time upload attempt fail with
-    // 401 regardless of file validity. Rate-limited the same as the other pre-auth endpoints
-    // (Register/Login) below since it's now reachable anonymously.
+    /// <summary>
+    /// Tải lên tập tin chứng chỉ/bằng cấp công khai khi đăng ký tài khoản Kỵ sĩ (Jockey).
+    /// </summary>
+    /// <param name="file">Tập tin hình ảnh hoặc PDF giấy phép.</param>
+    /// <returns>Đường dẫn URL tập tin đã tải lên thành công.</returns>
     [EnableRateLimiting("auth")]
     [HttpPost("upload-document")]
     public async Task<ActionResult> UploadDocument(IFormFile file)
