@@ -127,19 +127,19 @@
 .otl-card {
   display: grid;
   gap: 12px;
-  padding: 18px 20px;
-  border-radius: var(--hr-radius-panel);
-  background: linear-gradient(180deg, rgba(33, 26, 20, 0.96), rgba(26, 21, 17, 0.96));
-  border: 1px solid var(--hr-border);
-  box-shadow: var(--hr-shadow-soft);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 20px 22px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(35, 28, 22, 0.96), rgba(24, 19, 15, 0.98));
+  border: 1.5px solid rgba(184, 134, 59, 0.24);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .otl-card:hover,
 .otl-card:focus-within {
-  transform: translateY(-3px);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3);
-  border-color: rgba(184, 134, 59, 0.32);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.36);
+  border-color: rgba(215, 170, 77, 0.5);
 }
 
 .otl-card__top {

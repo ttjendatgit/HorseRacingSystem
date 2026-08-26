@@ -52,9 +52,14 @@ const normalizeJockey = (jockey) => ({
     jockey.approvalStatusName ?? jockey.ApprovalStatusName ?? "Unknown",
 });
 
+/** Lấy danh sách nài ngựa khả dụng trong hệ thống */
 export const getAvailableJockeys = async () =>
   (unwrapResponseData(await request("/api/jockeys")) ?? []).map(normalizeJockey);
 
+/**
+ * Chuẩn hóa chuỗi/mã trạng thái lời mời cho nài ngựa
+ * @param {string|number} rawStatus - Trạng thái thô từ API
+ */
 export const normalizeInvitationStatus = (rawStatus) => {
   if (rawStatus === undefined || rawStatus === null || rawStatus === "") {
     return "Pending";
@@ -77,6 +82,10 @@ export const normalizeInvitationStatus = (rawStatus) => {
   return String(rawStatus);
 };
 
+/**
+ * Chuẩn hóa cấu trúc lời mời tham gia cuộc đua cho nài ngựa
+ * @param {Object} invitation - Đối tượng lời mời thô từ API
+ */
 export const normalizeInvitation = (invitation) => {
   const horse = read(invitation, "horse", "Horse") ?? {};
   const owner = read(horse, "owner", "Owner") ?? {};
@@ -132,6 +141,10 @@ export const normalizeInvitation = (invitation) => {
   };
 };
 
+/**
+ * Chuẩn hóa thông tin cuộc đua được phân công cho nài ngựa
+ * @param {Object} entry - Lượt phân công/đăng ký
+ */
 export const normalizeAssignedRace = (entry) => {
   const race = read(entry, "race", "Race") ?? entry ?? {};
   const horse = read(entry, "horse", "Horse") ?? {};
@@ -174,32 +187,54 @@ export const normalizeAssignedRace = (entry) => {
   };
 };
 
+/** Lấy danh sách tất cả các lời mời đua dành cho nài ngựa */
 export const getJockeyInvitations = async () =>
   asArray(await request("/api/jockeys/invitations")).map(normalizeInvitation);
 
+/**
+ * Phản hồi lời mời tham gia cuộc đua (Đồng ý / Từ chối)
+ * @param {string} invitationId - ID lời mời
+ * @param {boolean} accept - true nếu đồng ý, false nếu từ chối
+ */
 export const respondJockeyInvitation = async (invitationId, accept) =>
   request(`/api/jockeys/invitations/${invitationId}/respond`, {
     method: "POST",
     body: JSON.stringify({ accept }),
   });
 
+/**
+ * Rút khỏi lời mời tham gia cuộc đua
+ * @param {string} invitationId - ID lời mời
+ * @param {string} reason - Lý do rút
+ */
 export const withdrawJockeyInvitation = async (invitationId, reason) =>
   request(`/api/jockeys/invitations/${invitationId}/withdraw`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
 
+/** Lấy danh sách cuộc đua nài ngựa đã được phân công tham gia */
 export const getJockeyAssignedRaces = async () =>
   asArray(await request("/api/jockeys/races")).map(normalizeAssignedRace);
 
+/** Lấy danh sách các lượt phân công đang chờ nài ngựa xác nhận */
 export const getJockeyPendingEntries = async () =>
   asArray(await request("/api/jockeys/entries/pending"));
 
+/** Lấy thông tin hồ sơ của nài ngựa đang đăng nhập */
 export const getMyJockeyProfile = async () =>
   unwrapResponseData(await request("/api/jockeys/me"));
 
+/**
+ * Xác nhận tham gia lượt thi đấu
+ * @param {string} entryId - ID lượt tham gia cuộc đua
+ */
 export const confirmJockeyEntry = async (entryId) =>
   request(`/api/jockeys/entries/${entryId}/confirm`, { method: "POST" });
 
+/**
+ * Từ chối tham gia lượt thi đấu
+ * @param {string} entryId - ID lượt tham gia cuộc đua
+ */
 export const declineJockeyEntry = async (entryId) =>
   request(`/api/jockeys/entries/${entryId}/decline`, { method: "POST" });

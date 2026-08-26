@@ -44,31 +44,60 @@ public class RefereesController : ControllerBase
 
     // ── Referee CRUD ──
 
+    /// <summary>
+    /// Tạo mới một hồ sơ trọng tài trong hệ thống dành cho Admin.
+    /// </summary>
+    /// <param name="r">Yêu cầu tạo hồ sơ trọng tài.</param>
+    /// <returns>Thông tin hồ sơ trọng tài vừa tạo.</returns>
     [HttpPost]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Create([FromBody] CreateRefereeRequest r)
         => OkR(await _refereeService.CreateRefereeAsync(r));
 
+    /// <summary>
+    /// Lấy danh sách tất cả trọng tài trong hệ thống.
+    /// </summary>
+    /// <returns>Danh sách trọng tài.</returns>
     [HttpGet]
     [AllowAnonymous]
     public async Task<ActionResult> GetAll()
         => OkR(await _refereeService.GetAllRefereesAsync());
 
+    /// <summary>
+    /// Lấy danh sách các trọng tài đang ở trạng thái Hoạt động (Active).
+    /// </summary>
+    /// <returns>Danh sách trọng tài đang hoạt động.</returns>
     [HttpGet("active")]
     [AllowAnonymous]
     public async Task<ActionResult> GetActive()
         => OkR(await _refereeService.GetActiveRefereesAsync());
 
+    /// <summary>
+    /// Lấy thông tin hồ sơ chi tiết của một trọng tài theo mã GUID định danh.
+    /// </summary>
+    /// <param name="id">Mã GUID của trọng tài.</param>
+    /// <returns>Thông tin hồ sơ trọng tài.</returns>
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult> GetById(Guid id)
         => OkR(await _refereeService.GetRefereeAsync(id));
 
+    /// <summary>
+    /// Cập nhật thông tin chuyên môn hoặc giấy phép của trọng tài.
+    /// </summary>
+    /// <param name="id">Mã GUID của trọng tài.</param>
+    /// <param name="r">Thông tin cập nhật.</param>
+    /// <returns>Hồ sơ trọng tài sau khi cập nhật.</returns>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Referee")]
     public async Task<ActionResult> Update(Guid id, [FromBody] UpdateRefereeRequest r)
         => OkR(await _refereeService.UpdateRefereeAsync(id, r));
 
+    /// <summary>
+    /// Xóa thông tin hồ sơ trọng tài dành cho Admin.
+    /// </summary>
+    /// <param name="id">Mã GUID trọng tài cần xóa.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả thực hiện xóa.</returns>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Delete(Guid id)
@@ -76,26 +105,51 @@ public class RefereesController : ControllerBase
 
     // ── Assignments ──
 
+    /// <summary>
+    /// Phân công nhiệm vụ trọng tài giám sát một trận đua cụ thể dành cho Admin.
+    /// </summary>
+    /// <param name="r">Thông tin phân công trọng tài vào trận đua.</param>
+    /// <returns>Kết quả phân công trọng tài.</returns>
     [HttpPost("assign")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Assign([FromBody] AssignRefereeRequest r)
         => OkR(await _refereeService.AssignRefereeToRaceAsync(r));
 
+    /// <summary>
+    /// Lấy danh sách trọng tài được phân công giám sát trận đua cụ thể.
+    /// </summary>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <returns>Danh sách phân công trọng tài theo trận đua.</returns>
     [HttpGet("race/{raceId:guid}/assignments")]
     [Authorize(Roles = "Admin,Referee")]
     public async Task<ActionResult> GetRaceAssignments(Guid raceId)
         => OkR(await _refereeService.GetRaceAssignmentsAsync(raceId));
 
+    /// <summary>
+    /// Lấy toàn bộ danh sách phân công trọng tài trong tất cả các trận đua dành cho Admin.
+    /// </summary>
+    /// <returns>Danh sách tất cả các lịch phân công trọng tài.</returns>
     [HttpGet("assignments")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetAllAssignments()
         => OkR(await _refereeService.GetAllAssignmentsAsync());
 
+    /// <summary>
+    /// Lấy danh sách nhiệm vụ phân công của một trọng tài cụ thể theo ID.
+    /// </summary>
+    /// <param name="refereeId">Mã GUID trọng tài.</param>
+    /// <returns>Danh sách trận đua trọng tài được phân công.</returns>
     [HttpGet("{refereeId:guid}/assignments")]
     [Authorize(Roles = "Admin,Referee")]
     public async Task<ActionResult> GetRefereeAssignments(Guid refereeId)
         => OkR(await _refereeService.GetRefereeAssignmentsAsync(refereeId));
 
+    /// <summary>
+    /// Trọng tài xác nhận tiếp nhận phân công nhiệm vụ trận đua.
+    /// </summary>
+    /// <param name="assignmentId">Mã GUID bản ghi phân công.</param>
+    /// <param name="r">Yêu cầu xác nhận phân công.</param>
+    /// <returns>Kết quả xác nhận phân công.</returns>
     [HttpPost("assignments/{assignmentId:guid}/confirm")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> Confirm(Guid assignmentId, [FromBody] ConfirmRefereeAssignmentRequest r)
@@ -104,6 +158,11 @@ public class RefereesController : ControllerBase
         return OkR(await _refereeService.ConfirmAssignmentAsync(r));
     }
 
+    /// <summary>
+    /// Trọng tài lấy danh sách tất cả nhiệm vụ thi đấu cá nhân của mình (Đã xác nhận, Đang chờ, Đã hủy).
+    /// </summary>
+    /// <param name="status">Lọc theo trạng thái phân công (tùy chọn).</param>
+    /// <returns>Danh sách nhiệm vụ phân công cá nhân của trọng tài.</returns>
     [HttpGet("my-assignments")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> GetMyAssignments([FromQuery] string? status)
@@ -131,6 +190,12 @@ public class RefereesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Trọng tài gửi phản hồi Đồng ý (Accept) hoặc Từ chối (Reject) lịch phân công giám sát trận đua.
+    /// </summary>
+    /// <param name="assignmentId">Mã GUID bản ghi phân công.</param>
+    /// <param name="r">Yêu cầu phản hồi chấp nhận hoặc từ chối kèm lý do.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả phản hồi.</returns>
     [HttpPost("assignments/{assignmentId:guid}/respond")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> Respond(Guid assignmentId, [FromBody] RespondToAssignmentRequest r)
@@ -174,6 +239,11 @@ public class RefereesController : ControllerBase
         return Ok(new { message = $"Đã {r.Response.ToLowerInvariant()} phân công." });
     }
 
+    /// <summary>
+    /// Lấy danh sách các con ngựa & kỵ sĩ đã được duyệt tham gia trận đua kèm theo số cổng xuất phát.
+    /// </summary>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <returns>Danh sách lượt đua chính thức.</returns>
     [HttpGet("race/{raceId:guid}/entries")]
     [AllowAnonymous]
     public async Task<ActionResult> GetRaceEntries(Guid raceId)
@@ -181,7 +251,6 @@ public class RefereesController : ControllerBase
         var allEntries = await _entryRepo.GetByRaceAsync(raceId);
         var entries = allEntries.Where(e => e.Status == RegistrationStatus.Approved).ToList();
 
-        // Auto-recalculate if all odds are at default (1.0)
         if (entries.Count > 0 && entries.All(e => e.Odds == 1.0m))
         {
             OddsCalculator.Recalculate(entries);
@@ -204,14 +273,17 @@ public class RefereesController : ControllerBase
             JockeyWinRate = e.Jockey?.WinRate ?? 0,
             Odds = e.Odds,
             Status = e.Status.ToString(),
-            // GATE-V1: gate assignment is public race-schedule info (like Odds above), not sensitive —
-            // exposed on this existing shared read endpoint rather than a new Referee-only one.
             GateNumber = e.GateNumber
         }));
     }
 
-    // ── GATE-V1: Referee-only starting gate assignment ──
-
+    /// <summary>
+    /// Trọng tài phân công số cổng xuất phát (Gate Number) cho từng lượt đua của con ngựa trước giờ xuất phát.
+    /// </summary>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <param name="entryId">Mã GUID lượt đăng ký thi đấu.</param>
+    /// <param name="r">Yêu cầu gán số cổng xuất phát.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả gán cổng xuất phát.</returns>
     [HttpPut("race/{raceId:guid}/entries/{entryId:guid}/gate")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> AssignGateNumber(Guid raceId, Guid entryId, [FromBody] AssignGateNumberRequest r)
@@ -224,9 +296,6 @@ public class RefereesController : ControllerBase
         if (referee is null)
             return NotFound(new { message = "Không tìm thấy hồ sơ trọng tài" });
 
-        // Any Confirmed Referee assigned to this exact Race may manage its gates — merely having
-        // an assignment record (Assigned/Cancelled/Completed) is not enough, and a Confirmed
-        // assignment to a DIFFERENT Race must not authorize this one.
         var raceAssignments = await _assignmentRepo.GetByRaceAsync(raceId);
         var isConfirmedForThisRace = raceAssignments.Any(a =>
             a.RefereeId == referee.Id && a.Status == RefereeAssignmentStatus.Confirmed);
@@ -237,6 +306,12 @@ public class RefereesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Trọng tài ghi nhận và gửi kết quả thi đấu chính thức (Thứ hạng 1, 2, 3...) sau khi cuộc đua kết thúc.
+    /// </summary>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <param name="request">Bảng kết quả thứ hạng các con ngựa về đích.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả cập nhật thứ hạng.</returns>
     [HttpPost("race/{raceId:guid}/submit-result")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> SubmitRaceResult(Guid raceId, [FromBody] RaceResultRequest request)
@@ -249,7 +324,6 @@ public class RefereesController : ControllerBase
         if (referee is null)
             return NotFound(new { message = "Không tìm thấy hồ sơ trọng tài" });
 
-        // Verify referee is assigned to this race
         var assignments = await _assignmentRepo.GetByRefereeAsync(referee.Id);
         var isAssigned = assignments.Any(a => a.RaceId == raceId);
         if (!isAssigned)

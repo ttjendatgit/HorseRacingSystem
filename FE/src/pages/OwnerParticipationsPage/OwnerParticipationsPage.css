@@ -68,9 +68,10 @@
 }
 
 .op-tab--active {
-  color: var(--hr-paper);
-  background: rgba(184, 134, 59, 0.16);
-  border-color: rgba(184, 134, 59, 0.28);
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(215, 170, 77, 0.28), rgba(143, 100, 32, 0.24));
+  border-color: rgba(215, 170, 77, 0.5);
+  box-shadow: 0 4px 14px rgba(184, 134, 59, 0.2);
 }
 
 .op-tab span {

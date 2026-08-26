@@ -41,6 +41,12 @@ public class TransactionService : ITransactionService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Khởi tạo một giao dịch nạp tiền đang chờ (pending) qua SePay với mã nội dung chuyển khoản ngẫu nhiên.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng nạp tiền.</param>
+    /// <param name="amount">Số tiền VNĐ muốn nạp.</param>
+    /// <returns>Thông tin giao dịch kèm mã nội dung và tài khoản nhận tiền.</returns>
     public async Task<ServiceResult<object>> CreatePendingAsync(Guid userId, decimal amount)
     {
         if (amount <= 0)
@@ -88,6 +94,11 @@ public class TransactionService : ITransactionService
         });
     }
 
+    /// <summary>
+    /// Xử lý Webhook biến động số dư tự động từ cổng thanh toán SePay để cộng điểm ví cho khán giả.
+    /// </summary>
+    /// <param name="request">Dữ liệu Webhook nhận từ SePay.</param>
+    /// <returns>Kết quả xử lý giao dịch nạp tiền.</returns>
     public async Task<ServiceResult<object>> HandleWebhookAsync(SepayWebhookRequest request)
     {
         // ── Validate amount ──

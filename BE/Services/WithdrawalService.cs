@@ -35,6 +35,12 @@ public class WithdrawalService : IWithdrawalService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Lưu thông tin tài khoản ngân hàng cá nhân của người dùng để phục vụ rút tiền.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng.</param>
+    /// <param name="request">Thông tin tài khoản ngân hàng mới.</param>
+    /// <returns>Kết quả lưu kèm thông tin tài khoản ngân hàng vừa tạo.</returns>
     public async Task<ServiceResult<object>> SaveBankAccountAsync(Guid userId, BankAccountRequest request)
     {
         var account = new BankAccount
@@ -63,6 +69,13 @@ public class WithdrawalService : IWithdrawalService
         }));
     }
 
+    /// <summary>
+    /// Tạo mới một yêu cầu rút tiền từ số dư ví điểm quy đổi thành VNĐ về tài khoản ngân hàng.
+    /// Tự động trừ số dư ví điểm tương ứng khi khởi tạo yêu cầu.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng gửi yêu cầu.</param>
+    /// <param name="request">Thông tin số điểm rút và tài khoản ngân hàng nhận tiền.</param>
+    /// <returns>Thông tin chi tiết yêu cầu rút tiền vừa tạo.</returns>
     public async Task<ServiceResult<object>> CreateWithdrawalAsync(Guid userId, WithdrawalRequestDto request)
     {
         var wallet = await _walletRepo.GetByUserIdAsync(userId);

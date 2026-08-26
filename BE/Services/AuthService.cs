@@ -35,6 +35,12 @@ public class AuthService : IAuthService
         _jwtTokenService = jwtTokenService;
     }
 
+    /// <summary>
+    /// Đăng ký tài khoản người dùng mới (Chủ ngựa, Kỵ thủ, Khán giả) và tự động tạo hồ sơ tương ứng.
+    /// Kiểm tra định dạng CCCD/tuổi đối với kỵ thủ và kiểm tra trùng lặp email.
+    /// </summary>
+    /// <param name="request">Thông tin đăng ký tài khoản mới.</param>
+    /// <returns>Thông tin xác thực và Token JWT khởi tạo.</returns>
     public async Task<ServiceResult<AuthResponse>> RegisterAsync(RegisterRequest request)
     {
         request.Email = request.Email.Trim();

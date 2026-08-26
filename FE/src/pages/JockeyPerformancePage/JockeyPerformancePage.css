@@ -36,38 +36,54 @@
 
 /* ── Chart ── */
 .jp-chart-card {
-  background: rgba(255,255,255,0.72);
+  background: rgba(255, 255, 255, 0.88);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.04);
-  padding: 22px 24px;
-  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+  border-radius: 18px;
+  border: 1.5px solid rgba(215, 170, 77, 0.22);
+  padding: 24px 28px;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.05);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.jp-chart-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15,23,42,0.06); }
+.jp-chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
 
-.jp-chart-card h3 { font-size: 15px; font-weight: 700; color: #1a1d23; margin: 0 0 16px; }
+.jp-chart-card h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1a1d23;
+  margin: 0 0 18px;
+  letter-spacing: -0.01em;
+}
 
-.jp-chart { display: grid; gap: 10px; }
+.jp-chart { display: grid; gap: 12px; }
 
 .jp-chart-row {
   display: grid;
-  grid-template-columns: 120px 1fr 60px 40px;
-  gap: 12px;
+  grid-template-columns: 130px 1fr 60px 45px;
+  gap: 14px;
   align-items: center;
 }
 
-.jp-chart-name { font-size: 13px; font-weight: 600; color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jp-chart-name { font-size: 13.5px; font-weight: 700; color: #1a1d23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .jp-chart-bar-wrap { height: 22px; border-radius: 99px; background: rgba(0,0,0,0.04); overflow: hidden; position: relative; }
 
-.jp-chart-bar { height: 100%; border-radius: 99px; background: rgba(242,210,139,0.15); transition: width 0.5s ease; }
+.jp-chart-bar { height: 100%; border-radius: 99px; background: rgba(242,210,139,0.18); transition: width 0.5s ease; }
 
-.jp-chart-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #d7aa4d, #f2d28b); transition: width 0.5s ease; }
+.jp-chart-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #e7b55d, #d7aa4d, #8f6420);
+  box-shadow: 0 2px 8px rgba(143, 100, 32, 0.25);
+  transition: width 0.5s ease;
+}
 
-.jp-chart-stat { font-size: 12px; color: #64748b; text-align: right; }
-.jp-chart-pct { font-size: 13px; font-weight: 700; color: #1a1d23; text-align: right; }
+.jp-chart-stat { font-size: 12px; color: #64748b; text-align: right; font-weight: 500; }
+.jp-chart-pct { font-size: 13.5px; font-weight: 800; color: #8f6420; text-align: right; }
 
 /* ── Table Card ── */
 .jp-table-card {

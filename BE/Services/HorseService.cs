@@ -46,6 +46,11 @@ public class HorseService : IHorseService
         _db = db;
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả các con ngựa thuộc quyền sở hữu của chủ sở hữu hiện tại.
+    /// </summary>
+    /// <param name="userId">Mã định danh người dùng chủ sở hữu.</param>
+    /// <returns>Danh sách ngựa của chủ sở hữu.</returns>
     public async Task<ServiceResult<object>> GetMyHorsesAsync(Guid userId)
     {
         var owner = await GetOwnerProfileAsync(userId);
@@ -58,6 +63,10 @@ public class HorseService : IHorseService
         return ServiceResult<object>.Ok(horses);
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả các con ngựa đã được Quản trị viên phê duyệt (Approved) trong hệ thống.
+    /// </summary>
+    /// <returns>Danh sách ngựa đủ điều kiện tham gia thi đấu.</returns>
     public async Task<ServiceResult<object>> GetAllApprovedHorsesAsync()
     {
         var horses = await _horses.GetAllApprovedAsync();

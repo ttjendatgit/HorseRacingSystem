@@ -34,6 +34,10 @@ public class HorsesController : ControllerBase
         _environment = environment;
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả lượt tham gia trận đua (RaceEntries) của các ngựa thuộc sở hữu của Chủ ngựa đang đăng nhập.
+    /// </summary>
+    /// <returns>Danh sách các lượt đua kèm thông tin ngựa, kỵ sĩ và trạng thái lời mời.</returns>
     [HttpGet("my-entries")]
     public async Task<ActionResult> GetMyRaceEntries()
     {
@@ -66,8 +70,6 @@ public class HorsesController : ControllerBase
             JockeyName = e.Jockey?.User?.FullName ?? string.Empty,
             GateNumber = e.GateNumber,
             FinishPosition = e.FinishPosition,
-            // J3: Owner Final Confirm picks one of these — only Accepted invitations for this
-            // exact Horse+Race are eligible. No official Jockey yet means this list drives the UI.
             AcceptedInvitations = (h.JockeyInvitations ?? new List<JockeyInvitation>())
                 .Where(i => i.RaceId == e.RaceId && i.Status == JockeyInvitationStatus.Accepted)
                 .Select(i => new
@@ -80,6 +82,10 @@ public class HorsesController : ControllerBase
         return Ok(entries);
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả các con ngựa thuộc sở hữu của Chủ ngựa đang đăng nhập.
+    /// </summary>
+    /// <returns>Danh sách thông tin các con ngựa của chủ sở hữu.</returns>
     [HttpGet]
     public async Task<ActionResult> GetMyHorses()
     {
@@ -95,21 +101,10 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
-    // Task C1 UI correction: the primary Admin Horse management screen (/admin/horses) needs
-    // every Horse — Pending ones especially, since those are exactly what Admin needs to act on —
-    // not just already-Approved ones. This is Admin-only and this action's sole FE consumer.
-    //
-    // J3 regression hotfix: this used to return the raw h.Owner/h.RaceEntries/h.JockeyInvitations
-    // navigation entities directly. EF Core's change-tracker fix-up wires those navigations back to
-    // each other across ALL loaded Horses in the same query (Horse -> RaceEntries -> Race ->
-    // Entries (other Horses' entries) -> Horse -> JockeyInvitations -> Jockey -> Invitations ->
-    // Horse -> ...), which fans out into a graph deep/wide enough to exceed System.Text.Json's
-    // MaxDepth even with the app-wide ReferenceHandler.IgnoreCycles already configured (that option
-    // only catches a literal same-instance cycle, not "too deep because too many distinct
-    // horses/races/jockeys/invitations cross-reference each other"). Fixed by projecting only the
-    // bounded, non-cyclical fields the FE (HorseManagementPage.jsx) actually reads — same wire
-    // shape/field names as before (including the raw numeric ApprovalStatus enum the FE filters by
-    // number), just with every nested object flattened to leaf fields instead of full entities.
+    /// <summary>
+    /// Lấy toàn bộ danh sách tất cả các con ngựa trong hệ thống (bao gồm cả các ngựa Đang chờ duyệt) dành cho Admin.
+    /// </summary>
+    /// <returns>Danh sách toàn bộ các con ngựa trong hệ thống.</returns>
     [HttpGet("all")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> GetAllHorses()
@@ -127,7 +122,6 @@ public class HorsesController : ControllerBase
 
         var result = horses.Select(h =>
         {
-            // Kỵ sĩ hiện tại: lời mời mới nhất đang Pending/Accepted, fallback kỵ sĩ của cuộc đua gần nhất
             var activeInv = h.JockeyInvitations
                 .Where(i => i.Status == Models.JockeyInvitationStatus.Accepted || i.Status == Models.JockeyInvitationStatus.Pending)
                 .OrderByDescending(i => i.CreatedAt)
@@ -202,6 +196,11 @@ public class HorsesController : ControllerBase
         return Ok(new { success = true, data = result });
     }
 
+    /// <summary>
+    /// Lấy thông tin chi tiết của một con ngựa theo mã GUID định danh.
+    /// </summary>
+    /// <param name="id">Mã GUID định danh của con ngựa.</param>
+    /// <returns>Thông tin chi tiết con ngựa.</returns>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult> GetHorse(Guid id)
     {
@@ -283,13 +282,11 @@ public class HorsesController : ControllerBase
         };
     }
 
-    // Task B Final Correction: Horse Create/Update/Delete is Owner-only business territory —
-    // Jockey must not create/manage Horses (full Jockey invitation/license flow is a separate,
-    // later feature). Admin's existing access here is preserved unchanged, not newly granted.
-    // Task C1 correction: Create still resolves an Owner profile from the caller — a Horse always
-    // needs an OwnerId and the request has no admin-target field, so an Admin caller without an
-    // Owner row still gets the same 404 here as before (unchanged; see report — inventing an
-    // OwnerId selector would be new privilege, out of scope for this correction pass).
+    /// <summary>
+    /// Đăng ký thêm một con ngựa đua mới vào hệ thống (cần Admin duyệt trước khi tham gia thi đấu).
+    /// </summary>
+    /// <param name="request">Thông tin mô tả con ngựa (tên, giống, tuổi, cân nặng, chiều cao, màu lông).</param>
+    /// <returns>Mã trạng thái HTTP và kết quả tạo mới con ngựa.</returns>
     [HttpPost]
     [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> CreateHorse(HorseCreateRequest request)
@@ -299,6 +296,12 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Cập nhật chỉ số và thông tin cá nhân của một con ngựa đua hiện có.
+    /// </summary>
+    /// <param name="id">Mã GUID con ngựa cần chỉnh sửa.</param>
+    /// <param name="request">Thông tin chỉnh sửa con ngựa.</param>
+    /// <returns>Dữ liệu con ngựa sau khi được chỉnh sửa.</returns>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> UpdateHorse(Guid id, HorseUpdateRequest request)
@@ -308,6 +311,11 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lưu trữ hoặc xóa thông tin một con ngựa khỏi danh sách thi đấu.
+    /// </summary>
+    /// <param name="id">Mã GUID con ngựa cần xóa.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả thực hiện xóa.</returns>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> DeleteHorse(Guid id)
@@ -317,6 +325,12 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Gửi lời mời kỵ sĩ (Jockey) tham gia điều khiển con ngựa trong một trận đua cụ thể.
+    /// </summary>
+    /// <param name="horseId">Mã GUID con ngựa thi đấu.</param>
+    /// <param name="request">Thông tin lời mời kỵ sĩ (JockeyId, RaceId, lời nhắn).</param>
+    /// <returns>Mã trạng thái HTTP và thông tin lời mời đã gửi.</returns>
     [HttpPost("{horseId:guid}/jockey-invitations")]
     public async Task<ActionResult> InviteJockey(Guid horseId, JockeyInvitationCreateRequest request)
     {
@@ -325,6 +339,13 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Hủy phân công hoặc gỡ bỏ kỵ sĩ khỏi lượt đua của con ngựa.
+    /// </summary>
+    /// <param name="horseId">Mã GUID con ngựa.</param>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <param name="request">Yêu cầu hủy kỵ sĩ.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả thực hiện.</returns>
     [HttpDelete("{horseId:guid}/races/{raceId:guid}/jockeys")]
     public async Task<ActionResult> RemoveJockey(Guid horseId, Guid raceId, [FromBody] JockeyRemovalRequest request)
     {
@@ -333,8 +354,13 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
-    // Legacy Race-level self-registration (item 4 audit: still reachable, still RaceStatus.RegistrationOpen-gated
-    // for lifecycle compatibility) — Owner-only for the same reason as Create/Update/Delete above.
+    /// <summary>
+    /// Đăng ký con ngựa tham gia vào một trận đua công khai đang mở đăng ký.
+    /// </summary>
+    /// <param name="horseId">Mã GUID con ngựa đăng ký.</param>
+    /// <param name="raceId">Mã GUID trận đua mục tiêu.</param>
+    /// <param name="request">Dữ liệu đăng ký tham gia trận đua.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả đăng ký.</returns>
     [HttpPost("{horseId:guid}/races/{raceId:guid}/registrations")]
     [Authorize(Roles = "HorseOwner,Admin")]
     public async Task<ActionResult> RegisterHorse(Guid horseId, Guid raceId, RaceRegistrationRequest request)
@@ -344,6 +370,11 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Tải lên hình ảnh đại diện cho con ngựa đua lên dịch vụ lưu trữ Cloud / Thư mục cục bộ.
+    /// </summary>
+    /// <param name="file">File ảnh đại diện con ngựa (PNG, JPG, WEBP).</param>
+    /// <returns>Đường dẫn URL hình ảnh sau khi tải lên thành công.</returns>
     [HttpPost("upload-image")]
     public async Task<ActionResult> UploadImage(IFormFile file)
     {
@@ -382,6 +413,12 @@ public class HorsesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Chủ ngựa xác nhận lượt thi đấu chính thức của con ngựa trong trận đua.
+    /// </summary>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <param name="entryId">Mã GUID lượt đăng ký thi đấu.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả xác nhận.</returns>
     [HttpPost("races/{raceId:guid}/entries/{entryId:guid}/owner-confirm")]
     public async Task<ActionResult> ConfirmOwner(Guid raceId, Guid entryId)
     {
@@ -390,7 +427,13 @@ public class HorsesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
-    // J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+    /// <summary>
+    /// Chủ ngựa chốt chọn chính thức một kỵ sĩ (Jockey) đã đồng ý lời mời để điều khiển ngựa trong trận đua.
+    /// </summary>
+    /// <param name="horseId">Mã GUID con ngựa.</param>
+    /// <param name="raceId">Mã GUID trận đua.</param>
+    /// <param name="request">Yêu cầu chốt kỵ sĩ chính thức.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả chốt kỵ sĩ.</returns>
     [HttpPost("{horseId:guid}/races/{raceId:guid}/jockeys/final-confirm")]
     public async Task<ActionResult> FinalConfirmJockey(Guid horseId, Guid raceId, OwnerFinalConfirmJockeyRequest request)
     {

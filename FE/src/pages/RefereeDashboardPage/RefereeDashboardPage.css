@@ -4,10 +4,10 @@
 
 :root {
   --rd-bg: transparent;
-  --rd-surface: rgba(26, 21, 17, 0.6);
-  --rd-surface-hover: rgba(36, 31, 27, 0.8);
-  --rd-border: rgba(238, 229, 212, 0.08);
-  --rd-border-light: rgba(238, 229, 212, 0.15);
+  --rd-surface: rgba(26, 21, 17, 0.75);
+  --rd-surface-hover: rgba(36, 31, 27, 0.9);
+  --rd-border: rgba(242, 210, 139, 0.16);
+  --rd-border-light: rgba(242, 210, 139, 0.28);
   --rd-gold: #f2d28b;
   --rd-gold-dim: #d7aa4d;
   --rd-green: #10b981;
@@ -15,8 +15,8 @@
   --rd-blue: #6366f1;
   --rd-text: #eee5d4;
   --rd-muted: #94a3b8;
-  --rd-radius: 12px;
-  --rd-radius-sm: 8px;
+  --rd-radius: 16px;
+  --rd-radius-sm: 10px;
 }
 
 /* Force a dark page background for this Referee surface. */
@@ -35,7 +35,7 @@
   margin: 0 auto;
   padding: 28px 32px 56px;
   display: grid;
-  gap: 24px;
+  gap: 26px;
 }
 
 /* ── Top Bar / Header ── */
@@ -48,16 +48,17 @@
 }
 
 .rd-topbar h1 {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--rd-text);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .rd-topbar-sub {
   color: var(--rd-muted);
-  font-size: 14px;
+  font-size: 14.5px;
+  font-weight: 500;
   margin: 4px 0 0;
 }
 
@@ -65,13 +66,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 6px 18px;
   border-radius: 999px;
-  background: rgba(242, 210, 139, 0.1);
-  border: 1px solid rgba(242, 210, 139, 0.2);
+  background: rgba(242, 210, 139, 0.12);
+  border: 1.5px solid rgba(242, 210, 139, 0.3);
   color: var(--rd-gold);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ── Topbar actions: refresh + date badge ── */
@@ -85,25 +86,28 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 6px;
-  border: 1px solid var(--rd-border-light);
-  background: transparent;
-  color: var(--rd-muted);
-  font-size: 12px;
-  font-weight: 600;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(242, 210, 139, 0.35);
+  background: rgba(242, 210, 139, 0.08);
+  color: var(--rd-gold);
+  font-size: 13px;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 .rd-btn-refresh:hover:not(:disabled) {
-  border-color: var(--rd-gold-dim);
-  color: var(--rd-gold);
-  background: rgba(242, 210, 139, 0.06);
+  border-color: var(--rd-gold);
+  color: #100b06;
+  background: linear-gradient(135deg, #f2d28b 0%, #d7aa4d 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(242, 210, 139, 0.25);
 }
 .rd-btn-refresh:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -121,7 +125,7 @@
 .rd-kpi-bar {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .rd-kpi-card {
@@ -129,32 +133,33 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: var(--rd-radius);
-  padding: 18px 20px;
-  border: 1px solid var(--rd-border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 20px 24px;
+  border: 1.5px solid var(--rd-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
 }
 
 .rd-kpi-card:hover {
-  border-color: rgba(242, 210, 139, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(-3px);
+  border-color: rgba(242, 210, 139, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
 }
 
 .rd-kpi-label {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.08em;
   color: var(--rd-muted);
-  font-weight: 500;
+  font-weight: 700;
   display: block;
   margin-bottom: 6px;
 }
 
 .rd-kpi-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--rd-text);
   letter-spacing: -0.02em;
   line-height: 1.15;

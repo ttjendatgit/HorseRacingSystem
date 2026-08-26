@@ -94,22 +94,29 @@ function SpectatorPredictionFormPage() {
 
       try {
         const [tournamentsResponse, racesResponse] = await Promise.all([
-          getActiveTournaments().catch(() => getTournaments()),
+          getTournaments().catch(() => getActiveTournaments()),
           getRaces(),
         ]);
-        const tournamentPayload = unwrapResponseData(tournamentsResponse);
+        let tournamentPayload = unwrapResponseData(tournamentsResponse);
         const racesPayload = unwrapResponseData(racesResponse);
 
-        const tournamentItems = Array.isArray(tournamentPayload) ? tournamentPayload : [];
+        let tournamentItems = Array.isArray(tournamentPayload) ? tournamentPayload : [];
         const raceItems = Array.isArray(racesPayload) ? racesPayload : [];
+
+        if (tournamentItems.length === 0) {
+          try {
+            const fallbackRes = await getActiveTournaments();
+            const fallbackData = unwrapResponseData(fallbackRes);
+            if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+              tournamentItems = fallbackData;
+            }
+          } catch { /* ignore fallback error */ }
+        }
 
         if (!cancelled) {
           setTournaments(tournamentItems);
           setRaces(raceItems);
-          if (tournamentItems.length > 0) {
-            const firstId = tournamentItems[0]?.id ?? tournamentItems[0]?.Id;
-            setSelectedTournament(firstId ?? "");
-          }
+          setSelectedTournament("");
         }
       } catch (error) {
         if (!cancelled) {
@@ -163,14 +170,53 @@ function SpectatorPredictionFormPage() {
     return () => { cancelled = true; };
   }, [selectedRace]);
 
+  const activeTournaments = useMemo(() => {
+    // 1. Tạo Map lưu trữ tất cả thông tin giải đấu theo ID (chuẩn hóa chữ thường)
+    const tournamentMap = new Map();
+    tournaments.forEach((t) => {
+      const id = String(t?.id ?? t?.Id ?? "").toLowerCase().trim();
+      if (id) tournamentMap.set(id, t);
+    });
+
+    // 2. Lấy danh sách TournamentID của những cuộc đua ĐANG hiển thị (Scheduled / InProgress)
+    const activeTournamentIds = new Set(
+      races
+        .filter((race) => {
+          const status = (race?.status ?? race?.Status ?? "").toLowerCase().trim();
+          return status !== "finished" && status !== "cancelled";
+        })
+        .map((race) => String(race?.tournamentId ?? race?.TournamentId ?? "").toLowerCase().trim())
+        .filter(Boolean)
+    );
+
+    // 3. CHỈ hiển thị các giải đấu thực sự có cuộc đua đang diễn ra hoặc sắp diễn ra
+    const result = [];
+    const addedIds = new Set();
+
+    activeTournamentIds.forEach((tid) => {
+      if (addedIds.has(tid)) return;
+      if (tournamentMap.has(tid)) {
+        result.push(tournamentMap.get(tid));
+      } else {
+        const race = races.find((r) => String(r?.tournamentId ?? r?.TournamentId ?? "").toLowerCase().trim() === tid);
+        const fallbackName = race?.tournamentName ?? race?.TournamentName ?? "Giải đấu";
+        result.push({ id: tid, name: fallbackName });
+      }
+      addedIds.add(tid);
+    });
+
+    return result;
+  }, [tournaments, races]);
+
   const raceOptions = useMemo(() => {
+    const selTid = String(selectedTournament ?? "").toLowerCase().trim();
     return races
       .filter((race) => {
-        const tid = race?.tournamentId ?? race?.TournamentId;
-        if (selectedTournament && tid !== selectedTournament) return false;
-        // Only show races that can be bet on: Scheduled only
+        const tid = String(race?.tournamentId ?? race?.TournamentId ?? "").toLowerCase().trim();
+        if (selTid && tid !== selTid) return false;
+        // Ẩn cuộc đua đã kết thúc (finished) hoặc đã hủy (cancelled). Giữ lại inprogress và scheduled.
         const status = (race?.status ?? race?.Status ?? "").toLowerCase().trim();
-        if (status === "finished" || status === "cancelled" || status === "inprogress") return false;
+        if (status === "finished" || status === "cancelled") return false;
         return true;
       })
       .map((race) => {
@@ -310,7 +356,7 @@ function SpectatorPredictionFormPage() {
             onChange={(e) => setSelectedTournament(e.target.value)}
           >
             <option value="">Tất cả giải đấu</option>
-            {tournaments.map((t) => (
+            {activeTournaments.map((t) => (
               <option key={t.id ?? t.Id} value={t.id ?? t.Id}>
                 {t.name ?? t.Name}
               </option>

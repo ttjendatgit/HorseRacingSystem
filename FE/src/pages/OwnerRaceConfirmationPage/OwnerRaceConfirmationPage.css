@@ -132,13 +132,13 @@
 }
 
 .orc-race-card {
-  background: linear-gradient(180deg, rgba(33, 26, 20, 0.94), rgba(26, 21, 17, 0.94));
+  background: linear-gradient(180deg, rgba(35, 28, 22, 0.96), rgba(24, 19, 15, 0.96));
   border-radius: var(--hr-radius-panel);
-  border: 1px solid var(--hr-border);
-  border-left: 3px solid transparent;
-  padding: 16px 18px;
+  border: 1.5px solid rgba(184, 134, 59, 0.22);
+  border-left: 4px solid transparent;
+  padding: 18px 20px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   display: grid;
   gap: 10px;
 }
@@ -146,13 +146,14 @@
 .orc-race-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--hr-shadow-soft);
-  border-color: rgba(184, 134, 59, 0.3);
+  border-color: rgba(215, 170, 77, 0.45);
 }
 
 .orc-race-card--active {
-  border-left-color: var(--hr-gold-soft);
-  background: linear-gradient(180deg, rgba(184, 134, 59, 0.14), rgba(26, 21, 17, 0.96));
-  box-shadow: var(--hr-shadow-soft);
+  border-left-color: #8f6420;
+  border-color: rgba(215, 170, 77, 0.5);
+  background: linear-gradient(180deg, rgba(184, 134, 59, 0.2), rgba(26, 21, 17, 0.98));
+  box-shadow: 0 10px 30px rgba(143, 100, 32, 0.15);
 }
 
 .orc-race-card__top {
