@@ -9,6 +9,7 @@ import {
 import { getOwnerTournaments } from "../../services/ownerApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
 import { getTournamentRegistrationState, getCapacityFullMessage } from "../../utils/tournamentRegistration";
+import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import "../OwnerSharedLayout.css";
 import "./OwnerTournamentRegisterPage.css";
 
@@ -27,13 +28,6 @@ const mapTournament = (tournament) => {
   };
 };
 
-const registrationStatusLabel = (status) => {
-  if (status === "Approved") return "Đã duyệt";
-  if (status === "Rejected") return "Từ chối";
-  if (status === "Withdrawn") return "Đã rút";
-  return "Chờ duyệt";
-};
-
 const mapRegistration = (r) => {
   const status = r.status ?? r.Status ?? "Pending";
   return {
@@ -44,7 +38,7 @@ const mapRegistration = (r) => {
     tournament: r.tournamentName ?? r.TournamentName ?? "Giải đấu",
     tournamentStatus: r.tournamentStatus ?? r.TournamentStatus ?? "",
     statusRaw: status,
-    status: registrationStatusLabel(status),
+    status: getRegistrationStatusLabel(status),
     submitted: (r.createdAt ?? r.CreatedAt ?? "").toString().slice(0, 10),
   };
 };
@@ -407,7 +401,7 @@ function OwnerTournamentRegisterPage() {
                       ? unavailableTournamentMessage
                       : hasExistingRegistration
                         ? "Đã đăng ký"
-                        : "Xem lại đăng ký"}
+                        : "Đăng ký"}
                 </button>
                 {hasExistingRegistration ? (
                   <p className="form-error">

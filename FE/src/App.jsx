@@ -44,9 +44,11 @@ const OwnerRaceConfirmationPage = lazy(() => import("./pages/OwnerRaceConfirmati
 const RefereeDashboardPage = lazy(() => import("./pages/RefereeDashboardPage/RefereeDashboardPage"));
 const RefereeAssignmentPage = lazy(() => import("./pages/RefereeAssignmentPage/RefereeAssignmentPage"));
 const RefereeHealthCheckPage = lazy(() => import("./pages/RefereeHealthCheckPage/RefereeHealthCheckPage"));
+const GateAssignmentPage = lazy(() => import("./pages/GateAssignmentPage/GateAssignmentPage"));
 const RefereeInjuryPage = lazy(() => import("./pages/RefereeInjuryPage/RefereeInjuryPage"));
 const RefereeViolationPage = lazy(() => import("./pages/RefereeViolationPage/RefereeViolationPage"));
 const RefereeRaceReportPage = lazy(() => import("./pages/RefereeRaceReportPage/RefereeRaceReportPage"));
+const RefereeComplaintsPage = lazy(() => import("./pages/RefereeComplaintsPage/RefereeComplaintsPage"));
 const OwnerProfilePage = lazy(() => import("./pages/OwnerProfilePage/OwnerProfilePage"));
 const JockeyProfilePage = lazy(() => import("./pages/JockeyProfilePage/JockeyProfilePage"));
 const RefereeProfilePage = lazy(() => import("./pages/RefereeProfilePage/RefereeProfilePage"));
@@ -172,8 +174,10 @@ function AppLayout() {
               <Route path="/referee" element={<RefereeDashboardPage />} />
               <Route path="/referee/assignments" element={<RefereeAssignmentPage />} />
               <Route path="/referee/health-checks" element={<RefereeHealthCheckPage />} />
+              <Route path="/referee/gate-assignment" element={<GateAssignmentPage />} />
               <Route path="/referee/violations" element={<RefereeViolationPage />} />
               <Route path="/referee/reports" element={<RefereeRaceReportPage />} />
+              <Route path="/referee/complaints" element={<RefereeComplaintsPage />} />
               <Route path="/referee/injuries" element={<RefereeInjuryPage />} />
               <Route path="/referee/profile" element={<RefereeProfilePage />} />
             </Route>
@@ -191,6 +195,7 @@ function AppLayout() {
               <Route path="/admin/races" element={<AdminPage />} />
               <Route path="/admin/prizes" element={<AdminPage />} />
               <Route path="/admin/protests" element={<AdminPage />} />
+              <Route path="/admin/race-complaints" element={<AdminPage />} />
               <Route path="/admin/transfers" element={<AdminPage />} />
               <Route path="/admin/contracts" element={<AdminPage />} />
               <Route path="/admin/injuries" element={<AdminPage />} />

@@ -113,6 +113,12 @@ public class RaceEntryService : IRaceEntryService
         entry.Status = RegistrationStatus.Rejected;
         entry.ScratchedAt = DateTime.UtcNow;
         entry.ScratchReason = string.IsNullOrWhiteSpace(reason) ? "Bị từ chối bởi admin" : reason.Trim();
+        // GATE-V1: a rejected entry is no longer participating (RaceEntryService.
+        // ValidateRaceEntriesForStartAsync excludes it), so its gate frees up for another entry —
+        // this is the only production path that sets ScratchedAt (there is no separate Scratch
+        // endpoint yet), so clearing it here covers both reject and scratch without redesigning
+        // the scratch lifecycle.
+        entry.GateNumber = null;
         await _entries.UpdateAsync(entry);
         await _unitOfWork.SaveChangesAsync();
         return ServiceResult<bool>.Ok(true);
@@ -123,10 +129,21 @@ public class RaceEntryService : IRaceEntryService
         var entries = await _entries.GetByRaceAsync(raceId);
         if (entries.Count == 0) return ServiceResult<bool>.Fail(400, "Cuộc đua chưa có ngựa tham gia");
 
+        // R1a: a Rejected or Scratched entry is kept in history (never deleted) but is no
+        // longer a real participant, so it must not be evaluated for start readiness — and
+        // must not count toward "no participants remain" either. An entry that is still
+        // participating but merely incomplete (missing confirmation/jockey/health/etc.) is
+        // NOT filtered out here — it still fails the readiness loop below by design.
+        var participatingEntries = entries
+            .Where(e => e.Status != RegistrationStatus.Rejected && e.ScratchedAt == null)
+            .ToList();
+        if (participatingEntries.Count == 0)
+            return ServiceResult<bool>.Fail(400, "Cuộc đua không còn ngựa nào đang tham gia (tất cả đã bị từ chối/rút lui)");
+
         // A user who owns the horse and rides it has already consented to both
         // roles by registering. This also repairs entries created before that
         // intent was persisted on the confirmation flags.
-        var selfRegisteredEntries = entries.Where(e =>
+        var selfRegisteredEntries = participatingEntries.Where(e =>
             e.JockeyId.HasValue &&
             e.Horse?.Owner?.UserId == e.Jockey?.UserId &&
             (!e.OwnerConfirmed || !e.JockeyConfirmed)).ToList();
@@ -138,12 +155,19 @@ public class RaceEntryService : IRaceEntryService
         if (selfRegisteredEntries.Count > 0)
             await _unitOfWork.SaveChangesAsync();
 
-        var healthPassed = await _db.HorseHealthChecks
-            .Where(h => h.RaceId == raceId && h.ApprovedToRace && h.Status == HealthCheckStatus.Passed)
-            .Select(h => h.HorseId).Distinct().ToListAsync();
+        // R0.1: the LATEST health check per Horse+Race is authoritative — an
+        // older Passed check no longer clears a horse whose most recent
+        // check is Failed/RequiresRecheck (see report). One query for the
+        // whole race, grouped in-memory, avoids an N+1 per entry.
+        var healthChecksForRace = await _db.HorseHealthChecks
+            .Where(h => h.RaceId == raceId)
+            .ToListAsync();
+        var latestHealthCheckByHorseId = healthChecksForRace
+            .GroupBy(h => h.HorseId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(h => h.CheckedAt).First());
 
         var invalidReasons = new List<string>();
-        foreach (var e in entries)
+        foreach (var e in participatingEntries)
         {
             var horseName = e.Horse?.Name ?? e.HorseId.ToString();
             var reasons = new List<string>();
@@ -152,9 +176,24 @@ public class RaceEntryService : IRaceEntryService
             if (!e.OwnerConfirmed) reasons.Add("Chủ ngựa chưa xác nhận (OwnerConfirmed=false)");
             if (!e.JockeyConfirmed) reasons.Add("Kỵ sĩ chưa xác nhận (JockeyConfirmed=false)");
             if (e.JockeyId == null) reasons.Add("Chưa chọn kỵ sĩ");
-            if (e.ScratchedAt != null) reasons.Add("Ngựa đã bị rút lui (Scratched)");
             if (e.Horse?.ApprovalStatus != ApprovalStatus.Approved) reasons.Add("Hồ sơ ngựa chưa được Admin duyệt");
-            if (!healthPassed.Contains(e.HorseId)) reasons.Add("Chưa có kiểm tra sức khỏe Đạt/Đã phê duyệt");
+
+            // R1a: defense-in-depth re-check of Jockey PERSON eligibility. Invite/Accept/
+            // FinalConfirm already enforce this at pairing time, but approval/active status
+            // can change afterward (e.g. Admin rejects/deactivates the Jockey later) — this
+            // must be re-verified right before the race actually starts.
+            if (e.JockeyId.HasValue)
+            {
+                if (e.Jockey == null || e.Jockey.ApprovalStatus != ApprovalStatus.Approved)
+                    reasons.Add("Hồ sơ kỵ sĩ chưa được Admin duyệt");
+                if (e.Jockey?.User != null && !e.Jockey.User.IsActive)
+                    reasons.Add("Tài khoản kỵ sĩ đã bị vô hiệu hóa");
+            }
+
+            var hasValidLatestHealthCheck = latestHealthCheckByHorseId.TryGetValue(e.HorseId, out var latestCheck)
+                && latestCheck.Status == HealthCheckStatus.Passed
+                && latestCheck.ApprovedToRace;
+            if (!hasValidLatestHealthCheck) reasons.Add("Chưa có kiểm tra sức khỏe Đạt/Đã phê duyệt (theo lần kiểm tra gần nhất)");
 
             if (e.JockeyId.HasValue && reasons.Count == 0)
             {

@@ -1,7 +1,10 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { unwrapResponseData } from "../../services/authRoleUtils";
 import { getTournaments } from "../../services/spectatorApi";
+import { getPrizesByTournament } from "../../services/managementApi";
 import { normalizeTournamentStatus } from "../../utils/tournamentRegistration";
+import PrizeBreakdown from "../../components/PrizeBreakdown";
+import "../../components/PrizeBreakdown.css";
 import heroBg from "../../assets/racing.png";
 import "./SpectatorTournamentListPage.css";
 
@@ -80,6 +83,19 @@ function SpectatorTournamentListPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [detailTournament, setDetailTournament] = useState(null);
+  const [detailPrizes, setDetailPrizes] = useState([]);
+
+  // PRIZE-V1.1 PART 10: Tournament list card stays lightweight (PrizePool only, above); the
+  // detail modal additionally fetches the rank breakdown, lazily on open. Draft breakdowns are
+  // hidden server-side (404), so a failed fetch just leaves the section empty.
+  useEffect(() => {
+    if (!detailTournament) { setDetailPrizes([]); return; }
+    let cancelled = false;
+    getPrizesByTournament(detailTournament.id)
+      .then((data) => { if (!cancelled) setDetailPrizes(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setDetailPrizes([]); });
+    return () => { cancelled = true; };
+  }, [detailTournament]);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,6 +419,11 @@ function SpectatorTournamentListPage() {
               <div className="stl-modal__desc">
                 <span className="stl-modal__label">Mô tả</span>
                 <p>{detailTournament.description}</p>
+              </div>
+            )}
+            {detailPrizes.length > 0 && (
+              <div className="stl-modal__desc">
+                <PrizeBreakdown prizes={detailPrizes} />
               </div>
             )}
             <div className="stl-modal__actions">

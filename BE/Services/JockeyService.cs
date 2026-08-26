@@ -185,20 +185,13 @@ public class JockeyService : IJockeyService
                 .FirstOrDefault();
         }
 
-        if (!request.Accept)
-        {
-            // Từ chối lời mời → gỡ kỵ sĩ khỏi các cuộc đua đã phân công cho ngựa này
-            var affected = horseEntries.Where(e => e.JockeyId == jockey.Id).ToList();
-            if (affected.Count > 0)
-            {
-                foreach (var e in affected)
-                {
-                    e.JockeyId = null;
-                    e.JockeyConfirmed = false;
-                }
-                await _raceEntries.UpdateRangeAsync(affected);
-            }
-        }
+        // J3.1: rejecting a Pending invitation only ever mutates the invitation itself
+        // (Pending -> Declined below). A Pending invitation can never be the source of
+        // an already-established official pairing — RaceEntry.JockeyId is only ever set
+        // by Owner Final Confirm from an Accepted invitation — so there is no RaceEntry
+        // state to clear here. The previous logic cleared every RaceEntry across ALL
+        // Tournaments where JockeyId matched this jockey, which risked silently wiping a
+        // historical Finished/Cancelled official pairing unrelated to this invitation.
 
         if (request.Accept)
         {
@@ -307,6 +300,20 @@ public class JockeyService : IJockeyService
             return ServiceResult<object>.Fail(StatusCodes.Status409Conflict, "Lời mời chưa được gắn với cuộc đua");
         }
 
+        // J3.1: official-ness is Tournament-wide and determined from RaceEntry.JockeyId,
+        // never from invitation.Status — Final Confirm never touches invitation.Status,
+        // so a winning invitation stays Accepted forever. Once this Jockey is the
+        // established official pairing for this Horse anywhere in the Tournament,
+        // withdrawal must not be able to break it — a Jockey may only withdraw while
+        // still a non-official candidate.
+        var officialAssignment = await _raceEntries.GetOfficialAssignmentForHorseInTournamentAsync(invitation.HorseId, invitation.Race.TournamentId);
+        if (officialAssignment != null && officialAssignment.JockeyId == jockey.Id)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status409Conflict,
+                "Bạn đã là kỵ sĩ chính thức của ngựa này trong giải đấu — không thể xin rút lời mời này.");
+        }
+
         if (invitation.Race.Status != RaceStatus.Scheduled &&
             invitation.Race.Status != RaceStatus.RegistrationOpen &&
             invitation.Race.Status != RaceStatus.RegistrationClosed)
@@ -323,6 +330,9 @@ public class JockeyService : IJockeyService
                 "Không thể xin rút sau thời gian bắt đầu cuộc đua");
         }
 
+        // Defensive no-op: with the guard above, this should never fire for an official
+        // RaceEntry — kept only in case a non-official RaceEntry happens to already
+        // carry this same JockeyId (data inconsistency, not the normal path).
         var entry = await _raceEntries.GetByRaceHorseAsync(invitation.RaceId.Value, invitation.HorseId);
         if (entry != null && entry.JockeyId == jockey.Id)
         {
@@ -462,6 +472,14 @@ public class JockeyService : IJockeyService
         return ServiceResult<object>.Ok(entry);
     }
 
+    // J3.1: legacy per-race manual decline path, disabled. It has zero live FE callers
+    // (see J3.1 report) and previously had no lifecycle guard at all — it could clear
+    // an already-official (Owner Final Confirmed) RaceEntry.JockeyId/JockeyConfirmed at
+    // any time, directly breaking the immutable Horse/Jockey/Tournament pairing. Kept
+    // reachable (not removed) for endpoint-compatibility, but now always refuses to
+    // mutate anything. The supported way for a Jockey to step back from a non-official
+    // candidacy is JockeyService.WithdrawInvitationAsync; there is currently no
+    // supported action to undo an already-official pairing.
     public async Task<ServiceResult<object>> DeclineRaceEntryAsync(Guid userId, Guid entryId)
     {
         var jockey = await _jockeys.GetByUserIdAsync(userId);
@@ -480,12 +498,9 @@ public class JockeyService : IJockeyService
             return ServiceResult<object>.Fail(StatusCodes.Status403Forbidden, "Bạn không phải kỵ sĩ của ngựa này");
         }
 
-        entry.JockeyId = null;
-        entry.JockeyConfirmed = false;
-        await _raceEntries.UpdateAsync(entry);
-        await _unitOfWork.SaveChangesAsync();
-
-        return ServiceResult<object>.Ok(entry);
+        return ServiceResult<object>.Fail(
+            StatusCodes.Status409Conflict,
+            "Chức năng từ chối cuộc đua trực tiếp không còn được hỗ trợ cho phân công chính thức. Vui lòng dùng chức năng xin rút lời mời, hoặc liên hệ Admin nếu cần thay đổi kỵ sĩ chính thức.");
     }
 
     public async Task<ServiceResult<object>> GetMyProfileAsync(Guid userId)
@@ -506,7 +521,10 @@ public class JockeyService : IJockeyService
             totalWins = jockey.TotalWins,
             winRate = jockey.WinRate,
             rank = jockey.Rank,
-            approvalStatus = jockey.ApprovalStatus.ToString()
+            approvalStatus = jockey.ApprovalStatus.ToString(),
+            // J-ADMIN-REVIEW Part 8: the Jockey's own approval-rejection reason, set by Admin
+            // RejectJockeyAsync — J-UX's jockeyApproval.js already reads this defensively.
+            approvalNote = jockey.ApprovalNote
         });
     }
 }

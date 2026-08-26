@@ -31,6 +31,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Prize> Prizes => Set<Prize>();
     public DbSet<Protest> Protests => Set<Protest>();
+    public DbSet<RaceComplaint> RaceComplaints => Set<RaceComplaint>();
+    public DbSet<RaceComplaintEvidence> RaceComplaintEvidence => Set<RaceComplaintEvidence>();
     public DbSet<HorseTransfer> HorseTransfers => Set<HorseTransfer>();
     public DbSet<InjuryRecord> InjuryRecords => Set<InjuryRecord>();
     public DbSet<Contract> Contracts => Set<Contract>();
@@ -344,6 +346,35 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(p => p.RaceId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // PRIZE-V1: DB-level defense against duplicate ranking-position allocations within one
+        // Tournament. TournamentId stays nullable at the physical-column level (schema debt —
+        // see the PRIZE-V1 report for why a NOT NULL migration was not attempted: no source of
+        // truth in this repo can prove no unknown/unmanaged deployed database has an existing
+        // NULL-TournamentId row, e.g. the legacy Race-scoped Prize shape); TournamentId is instead
+        // enforced as required at the DTO/service layer for every V1 write (PrizeService.CreateAsync).
+        // The filter matches the existing partial-unique-index convention used for
+        // TournamentHorseRegistrations above — NULL TournamentId rows are excluded from the
+        // uniqueness check entirely (Postgres/SQLite already never collide NULL with NULL in a
+        // unique index, but the filter also documents the intent and keeps behavior identical
+        // whether or not the column is ever tightened later).
+        //
+        // DEPLOYMENT PREFLIGHT (FINAL HARDENING Part 2): applying migration
+        // 20260823151908_PrizeTournamentPositionUniqueIndex to an existing database will FAIL if
+        // legacy duplicate (TournamentId, Position) rows already exist (pre-PRIZE-V1 CRUD had no
+        // such constraint). Before applying, run:
+        //   SELECT "TournamentId", "Position", COUNT(*) FROM "Prizes"
+        //   WHERE "TournamentId" IS NOT NULL
+        //   GROUP BY "TournamentId", "Position" HAVING COUNT(*) > 1;
+        // Any rows returned require manual business review (which duplicate wins? merge? renumber?)
+        // before the migration can be applied — this migration deliberately does NOT auto-resolve
+        // duplicates itself, since silently deleting/renumbering historical Prize data is a
+        // business decision, not a schema decision.
+        modelBuilder.Entity<Prize>()
+            .HasIndex(p => new { p.TournamentId, p.Position })
+            .IsUnique()
+            .HasFilter("\"TournamentId\" IS NOT NULL")
+            .HasDatabaseName("IX_Prizes_TournamentId_Position_Active");
+
         // Protest Model
         modelBuilder.Entity<Protest>()
             .HasOne(p => p.Race)
@@ -372,6 +403,78 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Protest>()
             .Property(p => p.Status)
             .HasConversion<string>();
+
+        // RaceComplaint Model
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.Race)
+            .WithMany()
+            .HasForeignKey(c => c.RaceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.FiledByUser)
+            .WithMany()
+            .HasForeignKey(c => c.FiledByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.AssignedRefereeAssignment)
+            .WithMany()
+            .HasForeignKey(c => c.AssignedRefereeAssignmentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasOne(c => c.RuledByUser)
+            .WithMany()
+            .HasForeignKey(c => c.RuledByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .Property(c => c.Type)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaint>()
+            .Property(c => c.Status)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.RaceId);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.FiledByUserId);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.Status);
+
+        modelBuilder.Entity<RaceComplaint>()
+            .HasIndex(c => c.AssignedRefereeAssignmentId);
+
+        // RaceComplaintEvidence Model (COMPLAINT-EVIDENCE-V1)
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasOne(e => e.RaceComplaint)
+            .WithMany(c => c.Evidence)
+            .HasForeignKey(e => e.RaceComplaintId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasOne(e => e.UploadedByUser)
+            .WithMany()
+            .HasForeignKey(e => e.UploadedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .Property(e => e.MediaType)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .Property(e => e.EvidenceSource)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasIndex(e => e.RaceComplaintId);
+
+        modelBuilder.Entity<RaceComplaintEvidence>()
+            .HasIndex(e => new { e.RaceComplaintId, e.EvidenceSource });
 
         // HorseTransfer Model
         modelBuilder.Entity<HorseTransfer>()
@@ -455,6 +558,18 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<RaceEntry>()
             .HasIndex(e => new { e.RaceId, e.HorseId })
             .IsUnique();
+
+        // GATE-V1: DB-level defense against two participating entries in the same Race holding
+        // the same starting gate. GateNumber is nullable (an entry has none until a Confirmed
+        // Referee assigns one, and Q1-generated next-round entries always start with
+        // GateNumber == null) — filtered to non-null so any number of ungated entries can coexist
+        // without colliding, matching the same partial-unique-index convention used for
+        // TournamentHorseRegistrations/Prizes above.
+        modelBuilder.Entity<RaceEntry>()
+            .HasIndex(e => new { e.RaceId, e.GateNumber })
+            .IsUnique()
+            .HasFilter("\"GateNumber\" IS NOT NULL")
+            .HasDatabaseName("IX_RaceEntries_RaceId_GateNumber_Active");
 
         // Phase5: Round.RoundNumber must be unique within its Tournament (spec §21.3).
         modelBuilder.Entity<Round>()

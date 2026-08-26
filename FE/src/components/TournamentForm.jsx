@@ -20,6 +20,7 @@ function TournamentForm({ onClose, onSuccess }) {
     registrationDeadline: "",
     minParticipants: 3,
     maxParticipants: 10,
+    maxRounds: 1,
   });
 
   const updateForm = (field, value) => {
@@ -59,6 +60,7 @@ function TournamentForm({ onClose, onSuccess }) {
         registrationDeadline: form.registrationDeadline ? vnInputToApiUtc(form.registrationDeadline) : null,
         minParticipants: Number(form.minParticipants),
         maxParticipants: Number(form.maxParticipants),
+        maxRounds: Number(form.maxRounds),
       };
 
       await createTournament(payload);
@@ -89,6 +91,10 @@ function TournamentForm({ onClose, onSuccess }) {
             <Input label="Số người tham gia tối thiểu" type="number" value={form.minParticipants} onChange={(e) => updateForm("minParticipants", e.target.value)} min="3" required />
             <Input label="Số người tham gia tối đa" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" required />
           </div>
+          {/* V0.1: MaxRounds must be explicit at create time — Round management identifies the
+              Final Round as RoundNumber === Tournament.MaxRounds, so an omitted/silently-default
+              value here (previously always 1) mislabels Round 1 as Final for any multi-round plan. */}
+          <Input label="Số vòng đấu *" type="number" value={form.maxRounds} onChange={(e) => updateForm("maxRounds", e.target.value)} min="1" step="1" required hint="Vòng đấu cuối cùng (số thứ tự bằng Số vòng đấu) sẽ được coi là Vòng chung kết." />
           <Input label="Tổng tiền thưởng (VND)" type="number" value={form.prizePool} onChange={(e) => updateForm("prizePool", e.target.value)} placeholder="100000000" min="0" />
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Ảnh đại diện</label>

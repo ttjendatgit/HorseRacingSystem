@@ -56,6 +56,14 @@ public interface IRaceManagementService
 
     // Horse Release
     Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId);
+
+    // Q1: Qualification — generate Round N+1 RaceEntries from Round N's Official rankings
+    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId);
+
+    // GATE-V1: Referee-only starting gate assignment. Caller (RefereesController) is responsible
+    // for identity + Confirmed-assignment-to-this-Race authorization before calling this — this
+    // method validates only the Race/Entry/gate business rules themselves.
+    Task<ServiceResult<bool>> AssignGateNumberAsync(Guid raceId, Guid entryId, int gateNumber);
 }
 
 public interface IRefereeService
@@ -134,7 +142,8 @@ public interface IAdminService
 
     // Jockey Management
     Task<ServiceResult<bool>> ApproveJockeyAsync(Guid jockeyId);
-    Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string reason);
+    Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string? reason);
+    Task<ServiceResult<JockeyAdminDetailResponse>> GetJockeyDetailAsync(Guid jockeyId);
 
     // Operations
     Task<ServiceResult<RefereeAssignmentResponse>> AssignRefereeToRaceAsync(AssignRefereeRequest request);
@@ -159,7 +168,23 @@ public interface ILiveResultService
 
 public class RaceResultRequest
 {
-    public Guid WinningHorseId { get; set; }
-    public CurrentPositionData[]? Rankings { get; set; }
+    /// <summary>
+    /// R0: optional compatibility field only. The ranking is the single
+    /// source of truth for the winner — if supplied, this must equal
+    /// Rankings[Position == 1].HorseId or the request is rejected (400).
+    /// Never treated as an independently-editable second winner source.
+    /// </summary>
+    public Guid? WinningHorseId { get; set; }
+    public List<RaceResultRankingItemRequest>? Rankings { get; set; }
     public string? Notes { get; set; }
+}
+
+/// <summary>
+/// One entry of a submitted finishing order. R0 deliberately carries only
+/// HorseId + Position — no time/margin/score; see RaceResult.RankingsJson.
+/// </summary>
+public class RaceResultRankingItemRequest
+{
+    public Guid HorseId { get; set; }
+    public int Position { get; set; }
 }

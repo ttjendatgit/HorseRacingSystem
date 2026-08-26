@@ -41,6 +41,20 @@ public class RefereeHealthCheckService : IRefereeHealthCheckService
                     $"Trạng thái không hợp lệ: {request.HealthCheckStatus}", 400);
             }
 
+            // R0.1: HealthCheck is a pre-race fitness check — a new one must
+            // not be recordable once the Race has already concluded or been
+            // cancelled (it would have no readiness to gate at that point).
+            var raceForGuard = await _raceRepo.GetByIdAsync(request.RaceId);
+            if (raceForGuard == null)
+            {
+                return ServiceResult<HealthCheckResponse>.Error("Không tìm thấy cuộc đua", 404);
+            }
+            if (raceForGuard.Status == RaceStatus.Finished || raceForGuard.Status == RaceStatus.Cancelled)
+            {
+                return ServiceResult<HealthCheckResponse>.Error(
+                    "Không thể ghi nhận kiểm tra sức khỏe khi cuộc đua đã kết thúc hoặc bị hủy.", 400);
+            }
+
             var healthCheck = new HorseHealthCheck
             {
                 Id = Guid.NewGuid(),
@@ -57,11 +71,10 @@ public class RefereeHealthCheckService : IRefereeHealthCheckService
             await _unitOfWork.SaveChangesAsync();
 
             var horse = await _horseRepo.GetByIdAsync(request.HorseId);
-            var race = await _raceRepo.GetByIdAsync(request.RaceId);
             var referee = await _refereeRepo.GetByIdAsync(request.RefereeId);
 
             return ServiceResult<HealthCheckResponse>.Success(
-                MapToResponse(healthCheck, horse, race, referee), 201);
+                MapToResponse(healthCheck, horse, raceForGuard, referee), 201);
         }
         catch (Exception ex)
         {
@@ -285,6 +298,23 @@ public class ViolationRecordService : IViolationRecordService
                 return ServiceResult<ViolationResponse>.Error("Không tìm thấy hồ sơ trọng tài", 404);
             }
 
+            // R0.1: Violation is an in-race observation — authoritative
+            // window is Race.Status == InProgress only (matches existing FE
+            // restriction, now enforced server-side). Because Approve can
+            // only ever run on a Finished race, this alone already prevents
+            // a new Violation from ever being created once the Result is
+            // Official — Finished/InProgress are mutually exclusive.
+            var raceForGuard = await _raceRepo.GetByIdAsync(request.RaceId);
+            if (raceForGuard == null)
+            {
+                return ServiceResult<ViolationResponse>.Error("Không tìm thấy cuộc đua", 404);
+            }
+            if (raceForGuard.Status != RaceStatus.InProgress)
+            {
+                return ServiceResult<ViolationResponse>.Error(
+                    "Vi phạm chỉ có thể được ghi nhận khi cuộc đua đang diễn ra.", 400);
+            }
+
             var violation = new ViolationRecord
             {
                 Id = Guid.NewGuid(),
@@ -301,7 +331,7 @@ public class ViolationRecordService : IViolationRecordService
             await _violationRepo.AddAsync(violation);
             await _unitOfWork.SaveChangesAsync();
 
-            var race = await _raceRepo.GetByIdAsync(request.RaceId);
+            var race = raceForGuard;
 
             // Notify all admins about the violation
             try

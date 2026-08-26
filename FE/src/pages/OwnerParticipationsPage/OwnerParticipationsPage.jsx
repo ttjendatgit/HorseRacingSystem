@@ -1,34 +1,147 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyTournamentRegistrations, getMyRaceEntries } from "../../services/ownerHorseApi";
+import { createRaceComplaint, uploadRaceComplaintEvidence } from "../../services/managementApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
+import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
+import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
+import { getJockeyNameDisplay } from "../../utils/jockeyAssignmentDisplay";
+import { EVIDENCE_ACCEPT_ATTR, RACE_COMPLAINT_TYPE_OPTIONS, validateEvidenceFile } from "../../utils/raceComplaintDisplay";
+import { RaceButton, RaceModalShell, RaceSelect } from "../../components/ui/RaceUi";
+import {
+  getTournamentLifecycleLabel,
+  normalizeTournamentStatus,
+} from "../../utils/tournamentRegistration";
 import "../OwnerSharedLayout.css";
 import "./OwnerParticipationsPage.css";
 
-const registrationStatusLabel = (status) => {
-  if (status === "Approved") return "Đã duyệt";
-  if (status === "Rejected") return "Từ chối";
-  if (status === "Withdrawn") return "Đã rút";
-  return "Chờ duyệt";
+const REGISTRATION_STATUS_NUM = {
+  1: "pending",
+  2: "approved",
+  3: "rejected",
+  4: "withdrawn",
 };
 
-// Task C1 §3: bucketing is driven ONLY by the Tournament's own lifecycle status (Published /
-// Ongoing / Finished) plus the registration's own status — never by inferring or fabricating a
-// stage from anything else.
-const bucketOf = (registration) => {
-  const t = registration.tournamentStatus;
-  const s = registration.statusRaw;
-  if (t === "Published" && (s === "Pending" || s === "Approved")) return "upcoming";
-  if (t === "Ongoing") return "ongoing";
-  if (t === "Finished") return "finished";
-  return "other";
+const RACE_STATUS_NUM = {
+  1: "scheduled",
+  2: "inprogress",
+  3: "finished",
+  4: "cancelled",
+  7: "registrationopen",
+  8: "registrationclosed",
 };
+
+const normalizeKey = (value, numericMap = {}) => {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number") return numericMap[value] ?? String(value);
+  const text = String(value).trim();
+  if (/^\d+$/.test(text)) return numericMap[Number(text)] ?? text;
+  return text.replace(/[\s_-]+/g, "").toLowerCase();
+};
+
+const getTournamentKey = (status) =>
+  normalizeTournamentStatus({ status }).toLowerCase();
+
+const bucketOf = (registration) => {
+  const tournamentStatus = normalizeTournamentStatus({ status: registration.tournamentStatus });
+  if (tournamentStatus === "Ongoing") return "ongoing";
+  if (tournamentStatus === "Finished" || tournamentStatus === "Cancelled") return "finished";
+  return "upcoming";
+};
+
+const REGISTRATION_TONE = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
+  withdrawn: "neutral",
+};
+
+const TOURNAMENT_TONE = {
+  draft: "neutral",
+  published: "gold",
+  ongoing: "live",
+  finished: "success",
+  cancelled: "danger",
+};
+
+const RACE_TONE = {
+  scheduled: "neutral",
+  registrationopen: "gold",
+  registrationclosed: "neutral",
+  inprogress: "live",
+  finished: "success",
+  cancelled: "danger",
+};
+
+const STATUS_PRIORITY = {
+  inprogress: 0,
+  registrationopen: 1,
+  registrationclosed: 1,
+  scheduled: 1,
+  finished: 2,
+  cancelled: 3,
+};
+
+const formatDateRange = (start, end) => {
+  const startText = apiToVNDisplay(start);
+  const endText = apiToVNDisplay(end);
+  if (startText && endText) return `${startText} - ${endText}`;
+  return startText || endText || "Chưa xác định";
+};
+
+const formatShortDate = (value) => {
+  const text = apiToVNDisplay(value);
+  return text ? text.slice(0, 5) : "chưa rõ";
+};
+
+const formatRoundLabel = (entry) => {
+  if (entry.roundName && entry.roundNumber != null) {
+    return `Vòng ${entry.roundNumber} · ${entry.roundName}`;
+  }
+  if (entry.roundName) return entry.roundName;
+  if (entry.roundNumber != null) return `Vòng ${entry.roundNumber}`;
+  return "Chưa gắn vòng";
+};
+
+const formatRank = (position) => {
+  if (position === null || position === undefined || position === "") return "Chưa có";
+  return `Hạng ${position}`;
+};
+
+const getEntrySortValue = (entry) => {
+  const time = entry.scheduledAt ? new Date(entry.scheduledAt).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const sortEntriesForDisplay = (items) =>
+  [...items].sort((a, b) => {
+    const statusDelta =
+      (STATUS_PRIORITY[a.raceStatusKey] ?? 4) - (STATUS_PRIORITY[b.raceStatusKey] ?? 4);
+    if (statusDelta !== 0) return statusDelta;
+
+    const resultDelta =
+      (a.finishPosition == null ? 1 : 0) - (b.finishPosition == null ? 1 : 0);
+    if (resultDelta !== 0) return resultDelta;
+
+    return getEntrySortValue(a) - getEntrySortValue(b);
+  });
+
+function StatusBadge({ label, tone = "neutral" }) {
+  return <span className={`op-status op-status--${tone}`}>{label}</span>;
+}
 
 function OwnerParticipationsPage() {
   const [registrations, setRegistrations] = useState([]);
   const [entries, setEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState(null);
+  const [expandedRaces, setExpandedRaces] = useState({});
+  const [complaintModal, setComplaintModal] = useState(null); // { entry }
+  const [complaintForm, setComplaintForm] = useState({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+  const [complaintFiles, setComplaintFiles] = useState([]);
+  const [complaintSubmitting, setComplaintSubmitting] = useState(false);
+  const [complaintMsg, setComplaintMsg] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -44,35 +157,51 @@ function OwnerParticipationsPage() {
         setRegistrations(
           (Array.isArray(regData) ? regData : []).map((r) => {
             const status = r.status ?? r.Status ?? "Pending";
+            const tournamentStatus = r.tournamentStatus ?? r.TournamentStatus ?? "";
             return {
               id: r.id ?? r.Id,
               horseId: r.horseId ?? r.HorseId,
               horseName: r.horseName ?? r.HorseName ?? "Không rõ",
               tournamentId: r.tournamentId ?? r.TournamentId,
               tournamentName: r.tournamentName ?? r.TournamentName ?? "Giải đấu",
-              tournamentStatus: r.tournamentStatus ?? r.TournamentStatus ?? "",
+              tournamentStatus,
+              tournamentStatusKey: getTournamentKey(tournamentStatus),
+              tournamentStatusLabel: getTournamentLifecycleLabel({ status: tournamentStatus }),
               tournamentStartDate: r.tournamentStartDate ?? r.TournamentStartDate,
               tournamentEndDate: r.tournamentEndDate ?? r.TournamentEndDate,
-              statusRaw: status,
-              statusLabel: registrationStatusLabel(status),
+              statusKey: normalizeKey(status, REGISTRATION_STATUS_NUM),
+              statusLabel: getRegistrationStatusLabel(status),
+              createdAt: r.createdAt ?? r.CreatedAt,
+              approvedAt: r.approvedAt ?? r.ApprovedAt,
+              note: r.note ?? r.Note ?? "",
             };
           }),
         );
         setEntries(
-          (Array.isArray(entryData) ? entryData : []).map((e) => ({
-            entryId: e.entryId ?? e.EntryId,
-            horseId: e.horseId ?? e.HorseId,
-            tournamentId: e.tournamentId ?? e.TournamentId,
-            raceId: e.raceId ?? e.RaceId,
-            raceName: e.raceName ?? e.RaceName ?? "Cuộc đua",
-            roundNumber: e.roundNumber ?? e.RoundNumber,
-            roundName: e.roundName ?? e.RoundName,
-            scheduledAt: e.scheduledAt ?? e.ScheduledAt,
-            raceStatus: e.raceStatus ?? e.RaceStatus ?? "",
-            ownerConfirmed: e.ownerConfirmed ?? e.OwnerConfirmed ?? false,
-            jockeyName: e.jockeyName ?? e.JockeyName ?? "",
-            finishPosition: e.finishPosition ?? e.FinishPosition ?? null,
-          })),
+          (Array.isArray(entryData) ? entryData : []).map((e) => {
+            const raceStatus = e.raceStatus ?? e.RaceStatus ?? "";
+            const entryStatus = e.status ?? e.Status ?? "";
+            return {
+              entryId: e.entryId ?? e.EntryId,
+              horseId: e.horseId ?? e.HorseId,
+              tournamentId: e.tournamentId ?? e.TournamentId,
+              raceId: e.raceId ?? e.RaceId,
+              raceName: e.raceName ?? e.RaceName ?? "Cuộc đua",
+              roundNumber: e.roundNumber ?? e.RoundNumber,
+              roundName: e.roundName ?? e.RoundName,
+              scheduledAt: e.scheduledAt ?? e.ScheduledAt,
+              scheduledEndAt: e.scheduledEndAt ?? e.ScheduledEndAt,
+              location: e.location ?? e.Location ?? "",
+              raceStatus,
+              raceStatusKey: normalizeKey(raceStatus, RACE_STATUS_NUM),
+              statusKey: normalizeKey(entryStatus, REGISTRATION_STATUS_NUM),
+              statusLabel: getRegistrationStatusLabel(entryStatus),
+              jockeyId: e.jockeyId ?? e.JockeyId,
+              jockeyName: e.jockeyName ?? e.JockeyName ?? "",
+              gateNumber: e.gateNumber ?? e.GateNumber,
+              finishPosition: e.finishPosition ?? e.FinishPosition ?? null,
+            };
+          }),
         );
       } catch (err) {
         if (isMounted) setError(err?.message || "Không thể tải danh sách tham gia.");
@@ -92,161 +221,324 @@ function OwnerParticipationsPage() {
     );
 
   const groups = useMemo(() => {
-    const result = { upcoming: [], ongoing: [], finished: [], other: [] };
+    const result = { upcoming: [], ongoing: [], finished: [] };
     registrations.forEach((registration) => {
       result[bucketOf(registration)].push(registration);
     });
     return result;
   }, [registrations]);
 
-  const renderRaceEntry = (entry) => (
-    <div key={entry.entryId} className="op-entry">
-      <div className="op-entry-row">
-        <span>Cuộc đua</span>
-        <strong>{entry.raceName}</strong>
-      </div>
-      {entry.roundNumber != null || entry.roundName ? (
-        <div className="op-entry-row">
-          <span>Vòng đấu</span>
-          <strong>{entry.roundName || `Vòng ${entry.roundNumber}`}</strong>
-        </div>
-      ) : null}
-      <div className="op-entry-row">
-        <span>Lịch thi đấu</span>
-        <strong>{apiToVNDisplay(entry.scheduledAt) || "Chưa xếp lịch"}</strong>
-      </div>
-      <div className="op-entry-row">
-        <span>Chủ ngựa xác nhận</span>
-        <strong>{entry.ownerConfirmed ? "Đã xác nhận" : "Chưa xác nhận"}</strong>
-      </div>
-      <div className="op-entry-row">
-        <span>Kỵ sĩ hiện tại</span>
-        <strong>{entry.jockeyName || "Chưa có kỵ sĩ"}</strong>
-      </div>
-      {/* Task C1 §3: never fabricate a rank — FinishPosition is only populated for horses with a
-          real recorded result. Everyone else gets an honest placeholder. */}
-      <div className="op-entry-row">
-        <span>Kết quả</span>
-        <strong>
-          {entry.finishPosition != null ? `Hạng ${entry.finishPosition}` : "Chưa có thứ hạng đầy đủ"}
-        </strong>
-      </div>
-    </div>
-  );
+  const sections = [
+    {
+      key: "upcoming",
+      title: "Sắp diễn ra",
+      hint: "Đăng ký đang chờ bước tiếp theo.",
+      empty: "Chưa có lượt tham gia sắp diễn ra.",
+      items: groups.upcoming,
+    },
+    {
+      key: "ongoing",
+      title: "Đang diễn ra",
+      hint: "Theo dõi phân công và trạng thái cuộc đua.",
+      empty: "Chưa có lượt tham gia đang diễn ra.",
+      items: groups.ongoing,
+    },
+    {
+      key: "finished",
+      title: "Đã kết thúc",
+      hint: "Lịch sử tham gia và kết quả đã ghi nhận.",
+      empty: "Chưa có lượt tham gia đã kết thúc.",
+      items: groups.finished,
+    },
+  ];
 
-  const renderRegistrationCard = (registration, { showEntries }) => {
-    const relatedEntries = showEntries
-      ? entriesFor(registration.tournamentId, registration.horseId)
-      : [];
+  const defaultTab = groups.upcoming.length
+    ? "upcoming"
+    : groups.ongoing.length
+      ? "ongoing"
+      : groups.finished.length
+        ? "finished"
+        : "upcoming";
+  const selectedKey = activeTab ?? defaultTab;
+  const selectedSection = sections.find((section) => section.key === selectedKey) ?? sections[0];
+  const isSelectedEmpty = selectedSection.items.length === 0;
+
+  const toggleRaceDisclosure = (registrationId) => {
+    setExpandedRaces((current) => ({
+      ...current,
+      [registrationId]: !current[registrationId],
+    }));
+  };
+
+  const openComplaintModal = (entry) => {
+    setComplaintForm({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+    setComplaintFiles([]);
+    setComplaintMsg(null);
+    setComplaintModal({ entry });
+  };
+
+  const addComplaintFiles = (fileList) => {
+    const picked = Array.from(fileList || []);
+    const accepted = [];
+    for (const file of picked) {
+      const check = validateEvidenceFile(file);
+      if (check.valid) accepted.push(file);
+      else setComplaintMsg({ type: "error", text: check.error });
+    }
+    if (accepted.length > 0) setComplaintFiles((prev) => [...prev, ...accepted]);
+  };
+
+  const removeComplaintFile = (index) => {
+    setComplaintFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const submitComplaint = async () => {
+    if (!complaintModal) return;
+    if (!complaintForm.reason.trim()) {
+      setComplaintMsg({ type: "error", text: "Vui lòng nhập nội dung khiếu nại." });
+      return;
+    }
+    setComplaintSubmitting(true);
+    try {
+      const res = await createRaceComplaint({
+        raceId: complaintModal.entry.raceId,
+        type: complaintForm.type,
+        reason: complaintForm.reason.trim(),
+        evidenceDescription: complaintForm.evidenceDescription?.trim() || null,
+      });
+      const created = res?.data ?? res;
+      // Evidence upload happens AFTER the complaint exists — RaceComplaintEvidence is a child
+      // row keyed by RaceComplaintId, so there is nothing to attach files to beforehand.
+      for (const file of complaintFiles) {
+        try {
+          await uploadRaceComplaintEvidence(created.id ?? created.Id, file);
+        } catch {
+          // Complaint itself already succeeded; a single evidence upload failure shouldn't
+          // block the filer from seeing their complaint was recorded.
+        }
+      }
+      setComplaintModal(null);
+      setComplaintFiles([]);
+      setError("");
+    } catch (err) {
+      setComplaintMsg({ type: "error", text: err?.message || "Gửi khiếu nại thất bại." });
+    } finally {
+      setComplaintSubmitting(false);
+    }
+  };
+
+  const renderRaceRow = (entry) => {
+    const jockeyDisplay = getJockeyNameDisplay({
+      jockeyId: entry.jockeyId,
+      jockeyName: entry.jockeyName,
+    });
+
+    return (
+      <div key={entry.entryId ?? `${entry.raceId}-${entry.horseId}`} className="op-race-row">
+        <div className="op-race-row__top">
+          <strong>{entry.raceName}</strong>
+          <StatusBadge
+            label={getOwnerRaceStatusLabel(entry.raceStatus)}
+            tone={RACE_TONE[entry.raceStatusKey] ?? "neutral"}
+          />
+        </div>
+        <p>{formatRoundLabel(entry)} · {apiToVNDisplay(entry.scheduledAt) || "Chưa xếp lịch"}</p>
+        <p>
+          Kỵ sĩ: {jockeyDisplay} · Cổng {entry.gateNumber ?? "chưa xếp"} · Kết quả: {formatRank(entry.finishPosition)}
+        </p>
+        {entry.raceStatusKey === "finished" && (
+          <div className="op-race-row__actions">
+            <RaceButton size="compact" variant="ghost" onClick={() => openComplaintModal(entry)}>
+              Khiếu nại cuộc đua
+            </RaceButton>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderRegistrationCard = (registration, sectionKey) => {
+    const relatedEntries = sortEntriesForDisplay(
+      entriesFor(registration.tournamentId, registration.horseId),
+    );
+    const expanded = !!expandedRaces[registration.id];
+    const visibleEntries = expanded ? relatedEntries : relatedEntries.slice(0, 1);
+    const hiddenCount = Math.max(relatedEntries.length - 1, 0);
+    const registrationTone = REGISTRATION_TONE[registration.statusKey] ?? "neutral";
+    const tournamentTone = TOURNAMENT_TONE[registration.tournamentStatusKey] ?? "neutral";
+
     return (
       <article key={registration.id} className="op-card">
-        <div className="op-card-header">
-          <div>
-            <span>Giải đấu</span>
-            <strong>{registration.tournamentName}</strong>
+        <div className="op-card__head">
+          <div className="op-card__title">
+            <h3>{registration.tournamentName}</h3>
+            <div className="op-card__badges">
+              <StatusBadge label={registration.tournamentStatusLabel} tone={tournamentTone} />
+              <StatusBadge label={registration.statusLabel} tone={registrationTone} />
+            </div>
           </div>
-          <div>
-            <span>Ngựa</span>
+          <div className="op-card__horse">
             <strong>{registration.horseName}</strong>
-          </div>
-          <div>
-            <span>Trạng thái đăng ký</span>
-            <strong
-              className={`registration-status-pill registration-status-pill--${registration.statusLabel
-                .toLowerCase()
-                .replace(/\s+/g, "-")}`}
-            >
-              {registration.statusLabel}
-            </strong>
+            <span>{formatDateRange(registration.tournamentStartDate, registration.tournamentEndDate)}</span>
           </div>
         </div>
-        <div className="op-card-dates">
-          {apiToVNDisplay(registration.tournamentStartDate) || "Chưa xác định"} -{" "}
-          {apiToVNDisplay(registration.tournamentEndDate) || "Chưa xác định"}
-        </div>
-        {showEntries ? (
-          relatedEntries.length > 0 ? (
-            <div className="op-entries">{relatedEntries.map(renderRaceEntry)}</div>
-          ) : (
-            <p className="muted">Chưa được phân công vào cuộc đua nào trong giải này.</p>
-          )
+
+        <p className="op-meta-line">
+          Đăng ký: {formatShortDate(registration.createdAt)} · Duyệt: {formatShortDate(registration.approvedAt)}
+          {registration.note ? ` · Ghi chú: ${registration.note}` : ""}
+        </p>
+
+        {relatedEntries.length > 0 ? (
+          <div className="op-race-list">
+            {visibleEntries.map(renderRaceRow)}
+            {hiddenCount > 0 ? (
+              <button
+                type="button"
+                className="op-disclosure"
+                onClick={() => toggleRaceDisclosure(registration.id)}
+              >
+                {expanded ? "Thu gọn" : `Xem ${hiddenCount + 1} cuộc đua`}
+              </button>
+            ) : null}
+          </div>
+        ) : sectionKey !== "upcoming" ? (
+          <p className="op-inline-empty">Chưa có phân công cuộc đua cho lượt tham gia này.</p>
         ) : null}
       </article>
     );
   };
 
-  const sections = [
-    {
-      key: "upcoming",
-      title: "Sắp diễn ra",
-      hint: "Giải đấu đã công bố, đăng ký đang chờ duyệt hoặc đã được duyệt.",
-      items: groups.upcoming,
-      showEntries: false,
-    },
-    {
-      key: "ongoing",
-      title: "Đang diễn ra",
-      hint: "Giải đấu đang diễn ra — cuộc đua được phân công (nếu có) hiển thị bên dưới.",
-      items: groups.ongoing,
-      showEntries: true,
-    },
-    {
-      key: "finished",
-      title: "Đã kết thúc",
-      hint: "Giải đấu đã kết thúc — chỉ hiển thị dữ liệu thực tế đã ghi nhận.",
-      items: groups.finished,
-      showEntries: true,
-    },
-    {
-      key: "other",
-      title: "Khác",
-      hint: "Đăng ký bị từ chối, đã rút, hoặc thuộc giải đấu ở trạng thái khác.",
-      items: groups.other,
-      showEntries: false,
-    },
-  ];
-
   return (
     <div className="owner-page owner-participations">
-      <div className="owner-content">
-        <section className="page-header">
-          <h1>Tham gia của tôi</h1>
-          <p>Theo dõi tất cả giải đấu bạn đã đăng ký, theo từng giai đoạn.</p>
+      <div className="owner-content op-shell">
+        <section className="op-page-head">
+          <div>
+            <h1>Tham gia của tôi</h1>
+            <p>Theo dõi giải đấu, ngựa đăng ký, phân công cuộc đua và kết quả.</p>
+          </div>
+          <div className="op-tabs" role="tablist" aria-label="Nhóm lượt tham gia">
+            {sections.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                role="tab"
+                aria-selected={selectedKey === section.key}
+                className={`op-tab ${selectedKey === section.key ? "op-tab--active" : ""}`}
+                onClick={() => setActiveTab(section.key)}
+              >
+                {section.title} <span>{section.items.length}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="op-error">{error}</p> : null}
 
         {isLoading ? (
-          <p className="muted">Đang tải...</p>
+          <section className="op-state-card">
+            <strong>Đang tải lượt tham gia</strong>
+            <span>Đang lấy danh sách đăng ký và cuộc đua liên quan.</span>
+          </section>
         ) : registrations.length === 0 ? (
-          <div className="op-empty">
-            <p>Bạn chưa đăng ký giải đấu nào.</p>
-            <Link className="primary-button" to="/owner/register-tournament">
+          <section className="op-empty op-empty--global">
+            <div>
+              <strong>Bạn chưa đăng ký giải đấu nào</strong>
+              <span>Khi đăng ký ngựa vào giải đấu, trạng thái tham gia sẽ xuất hiện tại đây.</span>
+            </div>
+            <Link className="op-primary-link" to="/owner/register-tournament">
               Đăng ký giải đấu
             </Link>
-          </div>
+          </section>
         ) : (
-          sections.map((section) => (
-            <section key={section.key} className="op-section">
-              <div className="section-heading">
-                <h2>
-                  {section.title} <span className="op-count">({section.items.length})</span>
-                </h2>
-                <p>{section.hint}</p>
+          <section className={`op-panel ${isSelectedEmpty ? "op-panel--empty" : ""}`} role="tabpanel">
+            <div className="op-panel__head">
+              <div>
+                <h2>{selectedSection.title}</h2>
+                <p>{selectedSection.hint}</p>
               </div>
-              {section.items.length === 0 ? (
-                <p className="muted">Không có mục nào.</p>
-              ) : (
-                <div className="op-grid">
-                  {section.items.map((registration) =>
-                    renderRegistrationCard(registration, { showEntries: section.showEntries }),
-                  )}
-                </div>
-              )}
-            </section>
-          ))
+              <span>{selectedSection.items.length} lượt</span>
+            </div>
+
+            {isSelectedEmpty ? (
+              <p className="op-section-empty">{selectedSection.empty}</p>
+            ) : (
+              <div className="op-list">
+                {selectedSection.items.map((registration) =>
+                  renderRegistrationCard(registration, selectedSection.key),
+                )}
+              </div>
+            )}
+          </section>
         )}
       </div>
+
+      {complaintModal && (
+        <RaceModalShell
+          title="Khiếu nại cuộc đua"
+          description={complaintModal.entry.raceName}
+          onClose={() => setComplaintModal(null)}
+          footer={(
+            <>
+              <RaceButton variant="ghost" onClick={() => setComplaintModal(null)}>Hủy</RaceButton>
+              <RaceButton loading={complaintSubmitting} disabled={complaintSubmitting} onClick={submitComplaint}>
+                Gửi khiếu nại
+              </RaceButton>
+            </>
+          )}
+        >
+          {complaintMsg && (
+            <p className="rm-field__message rm-field__message--error">{complaintMsg.text}</p>
+          )}
+          <RaceSelect
+            label="Loại khiếu nại"
+            value={complaintForm.type}
+            onChange={(e) => setComplaintForm((prev) => ({ ...prev, type: e.target.value }))}
+            options={RACE_COMPLAINT_TYPE_OPTIONS}
+          />
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-reason">Nội dung</label>
+            <textarea
+              id="op-complaint-reason"
+              className="rm-control"
+              rows={4}
+              value={complaintForm.reason}
+              onChange={(e) => setComplaintForm((prev) => ({ ...prev, reason: e.target.value }))}
+              placeholder="Mô tả nội dung khiếu nại..."
+            />
+          </div>
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-evidence">Bằng chứng (tùy chọn)</label>
+            <textarea
+              id="op-complaint-evidence"
+              className="rm-control"
+              rows={2}
+              value={complaintForm.evidenceDescription}
+              onChange={(e) => setComplaintForm((prev) => ({ ...prev, evidenceDescription: e.target.value }))}
+              placeholder="Mô tả bằng chứng liên quan (không bắt buộc)..."
+            />
+          </div>
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-files">Ảnh / video bằng chứng (tùy chọn)</label>
+            <input
+              id="op-complaint-files"
+              type="file"
+              multiple
+              accept={EVIDENCE_ACCEPT_ATTR}
+              onChange={(e) => { addComplaintFiles(e.target.files); e.target.value = ""; }}
+            />
+            {complaintFiles.length > 0 && (
+              <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 2 }}>
+                {complaintFiles.map((file, index) => (
+                  <li key={`${file.name}-${index}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--hr-text)" }}>
+                    <span>{file.name}</span>
+                    <button type="button" className="ghost-button" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => removeComplaintFile(index)}>Xóa</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </RaceModalShell>
+      )}
     </div>
   );
 }

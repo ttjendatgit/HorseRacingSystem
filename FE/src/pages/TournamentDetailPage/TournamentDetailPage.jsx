@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getTournament, getRoundsByTournament, getRaceEntries } from "../../services/spectatorApi";
 import { getTournamentRaces } from "../../services/adminApi";
+import { getPrizesByTournament } from "../../services/managementApi";
+import PrizeBreakdown from "../../components/PrizeBreakdown";
+import "../../components/PrizeBreakdown.css";
 import "./TournamentDetailPage.css";
 
 function TournamentDetailPage() {
@@ -9,6 +12,7 @@ function TournamentDetailPage() {
   const [tournament, setTournament] = useState(null);
   const [rounds, setRounds] = useState([]);
   const [races, setRaces] = useState([]);
+  const [prizes, setPrizes] = useState([]);
   const [entriesMap, setEntriesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedRace, setExpandedRace] = useState(null);
@@ -31,6 +35,13 @@ function TournamentDetailPage() {
         const list = Array.isArray(racesList) ? racesList : [];
         if (cancelled) return;
         setRaces(list);
+
+        // PRIZE-V1: allocation breakdown is a Position -> Amount config, never a payout/recipient
+        // record — a failed fetch here should never block the rest of the page from rendering.
+        try {
+          const prizesList = await getPrizesByTournament(id);
+          if (!cancelled) setPrizes(Array.isArray(prizesList) ? prizesList : []);
+        } catch { /* empty */ }
       } catch { /* empty */ }
       finally { if (!cancelled) setLoading(false); }
     };
@@ -180,6 +191,15 @@ function TournamentDetailPage() {
               <InfoCard label="Hạn đăng ký" value={fmtDate(tournament.registrationDeadline ?? tournament.RegistrationDeadline)} />
             )}
           </div>
+
+          {/* Prize breakdown — Position -> Amount allocation only, no payout/recipient/distribution
+              status. Shared component (PRIZE-V1.1 Part 7) — this page is the one route every
+              authenticated role (Owner/Jockey/Spectator/Referee) reaches for Tournament detail. */}
+          {prizes.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <PrizeBreakdown prizes={prizes} />
+            </div>
+          )}
 
           {/* Description */}
           {(tournament.description ?? tournament.Description) && (

@@ -29,8 +29,6 @@ function OwnerDashboardPage() {
 
   const upcomingEntries = useMemo(() => entries.filter(e => (e.finishPosition ?? e.FinishPosition) == null), [entries]);
   const pastEntries = useMemo(() => entries.filter(e => (e.finishPosition ?? e.FinishPosition) != null), [entries]);
-  const pendingCount = useMemo(() => entries.filter(e => !(e.ownerConfirmed ?? e.OwnerConfirmed)).length, [entries]);
-  const confirmedCount = useMemo(() => entries.filter(e => e.ownerConfirmed ?? e.OwnerConfirmed).length, [entries]);
   const wins = pastEntries.filter(e => (e.finishPosition ?? e.FinishPosition) === 1).length;
   const winRate = entries.length > 0 ? Math.round((wins / entries.length) * 100) : 0;
 
@@ -46,7 +44,7 @@ function OwnerDashboardPage() {
         <header className="od-topbar">
           <div>
             <h1>Chào mừng trở lại, {ownerName}</h1>
-            <p className="od-topbar-sub">{upcomingEntries.length} cuộc đua sắp diễn ra · {pendingCount} chờ xác nhận</p>
+            <p className="od-topbar-sub">{upcomingEntries.length} cuộc đua sắp diễn ra</p>
           </div>
           {canManageHorses && (
             <div className="od-topbar-actions">
@@ -70,7 +68,7 @@ function OwnerDashboardPage() {
             <div className="od-hero-card__content">
               <span className="od-label">Tổng số ngựa</span>
               <strong className="od-hero-value">{horseCount}</strong>
-              <span className="od-trend od-trend--up">{confirmedCount} đã xác nhận tham gia</span>
+              <span className="od-trend od-trend--up">{entries.length} lượt tham gia cuộc đua</span>
             </div>
             <div className="od-hero-card__ring">
               <svg width="80" height="80" viewBox="0 0 80 80">
@@ -96,7 +94,7 @@ function OwnerDashboardPage() {
             <div className="od-hero-card__content">
               <span className="od-label">Cuộc đua sắp tới</span>
               <strong className="od-hero-value">{upcomingEntries.length}</strong>
-              <span className="od-trend">{pendingCount} chưa xác nhận</span>
+              <span className="od-trend">{Math.round((upcomingEntries.length / (entries.length || 1)) * 100)}% tổng số</span>
             </div>
           </div>
           <div className="od-hero-card">
@@ -164,13 +162,12 @@ function OwnerDashboardPage() {
                   {upcomingEntries.slice(0, 5).map(entry => {
                     const hName = getEntryField(entry, "horseName", "HorseName");
                     const rName = getEntryField(entry, "raceName", "RaceName");
-                    const confirmed = getEntryField(entry, "ownerConfirmed", "OwnerConfirmed");
                     return (
                       <div key={getEntryField(entry, "entryId", "EntryId")} className="od-feed-item">
-                        <div className={`od-feed-dot ${confirmed ? "od-feed-dot--green" : "od-feed-dot--amber"}`} />
+                        <div className="od-feed-dot od-feed-dot--green" />
                         <div className="od-feed-content">
                           <strong>{rName ?? "Cuộc đua"}</strong>
-                          <span>{hName ?? "Ngựa"} · {confirmed ? "Đã xác nhận" : "Chờ xác nhận"}</span>
+                          <span>{hName ?? "Ngựa"}</span>
                         </div>
                       </div>
                     );
@@ -256,14 +253,14 @@ function OwnerDashboardPage() {
                 <div className="od-feed">
                   {entries.slice(0, 6).map(entry => {
                     const hName = getEntryField(entry, "horseName", "HorseName");
-                    const confirmed = getEntryField(entry, "ownerConfirmed", "OwnerConfirmed");
+                    const rName = getEntryField(entry, "raceName", "RaceName");
                     const pos = getEntryField(entry, "finishPosition", "FinishPosition");
                     return (
                       <div key={getEntryField(entry, "entryId", "EntryId")} className="od-feed-item">
-                        <div className={`od-feed-dot ${pos === 1 ? "od-feed-dot--gold" : confirmed ? "od-feed-dot--green" : "od-feed-dot--amber"}`} />
+                        <div className={`od-feed-dot ${pos === 1 ? "od-feed-dot--gold" : "od-feed-dot--gray"}`} />
                         <div className="od-feed-content">
                           <strong>{hName ?? "Ngựa"}</strong>
-                          <span>{confirmed ? "Đã xác nhận" : "Chờ xác nhận"}{pos != null ? ` · #${pos}` : ""}</span>
+                          <span>{rName ?? "Cuộc đua"}{pos != null ? ` · #${pos}` : ""}</span>
                         </div>
                       </div>
                     );
@@ -303,7 +300,7 @@ function OwnerDashboardPage() {
                     <div className="od-timeline-line" />
                   </div>
                   <div className="od-timeline-content">
-                    <span className="od-muted" style={{textAlign:"left",padding:0}}>{upcomingEntries.length} cuộc đua · {pendingCount} chờ xác nhận</span>
+                    <span className="od-muted" style={{textAlign:"left",padding:0}}>{upcomingEntries.length} cuộc đua sắp diễn ra</span>
                   </div>
                 </div>
                 <div className="od-timeline-item">

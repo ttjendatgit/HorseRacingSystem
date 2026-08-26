@@ -21,6 +21,7 @@ public class RefereesController : ControllerBase
     private readonly IRefereeAssignmentRepository _assignmentRepo;
     private readonly IRaceEntryRepository _entryRepo;
     private readonly ILiveResultService _liveResultService;
+    private readonly IRaceManagementService _raceManagement;
     private readonly IUnitOfWork _unitOfWork;
 
     public RefereesController(
@@ -29,6 +30,7 @@ public class RefereesController : ControllerBase
         IRefereeAssignmentRepository assignmentRepo,
         IRaceEntryRepository entryRepo,
         ILiveResultService liveResultService,
+        IRaceManagementService raceManagement,
         IUnitOfWork unitOfWork)
     {
         _refereeService = refereeService;
@@ -36,6 +38,7 @@ public class RefereesController : ControllerBase
         _assignmentRepo = assignmentRepo;
         _entryRepo = entryRepo;
         _liveResultService = liveResultService;
+        _raceManagement = raceManagement;
         _unitOfWork = unitOfWork;
     }
 
@@ -200,8 +203,38 @@ public class RefereesController : ControllerBase
             JockeyName = e.Jockey?.User?.FullName,
             JockeyWinRate = e.Jockey?.WinRate ?? 0,
             Odds = e.Odds,
-            Status = e.Status.ToString()
+            Status = e.Status.ToString(),
+            // GATE-V1: gate assignment is public race-schedule info (like Odds above), not sensitive —
+            // exposed on this existing shared read endpoint rather than a new Referee-only one.
+            GateNumber = e.GateNumber
         }));
+    }
+
+    // ── GATE-V1: Referee-only starting gate assignment ──
+
+    [HttpPut("race/{raceId:guid}/entries/{entryId:guid}/gate")]
+    [Authorize(Roles = "Referee")]
+    public async Task<ActionResult> AssignGateNumber(Guid raceId, Guid entryId, [FromBody] AssignGateNumberRequest r)
+    {
+        var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (uid is null || !Guid.TryParse(uid, out var userId))
+            return Unauthorized(new { message = "Token không hợp lệ" });
+
+        var referee = await _refereeRepo.GetByUserIdAsync(userId);
+        if (referee is null)
+            return NotFound(new { message = "Không tìm thấy hồ sơ trọng tài" });
+
+        // Any Confirmed Referee assigned to this exact Race may manage its gates — merely having
+        // an assignment record (Assigned/Cancelled/Completed) is not enough, and a Confirmed
+        // assignment to a DIFFERENT Race must not authorize this one.
+        var raceAssignments = await _assignmentRepo.GetByRaceAsync(raceId);
+        var isConfirmedForThisRace = raceAssignments.Any(a =>
+            a.RefereeId == referee.Id && a.Status == RefereeAssignmentStatus.Confirmed);
+        if (!isConfirmedForThisRace)
+            return Forbid();
+
+        var result = await _raceManagement.AssignGateNumberAsync(raceId, entryId, r.GateNumber);
+        return StatusCode(result.StatusCode, result.Result);
     }
 
     [HttpPost("race/{raceId:guid}/submit-result")]

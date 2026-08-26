@@ -17,11 +17,14 @@ public class TournamentsController : ControllerBase
 {
     private readonly ITournamentService _tournamentService;
     private readonly IRoundService _roundService;
+    private readonly IRaceManagementService _raceManagementService;
 
-    public TournamentsController(ITournamentService tournamentService, IRoundService roundService)
+    public TournamentsController(
+        ITournamentService tournamentService, IRoundService roundService, IRaceManagementService raceManagementService)
     {
         _tournamentService = tournamentService;
         _roundService = roundService;
+        _raceManagementService = raceManagementService;
     }
 
     /// <summary>
@@ -181,6 +184,16 @@ public class TournamentsController : ControllerBase
     public async Task<ActionResult> DeleteRound(Guid roundId)
     {
         var result = await _roundService.DeleteRoundAsync(roundId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
+    // Q1: Qualification — Admin-triggered generation of Round N+1 RaceEntries from Round N's
+    // Official rankings. Accepts only the current Round's identity — no Horse IDs, rankings, or
+    // target assignments from the client; everything is derived server-side.
+    [HttpPost("rounds/{roundId:guid}/generate-next")]
+    public async Task<ActionResult> GenerateNextRoundEntries(Guid roundId)
+    {
+        var result = await _raceManagementService.GenerateNextRoundEntriesAsync(roundId);
         return StatusCode(result.StatusCode, result.Result);
     }
 }

@@ -245,7 +245,7 @@ public class Phase3ContractTests
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
             Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
-            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1), MaxRounds = 2
         })).Result.Data!.Id;
 
         await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
@@ -269,7 +269,7 @@ public class Phase3ContractTests
         var tournamentId = (await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
         {
             Name = "T", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(5),
-            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1)
+            MinParticipants = 3, MaxParticipants = 20, RegistrationDeadline = DateTime.UtcNow.AddDays(-1), MaxRounds = 3
         })).Result.Data!.Id;
 
         // RoundNumber == 3 with no Round 2 ever created for this tournament.
@@ -362,6 +362,18 @@ public class Phase3ContractTests
 
     // ── Race ────────────────────────────────────────────────────────────
 
+    /// <summary>R1a: CreateReadyToStartRaceAsync now leaves the Tournament Ongoing (so StartRace
+    /// tests work out of the box), but CreateRaceAsync/UpdateRaceAsync both still require Draft —
+    /// tests below that only need a start-ready Race's scaffolding, not an actually start-ready
+    /// Tournament, temporarily revert the status before calling either.</summary>
+    private static async Task RevertTournamentToDraftAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
+    {
+        var tournament = await f.Db.Tournaments.SingleAsync(t => t.Id == tournamentId);
+        tournament.Status = TournamentStatus.Draft;
+        tournament.IsActive = false;
+        await f.Db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Race_QualificationSlots_RoundTripsThroughCreateAndUpdate()
     {
@@ -370,6 +382,8 @@ public class Phase3ContractTests
         var race = await f.RaceRepo.GetByIdAsync(seeded.Id);
         var tournamentId = race!.TournamentId;
         var roundId = race.RoundId;
+
+        await RevertTournamentToDraftAsync(f, tournamentId);
 
         var create = await f.RaceManagement.CreateRaceAsync(new CreateRaceRequest
         {
@@ -408,6 +422,8 @@ public class Phase3ContractTests
         await f.Db.SaveChangesAsync();
 
         var seeded = await f.CreateReadyToStartRaceAsync();
+        var seededRace = await f.RaceRepo.GetByIdAsync(seeded.Id);
+        await RevertTournamentToDraftAsync(f, seededRace!.TournamentId);
         await f.RaceManagement.UpdateRaceAsync(seeded.Id, new UpdateRaceRequest { TrackId = track.Id });
 
         var details = await f.RaceManagement.GetRaceDetailsAsync(seeded.Id);
@@ -423,6 +439,8 @@ public class Phase3ContractTests
         await f.Db.SaveChangesAsync();
 
         var seeded = await f.CreateReadyToStartRaceAsync();
+        var seededRace = await f.RaceRepo.GetByIdAsync(seeded.Id);
+        await RevertTournamentToDraftAsync(f, seededRace!.TournamentId);
         await f.RaceManagement.UpdateRaceAsync(seeded.Id, new UpdateRaceRequest { TrackId = track.Id, QualificationSlots = 2 });
 
         var list = await f.RaceSvc.GetRacesAsync();
@@ -451,7 +469,7 @@ public class Phase3ContractTests
         await f.RaceManagement.CloseRegistrationAsync(seeded.Id);
         await f.RaceManagement.StartRaceAsync(seeded.Id);
         await f.RaceManagement.EndRaceAsync(seeded.Id);
-        await f.LiveResult.UpdateRaceResultAsync(seeded.Id, new RaceResultRequest { WinningHorseId = seeded.WinnerHorseId });
+        await f.LiveResult.UpdateRaceResultAsync(seeded.Id, RaceLifecycleTests.WinnerLoserRanking(seeded.WinnerHorseId, seeded.LoserHorseId));
 
         var getResult = await f.RaceSvc.GetRaceAsync(seeded.Id);
         var dto = Assert.IsType<RaceDetailResponse>(getResult.Result.Data);

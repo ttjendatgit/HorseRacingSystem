@@ -29,6 +29,8 @@ public class AdminService : IAdminService
     private readonly IRaceEntryRepository _entryRepo;
     private readonly IRaceReportRepository _reportRepo;
     private readonly IViolationRecordRepository _violationRepo;
+    private readonly IProtestRepository _protestRepo;
+    private readonly IRaceComplaintRepository _raceComplaintRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public AdminService(
@@ -47,6 +49,8 @@ public class AdminService : IAdminService
         IRaceEntryRepository entryRepo,
         IRaceReportRepository reportRepo,
         IViolationRecordRepository violationRepo,
+        IProtestRepository protestRepo,
+        IRaceComplaintRepository raceComplaintRepo,
         IUnitOfWork unitOfWork)
     {
         _userRepo = userRepo;
@@ -64,6 +68,8 @@ public class AdminService : IAdminService
         _entryRepo = entryRepo;
         _reportRepo = reportRepo;
         _violationRepo = violationRepo;
+        _protestRepo = protestRepo;
+        _raceComplaintRepo = raceComplaintRepo;
         _unitOfWork = unitOfWork;
     }
 
@@ -478,17 +484,26 @@ public class AdminService : IAdminService
         }
     }
 
-    public async Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string reason)
+    public async Task<ServiceResult<bool>> RejectJockeyAsync(Guid jockeyId, string? reason)
     {
         try
         {
+            // J-ADMIN-REVIEW: a Jockey rejection must always carry a real reason — mirrors the
+            // existing Horse rejection rule (UpdateOwnerHorseStatusAsync above). Previously the
+            // controller silently substituted "Không có lý do" for a blank reason instead of
+            // rejecting the request; enforced here now so it can't be bypassed by any caller.
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return ServiceResult<bool>.Fail(400, "Vui lòng nhập lý do từ chối hồ sơ kỵ sĩ.");
+            }
+
             var jockey = await _jockeyRepo.GetByIdAsync(jockeyId);
             if (jockey == null)
             {
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy kỵ sĩ");
             }
             jockey.ApprovalStatus = ApprovalStatus.Rejected;
-            jockey.ApprovalNote = reason;
+            jockey.ApprovalNote = reason.Trim();
             await _jockeyRepo.UpdateAsync(jockey);
             await _unitOfWork.SaveChangesAsync();
             return ServiceResult<bool>.Ok(true);
@@ -496,6 +511,46 @@ public class AdminService : IAdminService
         catch (Exception ex)
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi từ chối kỵ sĩ: {ex.Message}");
+        }
+    }
+
+    // J-ADMIN-REVIEW: full verification detail for the Admin review modal — Admin-only (class-level
+    // [Authorize(Roles = "Admin")] on AdminController), distinct from the public/Owner-facing
+    // JockeyListResponse which never exposed Phone/Address/DateOfBirth/Height/Weight/IdCardNumber/
+    // LicenseFile/ApprovalNote/CreatedAt.
+    public async Task<ServiceResult<JockeyAdminDetailResponse>> GetJockeyDetailAsync(Guid jockeyId)
+    {
+        try
+        {
+            var jockey = await _jockeyRepo.GetByIdAsync(jockeyId);
+            if (jockey == null)
+            {
+                return ServiceResult<JockeyAdminDetailResponse>.Fail(404, "Không tìm thấy kỵ sĩ");
+            }
+
+            return ServiceResult<JockeyAdminDetailResponse>.Ok(new JockeyAdminDetailResponse
+            {
+                Id = jockey.Id,
+                UserId = jockey.UserId,
+                FullName = jockey.User?.FullName ?? string.Empty,
+                Email = jockey.User?.Email ?? string.Empty,
+                IsActive = jockey.User?.IsActive ?? false,
+                Phone = jockey.Phone,
+                Address = jockey.Address,
+                DateOfBirth = jockey.DateOfBirth,
+                Height = jockey.Height,
+                Weight = jockey.Weight,
+                IdCardNumber = jockey.IdCardNumber,
+                LicenseNumber = jockey.LicenseNumber,
+                LicenseFile = jockey.LicenseFile,
+                ApprovalStatus = jockey.ApprovalStatus.ToString(),
+                ApprovalNote = jockey.ApprovalNote,
+                CreatedAt = jockey.CreatedAt,
+            });
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<JockeyAdminDetailResponse>.Fail(500, $"Lỗi truy xuất hồ sơ kỵ sĩ: {ex.Message}");
         }
     }
 
@@ -571,12 +626,60 @@ public class AdminService : IAdminService
                 return ServiceResult<bool>.Fail(400, "Kết quả không ở trạng thái chờ duyệt (Provisional)");
 
             if (!string.IsNullOrWhiteSpace(raceResult.RejectedReason))
+            {
+                if (raceResult.RejectedReason == RaceResultCorrectionMessages.UpheldProtestRequiresCorrection)
+                    return ServiceResult<bool>.Fail(400, RaceResultCorrectionMessages.UpheldProtestApprovalBlocked);
+                if (raceResult.RejectedReason == RaceResultCorrectionMessages.UpheldRaceComplaintRequiresCorrection)
+                    return ServiceResult<bool>.Fail(400, RaceResultCorrectionMessages.UpheldRaceComplaintApprovalBlocked);
+
                 return ServiceResult<bool>.Fail(400, "Kết quả này đã bị từ chối trước đó. Trọng tài phải nộp lại kết quả trước khi có thể duyệt.");
+            }
 
             // Check if there is at least one referee report (V1.1 mandatory-report gate)
             var hasReport = await _reportRepo.GetByRaceAsync(raceId) != null;
             if (!hasReport)
                 return ServiceResult<bool>.Fail(400, "Chưa có báo cáo từ trọng tài. Trọng tài phải nộp báo cáo trước khi duyệt kết quả.");
+
+            // R0.1: Result must not become Official while unresolved race
+            // issues still exist — Official Rankings are the future source
+            // for Betting/Q1/Prize, so any legitimate correction must happen
+            // via a Provisional resubmit BEFORE approval, not after.
+            // Unresolved Violation: current schema has no Status field —
+            // resolution is inferred from Penalty being non-blank (matches
+            // AdminService.ResolveViolationAsync, the only writer of Penalty).
+            var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
+            if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.Penalty)))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
+
+            // Unresolved Protest: Pending/UnderReview are open; Upheld/
+            // Rejected/Withdrawn are terminal and never block approval.
+            var protestsForRace = await _protestRepo.GetByRaceAsync(raceId);
+            if (protestsForRace.Any(p => p.Status == ProtestStatus.Pending || p.Status == ProtestStatus.UnderReview))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn khiếu nại chưa được giải quyết.");
+
+            var complaintsForRace = await _raceComplaintRepo.GetByRaceAsync(raceId);
+            if (complaintsForRace.Any(c =>
+                    c.Status == RaceComplaintStatus.Pending ||
+                    c.Status == RaceComplaintStatus.AwaitingRefereeResponse ||
+                    c.Status == RaceComplaintStatus.UnderReview))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn khiếu nại cuộc đua chưa được giải quyết.");
+
+            // R0: defensively re-parse and re-validate the stored ranking
+            // before committing anything to Official — a stale/malformed
+            // RankingsJson (e.g. entries changed since Provisional submit)
+            // must be rejected outright, never partially applied to
+            // RaceEntry.FinishPosition.
+            var entries = await _entryRepo.GetByRaceAsync(raceId);
+            List<RaceResultRankingItemRequest> ranking;
+            try
+            {
+                ranking = RaceResultRankingValidator.ParseAndValidate(raceResult.RankingsJson, raceResult.WinningHorseId, entries);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ServiceResult<bool>.Fail(400, ex.Message);
+            }
+            var positionByHorseId = ranking.ToDictionary(r => r.HorseId, r => r.Position);
 
             // Wrap in transaction: if approval/settlement fails, everything rolls back
             using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
@@ -588,13 +691,14 @@ public class AdminService : IAdminService
                 await _raceResultRepo.UpdateAsync(raceResult);
 
                 // Ghi kết quả vào entry + cập nhật thành tích ngựa/kỵ sĩ
-                var entries = await _entryRepo.GetByRaceAsync(raceId);
                 foreach (var entry in entries)
                 {
-                    if (entry.HorseId == raceResult.WinningHorseId)
-                    {
-                        entry.FinishPosition = 1;
-                    }
+                    // Clear any stale value first (old/demo data, or a prior
+                    // approval attempt) so it can never survive into a newly
+                    // Official ranking — then set from the validated ranking.
+                    entry.FinishPosition = positionByHorseId.TryGetValue(entry.HorseId, out var position)
+                        ? position
+                        : null;
 
                     var horse = await _horseRepo.GetByIdAsync(entry.HorseId);
                     if (horse != null)
@@ -728,6 +832,13 @@ public class AdminService : IAdminService
 
             if (!string.IsNullOrWhiteSpace(violation.Penalty))
                 return ServiceResult<bool>.Fail(400, "Vi phạm này đã được xử lý trước đó.");
+
+            // R0.1: post-Official immutability — resolving a Violation must
+            // not be able to imply the ranking should change once the
+            // Result is already Official.
+            var raceForViolation = await _raceRepo.GetByIdAsync(violation.RaceId);
+            if (raceForViolation?.Result?.Status == RaceResultStatus.Official)
+                return ServiceResult<bool>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi xử lý vi phạm.");
 
             violation.Penalty = penalty;
             await _violationRepo.UpdateAsync(violation);

@@ -9,7 +9,9 @@ import {
   rejectTournamentRegistration,
 } from "../../../services/adminApi";
 import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
-import { getTournamentRegistrationState } from "../../../utils/tournamentRegistration";
+import { canEditTournamentStructure, getTournamentRegistrationState, isFinalRound } from "../../../utils/tournamentRegistration";
+import { buildRankingDisplayList } from "../../../utils/raceResultDisplay";
+import RaceRankingPanel from "../../../components/RaceRankingPanel";
 
 // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
 // RegistrationClosed are transitional compatibility values and display as neutral pre-race state.
@@ -57,7 +59,7 @@ function OddsEditor({ raceId, horseId, odds, setMessage }) {
 export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces, getTournamentRounds }) {
   const tId = t.id??t.Id;
   const status = t.statusName??t.StatusName;
-  const isDraft = status === "Draft";
+  const isDraft = canEditTournamentStructure(status);
   const navigate = useNavigate();
   const [races, setRaces] = useState([]);
   const [rounds, setRounds] = useState([]);
@@ -119,15 +121,19 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
   const isCapacityFull = typeof maxParticipants === "number" && maxParticipants > 0 && regSummary.approvedCount >= maxParticipants;
 
   return (
-    <><div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại</button></div>
+    <><div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại danh sách giải đấu</button></div>
     <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div><h2 style={{margin:"0 0 4px",fontSize:24,color:"var(--hr-paper)",fontFamily:"var(--font-display)"}}>{t.name??t.Name}</h2>
           <p style={{margin:0,fontSize:13,color:"var(--hr-muted)"}}>{(t.venue??t.Venue)?"📍 "+(t.venue??t.Venue)+" · ":""}📅 {fmtDateTime2(t.startDate??t.StartDate)} → {fmtDateTime2(t.endDate??t.EndDate)}</p>
           <p style={{margin:"2px 0 0",fontSize:13,color:"var(--hr-muted)"}}>⏳ Hạn đăng ký: {fmtDateTime2(regDeadlineRaw) || "Chưa thiết lập"} · {registrationState}</p></div>
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button className="ghost-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>navigate("/admin/prizes")}>Xem giải thưởng</button>
+          {/* CreateRoundAsync/CreateRaceAsync (BE/Services/TournamentAndRoundService.cs,
+              RaceManagementService.cs) both reject with 400 once the Tournament leaves Draft —
+              both structural-creation entry points must be gated the same way. */}
           {isDraft && <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>navigate(`/admin/rounds?tournamentId=${tId}`)}>+ Tạo vòng đấu</button>}
-          <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>setShowRaceForm(true)}>+ Tạo cuộc đua</button>
+          {isDraft && <button className="primary-button" style={{padding:"6px 14px",fontSize:13}} onClick={()=>setShowRaceForm(true)}>+ Tạo cuộc đua</button>}
         </div>
       </div>
     </div>
@@ -187,10 +193,9 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
             const advanceCount = r.advanceCount ?? r.AdvanceCount;
             const raceCount = r.raceCount ?? r.RaceCount ?? 0;
             const scheduledStart = r.scheduledStartDate ?? r.ScheduledStartDate;
-            // Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount alone —
-            // Draft data may temporarily hold AdvanceCount=0 on a non-final round.
-            const maxRounds = t.maxRounds ?? t.MaxRounds;
-            const isFinal = maxRounds != null && roundNumber === maxRounds;
+            // V0/V0.1: Final is defined by RoundNumber === Tournament.MaxRounds, not AdvanceCount
+            // alone — Draft data may temporarily hold AdvanceCount=0 on a non-final round.
+            const isFinal = isFinalRound(r, t);
             return (
               <div key={rid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,padding:"10px 14px",borderRadius:10,border:"1px solid var(--hr-border-soft)",background:"var(--hr-surface-2)"}}>
                 <div>
@@ -216,7 +221,6 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
     : <div style={{display:"grid",gap:10}}>{races.map((race)=>{
       const id=race.id??race.Id;const st=(race.status??race.Status??"").toString().toLowerCase();
       const rst=(race.resultStatus??race.ResultStatus??"").toString().toLowerCase();
-      const rejectedReason=race.rejectedReason??race.RejectedReason;
       const exp=expandedRaceId===id;const det=raceDetailData[id]||{};
       const toggleExpand=async()=>{
         if(exp){setExpandedRaceId(null);return;}setExpandedRaceId(id);
@@ -248,10 +252,17 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
             {["scheduled","registrationopen","registrationclosed"].includes(st)&&<button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid transparent",background:"var(--hr-gold)",color:"var(--hr-bg-deep)",cursor:det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")?"pointer":"not-allowed",fontWeight:700,opacity:det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")?1:0.5}} disabled={!det.refAssignments?.some(r=>(r.status||r.Status)==="Confirmed")} onClick={async(e)=>{e.stopPropagation();try{await request(`/api/races/management/${id}/start`,{method:"POST"});setMessage("Đã bắt đầu!");viewTournament()}catch(err){setMessage(err.message)}}}>Bắt đầu</button>}
             {st==="inprogress"&&<button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Kết thúc cuộc đua? Thao tác này đánh dấu cuộc đua đã diễn ra xong — kết quả sẽ được trọng tài nộp riêng sau đó."))return;try{await request(`/api/races/management/${id}/end`,{method:"POST"});setMessage("Đã kết thúc cuộc đua. Chờ trọng tài nộp kết quả.");viewTournament()}catch(err){setMessage(err.message)}}}>Kết thúc cuộc đua</button>}
             {st==="finished"&&!rst&&<span style={{fontSize:11,color:"var(--hr-muted)"}}>Đã kết thúc — chờ trọng tài nộp kết quả</span>}
-            {st==="finished"&&rst==="provisional"&&<><button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Duyệt kết quả này thành chính thức (Official)?"))return;try{await request(`/api/admin/races/${id}/approve-result`,{method:"POST"});setMessage("Đã duyệt kết quả chính thức!");viewTournament()}catch(err){setMessage(err.message)}}}>Duyệt KQ</button><button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"rgba(201,105,90,0.16)",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();const reason=window.prompt("Lý do từ chối:");if(!reason)return;try{await request(`/api/admin/races/${id}/reject-result`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});setMessage("Đã từ chối kết quả tạm thời. Trọng tài cần nộp lại.");viewTournament()}catch(err){setMessage(err.message)}}}>Từ chối</button></>}
+            {/* RESULT-APPROVAL-REVIEW-UX: Duyệt KQ/Từ chối moved into the expanded panel below,
+                directly under the full provisional ranking — Admin must open the race to review
+                every position before approving, not just see a button in this always-visible row. */}
+            {st==="finished"&&rst==="provisional"&&<span style={{fontSize:11,color:"var(--hr-warning)",fontWeight:600}}>Chờ duyệt — xem bảng xếp hạng bên dưới</span>}
             {st==="finished"&&rst==="official"&&<span style={{fontSize:11,color:"var(--hr-success)",fontWeight:600}}>✓ Kết quả chính thức — dự đoán đã thanh toán</span>}
-            {rejectedReason&&rst==="provisional"&&<span style={{fontSize:10,color:"var(--hr-danger)"}}>Đã bị từ chối trước đó: {rejectedReason}</span>}
-            <button className="ghost-button" style={{padding:"4px 10px",fontSize:11}} onClick={async(e)=>{e.stopPropagation();try{const[d,entries,refs]=await Promise.all([request(`/api/races/${id}`),request(`/api/referees/race/${id}/entries`),request(`/api/referees/race/${id}/assignments`)]);const r=d?.data??d;r._selectedHorseIds=(Array.isArray(entries?.data??entries)?(entries?.data??entries):[]).map(e=>e.horseId||e.HorseId);r._selectedRefereeIds=(Array.isArray(refs?.data??refs)?(refs?.data??refs):[]).map(r=>r.refereeId||r.RefereeId);setEditRaceData(r);}catch(err){setMessage(err.message)}}}>Sửa</button>
+            {/* A6/B8: structural Race edit ("Sửa cuộc đua") only works while the parent Tournament
+                is Draft (RaceManagementService.UpdateRaceAsync rejects it otherwise) — hiding it
+                elsewhere avoids the misleading "Sửa" that manual testing flagged as confusable
+                with result correction, and the explicit "cuộc đua" wording removes the remaining
+                ambiguity when it IS legitimately shown. */}
+            {isDraft && <button className="ghost-button" style={{padding:"4px 10px",fontSize:11}} onClick={async(e)=>{e.stopPropagation();try{const[d,entries,refs]=await Promise.all([request(`/api/races/${id}`),request(`/api/referees/race/${id}/entries`),request(`/api/referees/race/${id}/assignments`)]);const r=d?.data??d;r._selectedHorseIds=(Array.isArray(entries?.data??entries)?(entries?.data??entries):[]).map(e=>e.horseId||e.HorseId);r._selectedRefereeIds=(Array.isArray(refs?.data??refs)?(refs?.data??refs):[]).map(r=>r.refereeId||r.RefereeId);setEditRaceData(r);}catch(err){setMessage(err.message)}}}>Sửa cuộc đua</button>}
             <span style={{fontSize:11,color:"var(--hr-muted)"}}>{exp?"▲":"▼"}</span>
           </div>
         </div>
@@ -284,14 +295,27 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
           {st==="finished"&&det.result&&(()=>{
             const dRst=(det.result.resultStatus||det.result.ResultStatus||"").toLowerCase();
             const isOfficial=dRst==="official";
-            const wid=det.result.winningHorseId||det.result.WinningHorseId;
-            const we=det.entries.find(e=>(e.horseId||e.HorseId)===wid);
-            return(<div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:isOfficial?"rgba(112,139,104,0.1)":"rgba(185,138,69,0.1)",border:`1px solid ${isOfficial?"rgba(112,139,104,0.25)":"rgba(185,138,69,0.3)"}`,fontSize:12}}>
-              <strong style={{color:isOfficial?"var(--hr-success)":"var(--hr-warning)"}}>{isOfficial?"Kết quả chính thức:":"Kết quả tạm thời (chưa duyệt):"}</strong>{" "}
-              <strong style={{color:"var(--hr-paper)"}}>{we?.horseName||we?.HorseName||"Chưa xác định"}</strong>
-              {we?.jockeyName||we?.JockeyName?<span style={{color:"var(--hr-muted)"}}> — {we?.jockeyName||we?.JockeyName}</span>:null}
-              {(det.result.notes||det.result.Notes)?<div style={{color:"var(--hr-muted)",marginTop:2}}>{det.result.notes||det.result.Notes}</div>:null}
-            </div>)
+            const isProvisional=dRst==="provisional";
+            // RESULT-APPROVAL-REVIEW-UX: full ranking (buildRankingDisplayList), built the same
+            // way regardless of Provisional/Official, never gated on isOfficial.
+            const rankings=det.result.rankings||det.result.Rankings||[];
+            const rankingRows=buildRankingDisplayList(rankings, det.entries);
+            const rejectedReason=det.result.rejectedReason||det.result.RejectedReason;
+            return (
+              <RaceRankingPanel
+                title={isOfficial?"Kết quả chính thức":"Kết quả tạm thời"}
+                rows={rankingRows}
+                isOfficial={isOfficial}
+                rejectedReason={isProvisional?rejectedReason:null}
+                notes={det.result.notes||det.result.Notes}
+                actions={isProvisional?(
+                  <>
+                    <button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"rgba(201,105,90,0.16)",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();const reason=window.prompt("Lý do từ chối:");if(!reason)return;try{await request(`/api/admin/races/${id}/reject-result`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});setMessage("Đã từ chối kết quả tạm thời. Trọng tài cần nộp lại.");viewTournament()}catch(err){setMessage(err.message)}}}>Từ chối</button>
+                    <button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Duyệt kết quả này thành chính thức (Official)?"))return;try{await request(`/api/admin/races/${id}/approve-result`,{method:"POST"});setMessage("Đã duyệt kết quả chính thức!");viewTournament()}catch(err){setMessage(err.message)}}}>Duyệt KQ</button>
+                  </>
+                ):null}
+              />
+            );
           })()}
           {det.report&&<div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.25)",fontSize:12}}><strong style={{color:"#c4b5fd"}}>📋 Báo cáo trọng tài</strong><p style={{margin:"4px 0 0",color:"var(--hr-text)"}}>{det.report.details||det.report.Details||"—"}</p>{(det.report.incidents||det.report.Incidents)&&<p style={{margin:"4px 0 0",color:"var(--hr-muted)"}}>Sự cố: {det.report.incidents||det.report.Incidents}</p>}<span style={{display:"block",marginTop:4,fontSize:10,color:"var(--hr-muted)"}}>{det.report.refereeName||det.report.RefereeName||"Trọng tài"}{det.report.completedAt||det.report.CompletedAt?` · ${new Date(det.report.completedAt||det.report.CompletedAt).toLocaleString("vi-VN")}`:""}</span></div>}
         </div>}

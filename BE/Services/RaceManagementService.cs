@@ -416,15 +416,19 @@ public class RaceManagementService : IRaceManagementService
             }
 
             // J1: Admin assigns only the horse; jockey selection stays in the owner invitation flow.
+            // O1: Owner consent already happened at Tournament registration (Owner registered ->
+            // Admin approved the TournamentHorseRegistration) — this Admin assignment is the
+            // authoritative RaceEntry creation path, so OwnerConfirmed is true immediately; there is
+            // no second manual Owner "Xác nhận tham gia cuộc đua" step. JockeyConfirmed stays false
+            // until Owner Final Confirm (J3) establishes the official Jockey.
             var entry = new RaceEntry
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
                 HorseId = request.HorseId,
                 JockeyId = null,
-                // Admin-created entries wait for the owner/jockey invitation flow.
                 Status = RegistrationStatus.Approved,
-                OwnerConfirmed = false,
+                OwnerConfirmed = true,
                 JockeyConfirmed = false
             };
 
@@ -520,14 +524,16 @@ public class RaceManagementService : IRaceManagementService
                     continue;
                 }
 
+                // O1: same authoritative-assignment rule as the single-assign path above —
+                // OwnerConfirmed = true immediately, no second manual Owner confirmation step.
                 var entry = new RaceEntry
                 {
                     Id = Guid.NewGuid(),
                     RaceId = raceId,
                     HorseId = horseId,
-                    // Admin-created entries wait for the owner/jockey invitation flow.
+                    JockeyId = null,
                     Status = RegistrationStatus.Approved,
-                    OwnerConfirmed = false,
+                    OwnerConfirmed = true,
                     JockeyConfirmed = false
                 };
                 await _entryRepo.AddAsync(entry);
@@ -680,6 +686,11 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, $"Không thể bắt đầu cuộc đua với trạng thái '{race.Status}'. Cuộc đua phải ở trạng thái chuẩn bị trước khi bắt đầu.");
             }
 
+            if (race.Tournament?.Status != TournamentStatus.Ongoing)
+            {
+                return ServiceResult<bool>.Fail(409, "Giải đấu phải ở trạng thái đang diễn ra trước khi bắt đầu cuộc đua.");
+            }
+
             var entries = await _entryRepo.GetByRaceAsync(raceId);
             if (entries.Count == 0)
             {
@@ -697,6 +708,10 @@ public class RaceManagementService : IRaceManagementService
             if (!entryValidation.Result.Success)
                 return ServiceResult<bool>.Fail(entryValidation.StatusCode, entryValidation.Result.Message ?? "Entry chưa hợp lệ");
 
+            var gateValidation = ValidateGateReadinessForStart(entries, race.Track?.Capacity);
+            if (!gateValidation.Result.Success)
+                return ServiceResult<bool>.Fail(gateValidation.StatusCode, gateValidation.Result.Message ?? "Cổng xuất phát chưa hợp lệ");
+
             race.Status = RaceStatus.InProgress;
             race.ActualStartTime = DateTime.UtcNow;
             race.UpdatedAt = DateTime.UtcNow;
@@ -709,6 +724,104 @@ public class RaceManagementService : IRaceManagementService
         {
             return ServiceResult<bool>.Fail(500, "Không thể bắt đầu cuộc đua. Vui lòng thử lại.");
         }
+    }
+
+    /// <summary>
+    /// GATE-V1: StartRace readiness for Referee-assigned starting gates — kept as its own method,
+    /// separate from RaceEntryService.ValidateRaceEntriesForStartAsync (R1a), so R1a's existing
+    /// per-entry reasons/semantics are never touched. Uses the same participation filter as R1a
+    /// (Status != Rejected &amp;&amp; ScratchedAt == null) — Rejected/scratched entries never need a
+    /// gate. FINAL CAPACITY CORRECTION: the gate is a physical Track slot, not a Race participant
+    /// slot — the upper bound is Track.Capacity (Publish readiness already guarantees
+    /// Race.MaxParticipants &lt;= Track.Capacity, see TournamentAndRoundService), never
+    /// Race.MaxParticipants. Range/duplicate checks are defensive: the write endpoint and the DB
+    /// unique index should make these unreachable via normal use, but legacy data predating
+    /// GATE-V1 could still violate them, so StartRace re-checks rather than trusting stored state
+    /// blindly. A null/missing Track.Capacity (should be unreachable post-Publish) is treated as
+    /// "no valid gate can be proven in range" and rejects defensively rather than silently passing.
+    /// </summary>
+    private ServiceResult<bool> ValidateGateReadinessForStart(List<RaceEntry> entries, int? trackCapacity)
+    {
+        var participatingEntries = entries
+            .Where(e => e.Status != RegistrationStatus.Rejected && e.ScratchedAt == null)
+            .ToList();
+
+        if (participatingEntries.Any(e => e.GateNumber == null))
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua khi chưa phân đủ cổng xuất phát.");
+
+        if (!trackCapacity.HasValue || participatingEntries.Any(e => e.GateNumber!.Value < 1 || e.GateNumber.Value > trackCapacity.Value))
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua vì có cổng xuất phát không hợp lệ.");
+
+        var duplicateGate = participatingEntries
+            .GroupBy(e => e.GateNumber!.Value)
+            .Any(g => g.Count() > 1);
+        if (duplicateGate)
+            return ServiceResult<bool>.Fail(400, "Không thể bắt đầu cuộc đua vì có cổng xuất phát bị trùng lặp.");
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    /// <summary>
+    /// GATE-V1: assigns/updates the starting gate for one participating RaceEntry. Referee
+    /// identity and Confirmed-assignment-to-this-Race authorization are the caller's
+    /// responsibility (RefereesController) — this method validates only the Race/Entry/gate
+    /// business rules: Race exists and is pre-start, entry exists and belongs to this Race, entry
+    /// is participating (Status != Rejected &amp;&amp; ScratchedAt == null), gate is within
+    /// [1, Track.Capacity], and no other entry in the same Race already holds that gate.
+    /// FINAL CAPACITY CORRECTION: GateNumber represents a physical Track starting gate, not a
+    /// Race participant slot — Track.Capacity (not Race.MaxParticipants) is the correct upper
+    /// bound, since Race.MaxParticipants only caps how many RaceEntries the Race holds, while the
+    /// Track physically has Capacity gates available (Publish readiness already guarantees
+    /// Race.MaxParticipants &lt;= Track.Capacity, so this is never a smaller pool). Gates need not
+    /// be contiguous or match the participant count. Re-submitting an entry's own current gate is
+    /// idempotent and always succeeds.
+    /// </summary>
+    public async Task<ServiceResult<bool>> AssignGateNumberAsync(Guid raceId, Guid entryId, int gateNumber)
+    {
+        var race = await _raceRepo.GetByIdAsync(raceId);
+        if (race == null)
+            return ServiceResult<bool>.Fail(404, "Không tìm thấy cuộc đua");
+
+        var canEditGate =
+            race.Status == RaceStatus.Scheduled ||
+            race.Status == RaceStatus.RegistrationOpen ||
+            race.Status == RaceStatus.RegistrationClosed;
+        if (!canEditGate)
+            return ServiceResult<bool>.Fail(400, $"Không thể chỉnh sửa cổng xuất phát khi cuộc đua đang ở trạng thái '{race.Status}'.");
+
+        var entry = await _entryRepo.GetByIdAsync(entryId);
+        if (entry == null)
+            return ServiceResult<bool>.Fail(404, "Không tìm thấy lượt đăng ký tham gia.");
+
+        if (entry.RaceId != raceId)
+            return ServiceResult<bool>.Fail(400, "Lượt đăng ký này không thuộc cuộc đua đã chọn.");
+
+        var isParticipating = entry.Status != RegistrationStatus.Rejected && entry.ScratchedAt == null;
+        if (!isParticipating)
+            return ServiceResult<bool>.Fail(400, "Không thể gán cổng xuất phát cho lượt đăng ký đã bị từ chối hoặc rút lui.");
+
+        var track = race.Track;
+        if (track == null)
+            return ServiceResult<bool>.Fail(400, "Cuộc đua chưa được gán đường đua (Track), không thể phân cổng xuất phát.");
+        if (!track.Capacity.HasValue || track.Capacity.Value < 1)
+            return ServiceResult<bool>.Fail(400, "Sức chứa (Capacity) của đường đua chưa được thiết lập, không thể phân cổng xuất phát.");
+
+        if (gateNumber < 1 || gateNumber > track.Capacity.Value)
+            return ServiceResult<bool>.Fail(400, $"Cổng xuất phát phải từ 1 đến {track.Capacity.Value}.");
+
+        if (entry.GateNumber != gateNumber)
+        {
+            var raceEntries = await _entryRepo.GetByRaceAsync(raceId);
+            var conflict = raceEntries.Any(e => e.Id != entryId && e.GateNumber == gateNumber);
+            if (conflict)
+                return ServiceResult<bool>.Fail(409, "Cổng xuất phát này đã được sử dụng bởi ngựa khác trong cuộc đua.");
+
+            entry.GateNumber = gateNumber;
+            await _entryRepo.UpdateAsync(entry);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        return ServiceResult<bool>.Ok(true);
     }
 
     /// <summary>
@@ -770,23 +883,12 @@ public class RaceManagementService : IRaceManagementService
                 return ServiceResult<bool>.Fail(400, $"Không thể hủy cuộc đua với trạng thái '{race.Status}'.");
             }
 
-            // Refund all pending predictions
-            var pendingPredictions = await _predictionRepo.GetByRaceAsync(raceId);
-            var refunded = 0;
-            foreach (var p in pendingPredictions.Where(p => p.Status == PredictionStatus.Pending))
-            {
-                try
-                {
-                    await _walletService.AddPointsAsync(p.SpectatorUserId, p.BetAmount, $"refund_{raceId}");
-                    p.Status = PredictionStatus.Lost; // Use Lost as "refunded/cancelled"
-                    p.SettledAt = DateTime.UtcNow;
-                    refunded++;
-                }
-                catch
-                {
-                    // If refund fails, keep prediction as Pending for manual resolution
-                }
-            }
+            // Refund all pending predictions. Shared with the Tournament cancel cascade —
+            // see PredictionRefundHelper. swallowIndividualFailures: true preserves this
+            // method's original behavior of leaving a failed-refund Prediction Pending for
+            // manual resolution instead of blocking the whole Race cancellation.
+            await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                _db, _walletService, new[] { raceId }, "refund", swallowIndividualFailures: true);
 
             race.Status = RaceStatus.Cancelled;
             race.UpdatedAt = DateTime.UtcNow;
@@ -825,6 +927,230 @@ public class RaceManagementService : IRaceManagementService
         catch (Exception ex)
         {
             return ServiceResult<bool>.Fail(500, "Không thể giải phóng ngựa. Vui lòng thử lại.");
+        }
+    }
+
+    /// <summary>
+    /// Q1: Admin-triggered generation of Round N+1 RaceEntries from Round N's Official rankings.
+    /// Round/Race rows are never created here — both must already exist (created before Publish).
+    /// Readiness, qualifier selection, round-robin distribution, capacity, and Jockey carry-forward
+    /// all happen server-side; the caller supplies only the current Round's identity.
+    /// </summary>
+    public async Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId)
+    {
+        try
+        {
+            var currentRound = await _roundRepo.GetByIdAsync(roundId);
+            if (currentRound == null)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(404, "Không tìm thấy vòng đấu");
+
+            var tournament = currentRound.Tournament ?? await _tournamentRepo.GetByIdAsync(currentRound.TournamentId);
+            if (tournament == null)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(404, "Không tìm thấy giải đấu");
+
+            // V0 source of truth: Final is RoundNumber == Tournament.MaxRounds — never AdvanceCount==0.
+            if (currentRound.RoundNumber >= tournament.MaxRounds)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(400,
+                    "Vòng đấu này là Vòng chung kết, không thể tạo vòng tiếp theo.");
+
+            var allRounds = await _roundRepo.GetByTournamentAsync(tournament.Id);
+            var nextRound = allRounds.FirstOrDefault(r => r.RoundNumber == currentRound.RoundNumber + 1);
+            if (nextRound == null)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(404,
+                    "Không tìm thấy vòng đấu tiếp theo. Vòng đấu tiếp theo phải được tạo sẵn trước khi công bố giải đấu.");
+
+            // Deterministic source order: ScheduledAt, then Id.
+            var sourceRaces = (currentRound.Races ?? new List<Race>())
+                .OrderBy(r => r.ScheduledAt).ThenBy(r => r.Id).ToList();
+            if (sourceRaces.Count == 0)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(400, "Vòng đấu hiện tại không có cuộc đua nào.");
+
+            var targetRaces = (nextRound.Races ?? new List<Race>())
+                .OrderBy(r => r.ScheduledAt).ThenBy(r => r.Id).ToList();
+            if (targetRaces.Count == 0)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(400,
+                    "Vòng đấu tiếp theo chưa có cuộc đua nào để nhận ngựa đủ điều kiện.");
+
+            if (!currentRound.AdvanceCount.HasValue)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(409, "Vòng đấu hiện tại chưa thiết lập AdvanceCount.");
+            var expectedAdvance = currentRound.AdvanceCount.Value;
+
+            // ── Readiness + qualifier selection ──
+            // Every source Race must be Finished with an Official result before ANY qualifier is
+            // taken from it — a Cancelled/unfinished/Provisional Race rejects the whole generation
+            // rather than guessing qualifiers from it.
+            var qualifiers = new List<Guid>(); // deterministic flattened order: per Race (ScheduledAt,Id), then FinishPosition ascending
+            foreach (var race in sourceRaces)
+            {
+                if (race.Status == RaceStatus.Cancelled)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\" đã bị hủy — không thể tạo vòng tiếp theo.");
+                if (race.Status != RaceStatus.Finished)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\" chưa kết thúc.");
+
+                var result = await _db.RaceResults.AsNoTracking().FirstOrDefaultAsync(r => r.RaceId == race.Id);
+                if (result == null)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\" chưa có kết quả.");
+                if (result.Status != RaceResultStatus.Official)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Kết quả cuộc đua \"{race.Name}\" chưa ở trạng thái chính thức (Official).");
+
+                var slots = race.QualificationSlots ?? 0;
+                if (slots <= 0)
+                    continue; // this Race contributes no qualifiers — still validated above regardless
+
+                // Q1's qualification authority is the SAME canonical Official ranking R0/Admin
+                // approval trusts — RaceResult.RankingsJson, re-parsed and re-validated against
+                // this Race's CURRENT RaceEntry participants via the shared validator (also used
+                // by AdminService.ApproveRaceResultAsync). RaceEntry.FinishPosition remains a
+                // durable denormalized display/stat field written by that approval, but it is
+                // NEVER the source Q1 selects qualifiers from or writes to.
+                var participants = await _db.RaceEntries.AsNoTracking()
+                    .Where(e => e.RaceId == race.Id)
+                    .ToListAsync();
+
+                List<RaceResultRankingItemRequest> ranking;
+                try
+                {
+                    ranking = RaceResultRankingValidator.ParseAndValidate(result.RankingsJson, result.WinningHorseId, participants);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\": {ex.Message}");
+                }
+
+                if (ranking.Count < slots)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\" không có đủ ngựa trong bảng xếp hạng chính thức để chọn {slots} suất đi tiếp.");
+
+                qualifiers.AddRange(ranking.Take(slots).Select(r => r.HorseId));
+            }
+
+            // Defensive runtime invariant — Publish readiness already validates slot sums, but Q1
+            // re-checks the actual selected count against the Round's own AdvanceCount.
+            if (qualifiers.Count != expectedAdvance)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                    $"Số ngựa đủ điều kiện được chọn ({qualifiers.Count}) không khớp với AdvanceCount của vòng ({expectedAdvance}).");
+
+            // ── Idempotency: reject cleanly if Round N+1 already has ANY RaceEntries, including a
+            // partial/inconsistent prior attempt — never merge/repair, always reject. ──
+            var targetRaceIds = targetRaces.Select(r => r.Id).ToList();
+            var nextRoundAlreadyPopulated = await _db.RaceEntries.AsNoTracking()
+                .AnyAsync(e => targetRaceIds.Contains(e.RaceId));
+            if (nextRoundAlreadyPopulated)
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                    "Vòng đấu tiếp theo đã có ngựa được tạo trước đó — không thể tạo lại.");
+
+            // ── Resolve each qualified Horse's official Tournament-wide Jockey (J3/J3.1) ──
+            // Missing pairing rejects the ENTIRE generation; Q1 never creates a RaceEntry with
+            // JockeyId == null and never re-opens invitation selection.
+            var jockeyByHorse = new Dictionary<Guid, Guid>();
+            foreach (var horseId in qualifiers.Distinct())
+            {
+                var officialAssignment = await _entryRepo.GetOfficialAssignmentForHorseInTournamentAsync(horseId, tournament.Id);
+                if (officialAssignment?.JockeyId == null)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Ngựa đủ điều kiện (Id={horseId}) chưa có kỵ sĩ chính thức cho giải đấu này.");
+                jockeyByHorse[horseId] = officialAssignment.JockeyId.Value;
+            }
+
+            // ── Round-robin distribution across target Races, in deterministic target-Race order ──
+            var assignments = targetRaces.ToDictionary(r => r.Id, _ => new List<Guid>());
+            for (var i = 0; i < qualifiers.Count; i++)
+            {
+                var targetRace = targetRaces[i % targetRaces.Count];
+                assignments[targetRace.Id].Add(qualifiers[i]);
+            }
+
+            // ── Capacity: reject the ENTIRE generation if any target Race can't hold its assigned
+            // qualifiers. Race.MaxParticipants is already Publish-validated to fit Track.Capacity,
+            // so no separate Track query is needed here. ──
+            foreach (var race in targetRaces)
+            {
+                var assignedCount = assignments[race.Id].Count;
+                if (assignedCount > race.MaxParticipants)
+                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                        $"Cuộc đua \"{race.Name}\" không đủ chỗ cho {assignedCount} ngựa đủ điều kiện (tối đa {race.MaxParticipants}).");
+            }
+
+            // ── Insert — single transaction, all-or-nothing. Every prior step was read-only, so
+            // nothing needs rolling back if THIS fails; the transaction's job is to make the insert
+            // of (potentially many) RaceEntries atomic against itself and against a concurrent
+            // duplicate generation attempt (the unique index on RaceEntries(RaceId,HorseId) makes a
+            // racing second attempt fail here with a DbUpdateException instead of double-inserting). ──
+            var newEntries = new List<RaceEntry>();
+            foreach (var race in targetRaces)
+            {
+                foreach (var horseId in assignments[race.Id])
+                {
+                    newEntries.Add(new RaceEntry
+                    {
+                        Id = Guid.NewGuid(),
+                        RaceId = race.Id,
+                        HorseId = horseId,
+                        JockeyId = jockeyByHorse[horseId],
+                        Status = RegistrationStatus.Approved,
+                        OwnerConfirmed = true,
+                        JockeyConfirmed = true,
+                        GateNumber = null,
+                        FinishPosition = null
+                    });
+                }
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                _db.RaceEntries.AddRange(newEntries);
+                await _unitOfWork.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // Provider-portable classification (works identically under Npgsql production and
+                // the Sqlite test provider, unlike inspecting a provider-specific error code):
+                // roll back FIRST — querying through an aborted relational transaction would itself
+                // fail — then clear the failed Added RaceEntry tracking so the re-query below can
+                // only see actually-committed database state, never confused by our own failed
+                // insert attempt. Only THEN can we tell whether this was a concurrent duplicate
+                // generation (unique (RaceId,HorseId) index hit by a racing second attempt) or some
+                // unrelated persistence failure.
+                await transaction.RollbackAsync();
+                _db.ChangeTracker.Clear();
+
+                var targetPopulatedNow = await _db.RaceEntries.AsNoTracking()
+                    .AnyAsync(e => targetRaceIds.Contains(e.RaceId));
+                if (!targetPopulatedNow)
+                    throw; // not proven to be a duplicate — rethrow the ORIGINAL exception so the
+                            // outer catch reports and logs it as an honest server failure (500)
+
+                return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
+                    "Vòng đấu tiếp theo đã có ngựa được tạo trước đó — không thể tạo lại.");
+            }
+
+            foreach (var race in targetRaces)
+                await RecalculateOddsAsync(race.Id);
+
+            return ServiceResult<GenerateNextRoundResultDto>.Ok(new GenerateNextRoundResultDto
+            {
+                SourceRoundNumber = currentRound.RoundNumber,
+                TargetRoundNumber = nextRound.RoundNumber,
+                GeneratedEntries = newEntries.Count,
+                Assignments = targetRaces.Select(r => new GenerateNextRoundRaceAssignmentDto
+                {
+                    RaceId = r.Id,
+                    RaceName = r.Name,
+                    HorseIds = assignments[r.Id]
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi tạo vòng đấu tiếp theo cho vòng {RoundId}", roundId);
+            return ServiceResult<GenerateNextRoundResultDto>.Fail(500, "Không thể tạo vòng đấu tiếp theo. Vui lòng thử lại.");
         }
     }
 

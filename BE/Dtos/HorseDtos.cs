@@ -92,3 +92,10 @@ public class RaceRegistrationRequest
 {
     public bool OwnerConfirmed { get; set; } = false;
 }
+
+// J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+public class OwnerFinalConfirmJockeyRequest
+{
+    [Required]
+    public Guid InvitationId { get; set; }
+}

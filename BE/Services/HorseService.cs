@@ -1,4 +1,5 @@
 using System;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using HorseRacing.Data;
@@ -444,18 +445,32 @@ public class HorseService : IHorseService
                 "Không tìm thấy lời mời cần hủy cho ngựa và cuộc đua này");
         }
 
+        // J3.1: official-ness is Tournament-wide and determined from RaceEntry.JockeyId,
+        // never from invitation.Status — an Accepted invitation stays Accepted forever
+        // even after it becomes official (Final Confirm never touches invitation.Status),
+        // so checking Status here would not catch it. Once Owner Final Confirm has
+        // established RaceEntry.JockeyId for this Horse anywhere in the Tournament, this
+        // action must not be able to undo it — regardless of which Race/invitation the
+        // Owner operates on for the same Horse+Tournament.
+        var raceForGuard = await _races.GetByIdAsync(raceId);
+        if (raceForGuard != null)
+        {
+            var officialAssignment = await _raceEntries.GetOfficialAssignmentForHorseInTournamentAsync(horseId, raceForGuard.TournamentId);
+            if (officialAssignment != null && officialAssignment.JockeyId == invitation.JockeyId)
+            {
+                return ServiceResult<string>.Fail(
+                    StatusCodes.Status409Conflict,
+                    "Kỵ sĩ này đã là kỵ sĩ chính thức của ngựa trong giải đấu này và không thể bị hủy qua thao tác này.");
+            }
+        }
+
+        // J3.1: the official-pairing guard above already rejected this call if the invitation
+        // belonged to the official Jockey — so by this point the invitation is necessarily
+        // non-official, and only the invitation itself needs to change. RaceEntry is never
+        // touched here.
         invitation.Status = JockeyInvitationStatus.Declined;
         invitation.ResponseNote = request.Reason.Trim();
         invitation.RespondedAt = DateTime.UtcNow;
-
-        // Only clear the RaceEntry's official jockey if it was actually this invitation's
-        // jockey — never touch a different jockey's official assignment as a side effect.
-        var entry = await _db.RaceEntries.FirstOrDefaultAsync(e => e.HorseId == horseId && e.RaceId == raceId);
-        if (entry != null && entry.JockeyId == invitation.JockeyId)
-        {
-            entry.JockeyId = null;
-            entry.JockeyConfirmed = false;
-        }
 
         await _unitOfWork.SaveChangesAsync();
 
@@ -610,6 +625,205 @@ public class HorseService : IHorseService
 
         entry.OwnerConfirmed = true;
         await _unitOfWork.SaveChangesAsync();
+
+        return ServiceResult<object>.Ok(entry);
+    }
+
+    // J3: Owner picks exactly one Accepted invitation as the official Jockey for a RaceEntry.
+    // RaceEntry.JockeyId is set ONLY here — J2 Accept never touches it. Wrapped in a Serializable
+    // transaction (same convention as TournamentRegistrationsController.Approve) so two Owners
+    // racing to confirm the same Jockey into conflicting RaceEntries can't both succeed.
+    public async Task<ServiceResult<object>> FinalConfirmJockeyAsync(Guid userId, Guid horseId, Guid raceId, OwnerFinalConfirmJockeyRequest request)
+    {
+        var owner = await GetOwnerProfileAsync(userId);
+        if (owner == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ chủ sở hữu");
+        }
+
+        // A: Horse must belong to the authenticated Owner.
+        var horse = await _horses.GetOwnedHorseAsync(horseId, owner.Id);
+        if (horse == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy ngựa");
+        }
+
+        if (request.InvitationId == Guid.Empty)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Vui lòng chọn lời mời cần xác nhận");
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+        // B: exact RaceEntry for HorseId + RaceId.
+        var entry = await _raceEntries.GetByRaceHorseAsync(raceId, horseId);
+        if (entry == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy đăng ký tham gia cho ngựa và cuộc đua này");
+        }
+
+        // C: the invitation must exist and belong to this exact Horse + Race.
+        var invitation = await _db.JockeyInvitations
+            .Include(i => i.Jockey)
+                .ThenInclude(j => j!.User)
+            .FirstOrDefaultAsync(i => i.Id == request.InvitationId && i.HorseId == horseId && i.RaceId == raceId);
+        if (invitation == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy lời mời cho ngựa và cuộc đua này");
+        }
+
+        // D: only an Accepted invitation may become the official Jockey.
+        if (invitation.Status != JockeyInvitationStatus.Accepted)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Chỉ có thể chọn kỵ sĩ từ lời mời đã được chấp nhận");
+        }
+
+        // E: revalidate Jockey eligibility now — accepted earlier does not guarantee still eligible.
+        var jockey = invitation.Jockey;
+        if (jockey == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kỵ sĩ");
+        }
+        if (jockey.ApprovalStatus != ApprovalStatus.Approved)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Kỵ sĩ chưa được admin phê duyệt");
+        }
+        if (jockey.User != null && !jockey.User.IsActive)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Tài khoản kỵ sĩ đã bị vô hiệu hóa");
+        }
+
+        // 4: lifecycle guards — Status is authoritative, never ScheduledAt/StartDate/EndDate.
+        if (entry.Race == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy cuộc đua");
+        }
+        var tournamentStatus = entry.Race.Tournament?.Status;
+        if (tournamentStatus != TournamentStatus.Published && tournamentStatus != TournamentStatus.Ongoing)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status400BadRequest,
+                "Chỉ có thể chọn kỵ sĩ chính thức khi giải đấu đang ở trạng thái Đã công bố hoặc Đang diễn ra");
+        }
+        var raceStatus = entry.Race.Status;
+        if (raceStatus != RaceStatus.Scheduled &&
+            raceStatus != RaceStatus.RegistrationOpen &&
+            raceStatus != RaceStatus.RegistrationClosed)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status400BadRequest,
+                "Không thể chọn kỵ sĩ chính thức vì cuộc đua đã bắt đầu, đã kết thúc hoặc đã bị hủy");
+        }
+
+        // BUSINESS PIVOT: one Jockey is paired with one Horse for that Horse's ENTIRE Tournament
+        // journey (not just one Race) — Owner Final Confirm establishes this pairing once, and it
+        // is then immutable for the Tournament. Within the SAME Tournament this stays a pure
+        // identity rule (never Race-timing based, see checks 5/6 below). ACROSS Tournaments
+        // (J-CROSS, check 7) the Jockey may now hold official pairings in multiple Published/
+        // Ongoing Tournaments at once, gated by whether their Race schedules actually overlap.
+        // Q1 carries HorseId+JockeyId forward into each new-round RaceEntry automatically — Owner
+        // never re-picks a Jockey for a Horse that already has one in this Tournament.
+        var targetTournamentId = entry.Race.TournamentId;
+
+        // 5: does this Horse already have an official Jockey somewhere in this Tournament? Covers
+        // both "this exact RaceEntry already has one" (no replacement) and "a different RaceEntry
+        // for this Horse in the same Tournament already established the pairing" (e.g. a prior
+        // Round) — deliberately not excluded from the query, since either case means the pairing
+        // already exists and Owner must not pick again.
+        var existingHorsePairing = await _raceEntries.GetOfficialAssignmentForHorseInTournamentAsync(horseId, targetTournamentId);
+        if (existingHorsePairing != null)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status409Conflict,
+                "Ngựa này đã có kỵ sĩ chính thức cho giải đấu.");
+        }
+
+        // 6/7: load every other existing official assignment for this Jockey once — shared by the
+        // same-Tournament different-Horse check and the cross-Tournament lock below.
+        var jockeyOfficialAssignments = await _raceEntries.GetOfficialAssignmentsForJockeyAsync(jockey.Id);
+
+        // 6: is the Jockey already officially paired with a DIFFERENT Horse in this Tournament?
+        // One Jockey, one Horse per Tournament — never allowed even when Races don't overlap.
+        var pairedWithDifferentHorseInTournament = jockeyOfficialAssignments.Any(other =>
+            other.Race != null &&
+            other.Race.TournamentId == targetTournamentId &&
+            other.HorseId != horseId);
+        if (pairedWithDifferentHorseInTournament)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status409Conflict,
+                "Kỵ sĩ này đã được ghép chính thức với một ngựa khác trong giải đấu.");
+        }
+
+        // 7 (J-CROSS): cross-Tournament SCHEDULE-OVERLAP lock, replacing the old global
+        // one-active-Tournament-per-Jockey lock. A Jockey may now be officially paired in several
+        // Published/Ongoing Tournaments at once, as long as none of their Race schedules overlap.
+        // A Finished/Cancelled Tournament never locks — its historical RaceEntry.JockeyId is left
+        // untouched by design (unchanged from before).
+        //
+        // Do NOT compare only the current Race: official pairing carries forward for the Horse's
+        // entire Tournament journey, and Q1 propagates the same JockeyId into Round2+/Final
+        // RaceEntries automatically without re-running Final Confirm. Round/Race structure for
+        // every round (including Final) already exists before Publish and is backend-immutable
+        // once the Tournament leaves Draft, so comparing the two Tournaments' FULL immutable Race
+        // schedule sets here safely catches a future-round collision even when neither Tournament
+        // has RaceEntries yet for the colliding Race (e.g. two Finals landing on the same day while
+        // each Tournament's Round1 does not overlap).
+        var otherLockedTournamentIds = jockeyOfficialAssignments
+            .Where(other =>
+                other.Race != null &&
+                other.Race.TournamentId != targetTournamentId &&
+                other.Race.Tournament != null &&
+                (other.Race.Tournament.Status == TournamentStatus.Published ||
+                 other.Race.Tournament.Status == TournamentStatus.Ongoing))
+            .Select(other => other.Race!.TournamentId)
+            .Distinct()
+            .ToList();
+
+        if (otherLockedTournamentIds.Count > 0)
+        {
+            var scheduleWindows = await _races.GetScheduleWindowsByTournamentsAsync(
+                otherLockedTournamentIds.Append(targetTournamentId));
+
+            var targetSchedule = scheduleWindows.TryGetValue(targetTournamentId, out var targetWindows)
+                ? targetWindows
+                : new List<(DateTime Start, DateTime End)>();
+
+            var hasCrossTournamentScheduleOverlap = otherLockedTournamentIds.Any(otherTournamentId =>
+            {
+                var otherSchedule = scheduleWindows.TryGetValue(otherTournamentId, out var otherWindows)
+                    ? otherWindows
+                    : new List<(DateTime Start, DateTime End)>();
+
+                // Standard overlap formula: existing.Start < candidate.End AND candidate.Start < existing.End.
+                // Back-to-back windows (A ends exactly when B starts) are NOT an overlap.
+                return targetSchedule.Any(t => otherSchedule.Any(o => t.Start < o.End && o.Start < t.End));
+            });
+
+            if (hasCrossTournamentScheduleOverlap)
+            {
+                return ServiceResult<object>.Fail(
+                    StatusCodes.Status409Conflict,
+                    "Kỵ sĩ này đã được phân công ở một giải đấu khác có lịch thi đấu trùng.");
+            }
+        }
+
+        // 8: only RaceEntry.JockeyId/JockeyConfirmed are mutated — OwnerConfirmed and every other
+        // Accepted/Pending invitation are left exactly as they were (no replacement/history rewrite).
+        entry.JockeyId = jockey.Id;
+        entry.JockeyConfirmed = true;
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (Exception)
+        {
+            return ServiceResult<object>.Fail(
+                StatusCodes.Status409Conflict,
+                "Một thao tác khác vừa thay đổi phân công kỵ sĩ cho cuộc đua này. Vui lòng thử lại.");
+        }
 
         return ServiceResult<object>.Ok(entry);
     }
