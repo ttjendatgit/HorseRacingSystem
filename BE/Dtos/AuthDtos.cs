@@ -3,6 +3,9 @@ using HorseRacing.Models;
 
 namespace HorseRacing.Dtos;
 
+/// <summary>
+/// DTO chứa dữ liệu đăng ký tài khoản người dùng mới (Chủ ngựa, Kỵ thủ, Khán giả).
+/// </summary>
 public class RegisterRequest
 {
     [Required(ErrorMessage = "Email không được để trống.")]
@@ -37,6 +40,9 @@ public class RegisterRequest
     public string? IdCardNumber { get; set; }
 }
 
+/// <summary>
+/// DTO chứa dữ liệu đăng nhập hệ thống.
+/// </summary>
 public class LoginRequest
 {
     [Required(ErrorMessage = "Email không được để trống.")]
@@ -47,6 +53,9 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// DTO trả về thông tin xác thực sau khi đăng nhập/đăng ký thành công kèm Token JWT.
+/// </summary>
 public class AuthResponse
 {
     public Guid UserId { get; set; }
@@ -57,6 +66,9 @@ public class AuthResponse
     public string? RefreshToken { get; set; }
 }
 
+/// <summary>
+/// DTO trả về thông tin hồ sơ chi tiết của Chủ sở hữu ngựa.
+/// </summary>
 public class OwnerProfileResponse
 {
     public Guid UserId { get; set; }

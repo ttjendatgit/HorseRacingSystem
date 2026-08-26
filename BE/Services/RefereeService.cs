@@ -35,6 +35,11 @@ public class RefereeService : IRefereeService
     }
 
     // Referee Management
+    /// <summary>
+    /// Tạo mới một hồ sơ Trọng tài kèm thông tin chứng chỉ chuyên môn và số giấy phép hành nghề.
+    /// </summary>
+    /// <param name="request">Thông tin đăng ký hồ sơ Trọng tài mới.</param>
+    /// <returns>Thông tin hồ sơ Trọng tài vừa tạo thành công.</returns>
     public async Task<ServiceResult<RefereeResponse>> CreateRefereeAsync(CreateRefereeRequest request)
     {
         try
@@ -61,6 +66,11 @@ public class RefereeService : IRefereeService
         }
     }
 
+    /// <summary>
+    /// Truy xuất thông tin hồ sơ Trọng tài theo mã định danh.
+    /// </summary>
+    /// <param name="id">Mã định danh hồ sơ Trọng tài.</param>
+    /// <returns>Chi tiết thông tin Trọng tài.</returns>
     public async Task<ServiceResult<RefereeResponse>> GetRefereeAsync(Guid id)
     {
         try

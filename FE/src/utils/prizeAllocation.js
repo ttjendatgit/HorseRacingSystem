@@ -10,6 +10,11 @@ const STATUS_BY_NUMBER = { 0: "Draft", 1: "Published", 2: "Ongoing", 3: "Finishe
 // Mirrors the numeric-enum/string-enum/numeric-as-string normalization already used by
 // jockeyApproval.js's normalizeJockeyApprovalStatus, for the same reason: the backend sends
 // Tournament.Status as a number but some payload shapes carry a string StatusName instead.
+/**
+ * Chuẩn hóa trạng thái giải đấu từ định dạng số enum hoặc chuỗi về tên chuẩn.
+ * @param {number|string} rawStatus - Trạng thái thô nhận từ API backend.
+ * @returns {string|null} Tên trạng thái chuẩn ("Draft", "Published", "Ongoing", "Finished", "Cancelled")
+ */
 export function normalizeTournamentStatus(rawStatus) {
   if (rawStatus === undefined || rawStatus === null || rawStatus === "") return null;
 
@@ -26,6 +31,11 @@ export function normalizeTournamentStatus(rawStatus) {
 
 // Accepts a Tournament payload (camelCase or PascalCase) and reports whether its Prize allocation
 // is currently mutable — true only in Draft, per the V1 lock rule (Part 3).
+/**
+ * Kiểm tra giải đấu có ở trạng thái Bản nháp (Draft) để cho phép chỉnh sửa giải thưởng hay không.
+ * @param {Object} tournament - Thông tin đối tượng giải đấu.
+ * @returns {boolean} True nếu giải đấu ở trạng thái Bản nháp.
+ */
 export function isTournamentDraftEditable(tournament) {
   const raw = tournament?.status ?? tournament?.Status ?? tournament?.statusName ?? tournament?.StatusName ?? null;
   return normalizeTournamentStatus(raw) === "Draft";

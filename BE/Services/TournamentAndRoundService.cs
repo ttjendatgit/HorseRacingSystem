@@ -54,6 +54,12 @@ public class TournamentService : ITournamentService
         _walletService = walletService;
     }
 
+    /// <summary>
+    /// Tạo mới một giải đua ngựa mới với các thông tin tổng tiền thưởng, thời gian đăng ký và số lượng vòng đua.
+    /// Tự động gửi thông báo cho tất cả khán giả khi giải đua mới được tạo.
+    /// </summary>
+    /// <param name="request">Thông tin cấu hình giải đua mới.</param>
+    /// <returns>Thông tin chi tiết giải đua vừa được khởi tạo thành công.</returns>
     public async Task<ServiceResult<TournamentResponse>> CreateTournamentAsync(CreateTournamentRequest request)
     {
         try

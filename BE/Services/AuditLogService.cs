@@ -21,6 +21,11 @@ public class AuditLogService : IAuditLogService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Khởi tạo và ghi vết lịch sử hoạt động (Audit Log) của Quản trị viên/Người dùng trong hệ thống.
+    /// </summary>
+    /// <param name="dto">Thông tin hành động và dữ liệu thay đổi trước/sau.</param>
+    /// <returns>Nhật ký hành động đã khởi tạo thành công.</returns>
     public async Task<ServiceResult<AuditLogDto>> LogActionAsync(CreateAuditLogDto dto)
     {
         try
@@ -70,6 +75,11 @@ public class AuditLogService : IAuditLogService
         }
     }
 
+    /// <summary>
+    /// Truy xuất thông tin nhật ký thay đổi chi tiết theo mã định danh log.
+    /// </summary>
+    /// <param name="id">Mã định danh nhật ký hành động.</param>
+    /// <returns>Chi tiết nhật ký hành động thay đổi.</returns>
     public async Task<ServiceResult<AuditLogDetailDto>> GetAuditLogByIdAsync(Guid id)
     {
         try
