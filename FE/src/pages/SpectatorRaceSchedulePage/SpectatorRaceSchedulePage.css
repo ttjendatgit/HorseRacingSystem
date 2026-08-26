@@ -19,102 +19,114 @@
 
 .srs-eyebrow {
   display: inline-block;
-  padding: 4px 14px;
+  padding: 6px 14px;
   border-radius: 999px;
-  background: rgba(143, 100, 32, 0.1);
+  background: linear-gradient(135deg, rgba(215, 170, 77, 0.16), rgba(215, 170, 77, 0.08));
+  border: 1px solid rgba(215, 170, 77, 0.3);
   color: #8f6420;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .srs-title {
   margin: 8px 0;
-  font-size: 36px;
-  font-weight: 700;
+  font-size: clamp(34px, 4.5vw, 48px);
+  font-weight: 800;
   color: #172033;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  background: linear-gradient(135deg, #172033 60%, #34415b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .srs-subtitle {
   margin: 0;
-  color: #657086;
+  color: #5f6b80;
   font-size: 16px;
+  line-height: 1.6;
 }
 
 /* ── Highlights ── */
 .srs-highlights {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .srs-highlight {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 20px;
-  border-radius: 18px;
-  background: rgba(255, 250, 240, 0.96);
-  border: 1px solid rgba(231, 198, 120, 0.12);
+  gap: 16px;
+  padding: 22px 24px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1.5px solid rgba(215, 170, 77, 0.22);
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.srs-highlight:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(23, 32, 51, 0.09);
 }
 
 .srs-highlight__icon {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   border-radius: 14px;
 }
 
 .srs-highlight--live .srs-highlight__icon {
-  background: rgba(75, 153, 103, 0.1);
-  color: #3f7853;
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
 }
 
 .srs-highlight--live {
-  border-left: 3px solid #3f7853;
+  border-left: 4px solid #16a34a;
 }
 
 .srs-highlight--upcoming .srs-highlight__icon {
-  background: rgba(215, 170, 77, 0.12);
+  background: rgba(215, 170, 77, 0.14);
   color: #8f6420;
 }
 
 .srs-highlight--upcoming {
-  border-left: 3px solid #d7aa4d;
+  border-left: 4px solid #d7aa4d;
 }
 
 .srs-highlight--countdown {
-  border-left: 3px solid #8f6420;
-  background: linear-gradient(
-    135deg,
-    rgba(231, 198, 120, 0.08),
-    rgba(255, 250, 240, 0.96)
-  );
+  border-left: 4px solid #8f6420;
+  background: linear-gradient(135deg, #fffdf8 0%, #faf3e2 100%);
 }
 
 .srs-highlight__value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: #172033;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .srs-highlight__label {
   display: block;
-  font-size: 12px;
-  color: #657086;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5f6b80;
   margin-top: 4px;
 }
 
 .srs-highlight__countdown {
   display: block;
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: #8f6420;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -123,7 +135,7 @@
 .srs-highlight__racename {
   display: block;
   font-size: 12px;
-  color: #657086;
+  color: #5f6b80;
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
