@@ -15,6 +15,9 @@ using Microsoft.Extensions.Logging;
 
 namespace HorseRacing.Controllers;
 
+/// <summary>
+/// Quản lý xác thực người dùng, đăng ký, đăng nhập, cấp lại token và hồ sơ cá nhân.
+/// </summary>
 [ApiController]
 [Route("api/auth")]
 public class AuthController : ControllerBase
@@ -38,7 +41,11 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    // Authentication
+    /// <summary>
+    /// Đăng ký tài khoản người dùng mới (Chủ ngựa, Nài ngựa, Khán giả).
+    /// </summary>
+    /// <param name="request">Thông tin đăng ký gồm Email, Password, FullName, Role, ...</param>
+    /// <returns>Thông tin xác thực và JWT token.</returns>
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
@@ -47,6 +54,11 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Đăng nhập tài khoản hệ thống.
+    /// </summary>
+    /// <param name="request">Thông tin Email và Password.</param>
+    /// <returns>JWT Access Token và Refresh Token.</returns>
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
@@ -55,6 +67,11 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Cấp lại Access Token mới bằng Refresh Token hợp lệ.
+    /// </summary>
+    /// <param name="request">Yêu cầu chứa RefreshToken.</param>
+    /// <returns>Access Token mới.</returns>
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request)
     {
@@ -62,6 +79,9 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lấy thông tin chi tiết hồ sơ Chủ ngựa cho người dùng hiện tại.
+    /// </summary>
     [Authorize(Roles = "HorseOwner")]
     [HttpGet("me")]
     public async Task<ActionResult<OwnerProfileResponse>> GetCurrentOwner()
