@@ -35,6 +35,11 @@ public class SepayController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Khởi tạo một giao dịch nạp tiền chờ xử lý (Pending) cho người dùng đã đăng nhập với mã QR SePay.
+    /// </summary>
+    /// <param name="request">Yêu cầu nạp tiền chứa số tiền cần nạp.</param>
+    /// <returns>Thông tin tham chiếu giao dịch nạp tiền kèm nội dung chuyển khoản QR SePay.</returns>
     [Authorize]
     [HttpPost("deposit")]
     public async Task<ActionResult> CreateDeposit([FromBody] DepositRequest request)
@@ -45,6 +50,11 @@ public class SepayController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Kiểm tra trạng thái xử lý tức thời của một đơn nạp tiền (Đang chờ, Hoàn thành, Đã hủy).
+    /// </summary>
+    /// <param name="transactionId">Mã GUID định danh của giao dịch nạp tiền.</param>
+    /// <returns>Dữ liệu trạng thái giao dịch hiện tại.</returns>
     [Authorize]
     [HttpGet("check")]
     public async Task<ActionResult> CheckTransaction([FromQuery] Guid transactionId)
@@ -55,6 +65,10 @@ public class SepayController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lấy danh sách biến động dư tài khoản ví và lịch sử nạp tiền của tài khoản đang đăng nhập.
+    /// </summary>
+    /// <returns>Danh sách lịch sử các giao dịch nạp/rút/cược của ví.</returns>
     [Authorize]
     [HttpGet("history")]
     public async Task<ActionResult> GetHistory()
@@ -65,6 +79,10 @@ public class SepayController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Endpoint kiểm tra chẩn đoán kết nối và cấu hình API Key cổng thanh toán SePay dành cho Admin.
+    /// </summary>
+    /// <returns>Đối tượng kết quả trạng thái cấu hình.</returns>
     [HttpGet("webhook/test")]
     [Authorize(Roles = "Admin")]
     public ActionResult WebhookTest()
@@ -79,6 +97,11 @@ public class SepayController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Endpoint nhận tín hiệu Webhook tự động từ cổng SePay khi có biến động tài khoản ngân hàng.
+    /// Thực hiện xác thực chữ ký bảo mật HMAC-SHA256/API Key và tự động cộng dư tiền ví cho người dùng.
+    /// </summary>
+    /// <returns>Mã trạng thái HTTP phản hồi cho cổng SePay.</returns>
     [HttpPost("webhook")]
     public async Task<ActionResult> Webhook()
     {

@@ -22,6 +22,10 @@ public class RacesController : ControllerBase
         _refereeService = refereeService;
     }
 
+    /// <summary>
+    /// Lấy danh sách tất cả các trận đua ngựa công khai trong hệ thống.
+    /// </summary>
+    /// <returns>Danh sách các trận đua.</returns>
     [HttpGet]
     [AllowAnonymous]
     public async Task<ActionResult> GetRaces()
@@ -30,6 +34,11 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lấy thông tin chi tiết của một trận đua theo mã GUID định danh.
+    /// </summary>
+    /// <param name="id">Mã GUID định danh trận đua.</param>
+    /// <returns>Thông tin chi tiết trận đua.</returns>
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult> GetRace(Guid id)
@@ -38,6 +47,11 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Lấy bảng kết quả thi đấu chính thức của trận đua sau khi hoàn thành.
+    /// </summary>
+    /// <param name="id">Mã GUID định danh trận đua.</param>
+    /// <returns>Bảng thứ hạng và kết quả thi đấu chính thức.</returns>
     [HttpGet("{id:guid}/result")]
     [AllowAnonymous]
     public async Task<ActionResult> GetRaceResult(Guid id)
@@ -46,6 +60,12 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Giải phóng (hủy đăng ký) một con ngựa khỏi trận đua cụ thể dành cho Admin.
+    /// </summary>
+    /// <param name="id">Mã GUID trận đua.</param>
+    /// <param name="horseId">Mã GUID con ngựa cần giải phóng.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả thực hiện.</returns>
     [HttpDelete("{id:guid}/horses/{horseId:guid}/release")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> ReleaseHorse(Guid id, Guid horseId)
@@ -54,6 +74,12 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Cập nhật thông tin thi đấu của trận đua (thời gian, cổng xuất phát, trạng thái).
+    /// </summary>
+    /// <param name="id">Mã GUID trận đua.</param>
+    /// <param name="request">Thông tin cập nhật trận đua.</param>
+    /// <returns>Dữ liệu trận đua sau khi cập nhật.</returns>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> UpdateRace(Guid id, [FromBody] UpdateRaceRequest request)
@@ -62,6 +88,11 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Xóa một trận đua chưa diễn ra khỏi hệ thống dành cho Admin.
+    /// </summary>
+    /// <param name="id">Mã GUID trận đua cần xóa.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả xóa.</returns>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> DeleteRace(Guid id)
@@ -70,6 +101,12 @@ public class RacesController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    /// <summary>
+    /// Phân công trọng tài chịu trách nhiệm giám sát trận đua cụ thể.
+    /// </summary>
+    /// <param name="id">Mã GUID trận đua.</param>
+    /// <param name="request">Thông tin trọng tài được phân công.</param>
+    /// <returns>Mã trạng thái HTTP báo kết quả phân công.</returns>
     [HttpPost("{id:guid}/referees")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> AssignReferee(Guid id, [FromBody] AssignRefereeRequest request)
