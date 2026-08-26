@@ -28,6 +28,14 @@ export const routeRaceComplaint = (id, p) => request(`/api/management/race-compl
 export const respondRaceComplaint = (id, p) => request(`/api/management/race-complaints/${id}/respond`, { method: "POST", body: JSON.stringify(p) });
 export const ruleRaceComplaint = (id, p) => request(`/api/management/race-complaints/${id}/rule`, { method: "POST", body: JSON.stringify(p) });
 export const withdrawRaceComplaint = (id) => request(`/api/management/race-complaints/${id}/withdraw`, { method: "POST" });
+export const uploadRaceComplaintEvidence = (id, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(`/api/management/race-complaints/${id}/evidence`, { method: "POST", body: formData });
+};
+
+export const deleteRaceComplaintEvidence = (id, evidenceId) =>
+  request(`/api/management/race-complaints/${id}/evidence/${evidenceId}`, { method: "DELETE" });
 
 // ── Horse Transfers ──
 export const getTransfers = async () => unwrap(await request("/api/management/transfers"));

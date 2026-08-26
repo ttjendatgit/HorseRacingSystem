@@ -182,6 +182,21 @@ public enum RaceComplaintStatus
     Withdrawn = 6
 }
 
+public enum ComplaintEvidenceMediaType
+{
+    Image = 1,
+    Video = 2
+}
+
+// COMPLAINT-EVIDENCE-V1.1: which side of the complaint this evidence belongs to — persisted at
+// upload time from the caller's verified relationship to the complaint (original filer vs the
+// assigned Referee), never inferred later from User.Role and never accepted from client input.
+public enum EvidenceSource
+{
+    Filer = 1,
+    Referee = 2
+}
+
 public enum BetStatus
 {
     Placed = 1,

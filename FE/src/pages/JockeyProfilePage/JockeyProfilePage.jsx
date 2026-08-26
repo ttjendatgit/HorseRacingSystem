@@ -1,18 +1,22 @@
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { updateProfile, changePassword, getProfile } from "../../services/authApi";
 import {
   getContracts, signContractJockey,
-  getMyRaceComplaints, createRaceComplaint, withdrawRaceComplaint, getEligibleRaceComplaintRaces,
+  getMyRaceComplaints, createRaceComplaint, uploadRaceComplaintEvidence, withdrawRaceComplaint, getEligibleRaceComplaintRaces,
 } from "../../services/managementApi";
 import { getMyJockeyProfile } from "../../services/jockeyApi";
 import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
 import {
+  EVIDENCE_ACCEPT_ATTR,
   RACE_COMPLAINT_TYPE_OPTIONS,
   canFilerWithdraw,
   getRaceComplaintStatusDetails,
   getRaceComplaintTypeLabel,
   mapEligibleRacesToOptions,
+  validateEvidenceFile,
 } from "../../utils/raceComplaintDisplay";
+import ComplaintEvidenceGallery from "../../components/ComplaintEvidenceGallery";
+import ComplaintEvidenceUploader from "../../components/ComplaintEvidenceUploader";
 import { ProfileLayout, Field, Detail, msgBox, grid2, btnPrimary, btnSecondary, fieldStyle, fieldLabel, inputBase } from "../ProfileCommon";
 import "../ProfilePages.css";
 
@@ -48,6 +52,8 @@ export default function JockeyProfilePage() {
   const [showComplaintForm, setShowComplaintForm] = useState(false);
   const [eligibleRaceOptions, setEligibleRaceOptions] = useState([]);
   const [complaintForm, setComplaintForm] = useState({ raceId: "", type: "ResultJudging", reason: "", evidenceDescription: "" });
+  const [complaintFiles, setComplaintFiles] = useState([]);
+  const [expandedComplaintId, setExpandedComplaintId] = useState(null);
 
   const showMsg = useCallback((type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); }, []);
 
@@ -246,18 +252,52 @@ export default function JockeyProfilePage() {
               </div>
               <Field label="Nội dung" value={complaintForm.reason} onChange={(e) => setComplaintForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Mô tả nội dung khiếu nại" />
               <Field label="Bằng chứng (tùy chọn)" value={complaintForm.evidenceDescription} onChange={(e) => setComplaintForm((p) => ({ ...p, evidenceDescription: e.target.value }))} placeholder="Mô tả bằng chứng liên quan (không bắt buộc)" />
+              <div style={fieldStyle}>
+                <label style={fieldLabel}>Ảnh / video bằng chứng (tùy chọn, có thể chọn nhiều)</label>
+                <input
+                  type="file"
+                  multiple
+                  accept={EVIDENCE_ACCEPT_ATTR}
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files || []);
+                    const accepted = [];
+                    for (const file of picked) {
+                      const check = validateEvidenceFile(file);
+                      if (check.valid) accepted.push(file);
+                      else showMsg("error", check.error);
+                    }
+                    if (accepted.length > 0) setComplaintFiles((prev) => [...prev, ...accepted]);
+                    e.target.value = "";
+                  }}
+                />
+                {complaintFiles.length > 0 && (
+                  <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 2 }}>
+                    {complaintFiles.map((file, index) => (
+                      <li key={`${file.name}-${index}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                        <span>{file.name}</span>
+                        <button type="button" style={btnSecondary} onClick={() => setComplaintFiles((prev) => prev.filter((_, i) => i !== index))}>Xóa</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <div style={{ marginTop: 8 }}>
                 <button style={btnPrimary} onClick={async () => {
                   if (!complaintForm.raceId || !complaintForm.reason) { showMsg("error", "Vui lòng chọn cuộc đua và nhập nội dung."); return; }
                   try {
-                    await createRaceComplaint({
+                    const res = await createRaceComplaint({
                       raceId: complaintForm.raceId,
                       type: complaintForm.type,
                       reason: complaintForm.reason,
                       evidenceDescription: complaintForm.evidenceDescription || null,
                     });
+                    const created = res?.data ?? res;
+                    for (const file of complaintFiles) {
+                      try { await uploadRaceComplaintEvidence(created.id ?? created.Id, file); } catch { /* complaint already recorded */ }
+                    }
                     setShowComplaintForm(false);
                     setComplaintForm({ raceId: "", type: "ResultJudging", reason: "", evidenceDescription: "" });
+                    setComplaintFiles([]);
                     showMsg("success", "Đã gửi khiếu nại!");
                     getMyRaceComplaints().then((d) => setComplaints(Array.isArray(d) ? d : d?.data ?? []));
                   } catch (e) { showMsg("error", e?.message ?? "Gửi khiếu nại thất bại."); }
@@ -270,7 +310,7 @@ export default function JockeyProfilePage() {
               <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>Chưa có khiếu nại nào.</p>
             ) : (
               <table className="sp-history-table">
-                <thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                <thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Trạng thái</th><th>Bằng chứng</th><th>Thao tác</th></tr></thead>
                 <tbody>
                   {complaints.map((c) => {
                     const id = c.id ?? c.Id;
@@ -278,14 +318,47 @@ export default function JockeyProfilePage() {
                     const status = getRaceComplaintStatusDetails(s);
                     const colors = statusColor(status.status);
                     const withdrawable = canFilerWithdraw(status.status);
+                    const evidenceList = c.evidence ?? c.Evidence ?? [];
+                    const evidenceCount = evidenceList.length;
+                    const filerEvidenceCount = evidenceList.filter((e) => (e.evidenceSource ?? e.EvidenceSource) === "Filer").length;
+                    const expanded = expandedComplaintId === id;
                     return (
-                      <tr key={id}>
-                        <td>{c.createdAt ?? c.CreatedAt ? new Date(c.createdAt ?? c.CreatedAt).toLocaleDateString() : "-"}</td>
-                        <td>{getRaceComplaintTypeLabel(c.type ?? c.Type)}</td>
-                        <td>{c.reason ?? c.Reason ?? "-"}</td>
-                        <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{status.label}</span></td>
-                        <td>{withdrawable ? <button style={btnSecondary} onClick={() => withdraw(id)}>Rút</button> : "-"}</td>
-                      </tr>
+                      <Fragment key={id}>
+                        <tr>
+                          <td>{c.createdAt ?? c.CreatedAt ? new Date(c.createdAt ?? c.CreatedAt).toLocaleDateString() : "-"}</td>
+                          <td>{getRaceComplaintTypeLabel(c.type ?? c.Type)}</td>
+                          <td>{c.reason ?? c.Reason ?? "-"}</td>
+                          <td><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, ...colors }}>{status.label}</span></td>
+                          <td>
+                            <button style={btnSecondary} onClick={() => setExpandedComplaintId(expanded ? null : id)}>
+                              {evidenceCount > 0 ? `Xem (${evidenceCount})` : "Thêm"}
+                            </button>
+                          </td>
+                          <td>{withdrawable ? <button style={btnSecondary} onClick={() => withdraw(id)}>Rút</button> : "-"}</td>
+                        </tr>
+                        {expanded && (
+                          <tr>
+                            <td colSpan={6} style={{ background: "var(--hr-surface-2, rgba(0,0,0,0.02))", padding: "10px 14px" }}>
+                              <ComplaintEvidenceGallery
+                                evidence={evidenceList}
+                                complaintId={id}
+                                complaintStatus={s}
+                                viewerRole="filer"
+                                onDeleted={() => getMyRaceComplaints().then((d) => setComplaints(Array.isArray(d) ? d : d?.data ?? []))}
+                              />
+                              {withdrawable && (
+                                <div style={{ marginTop: 8 }}>
+                                  <ComplaintEvidenceUploader
+                                    complaintId={id}
+                                    currentCount={filerEvidenceCount}
+                                    onUploaded={() => getMyRaceComplaints().then((d) => setComplaints(Array.isArray(d) ? d : d?.data ?? []))}
+                                  />
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

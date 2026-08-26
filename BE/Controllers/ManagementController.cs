@@ -6,6 +6,7 @@ using HorseRacing.Models;
 using HorseRacing.Services;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacing.Controllers;
@@ -164,6 +165,20 @@ public class ManagementController : ControllerBase
     [Authorize(Roles = "HorseOwner,Jockey")]
     public async Task<ActionResult> WithdrawRaceComplaint(Guid id)
         => OkR(await _raceComplaint.WithdrawAsync(id, GetUserId()));
+
+    // COMPLAINT-EVIDENCE-V1: filer (Owner/Jockey) or the assigned Referee only — service layer
+    // re-checks exactly which of the two the caller is and whether the complaint is still open.
+    [HttpPost("race-complaints/{id:guid}/evidence")]
+    [Authorize(Roles = "HorseOwner,Jockey,Referee")]
+    public async Task<ActionResult> UploadRaceComplaintEvidence(Guid id, IFormFile file)
+        => OkR(await _raceComplaint.UploadEvidenceAsync(id, file, GetUserId()));
+
+    // COMPLAINT-EVIDENCE-V1.1: only the original uploader of a given evidence row may delete it,
+    // and only while its side's mutation window is still open — service layer enforces both.
+    [HttpDelete("race-complaints/{id:guid}/evidence/{evidenceId:guid}")]
+    [Authorize(Roles = "HorseOwner,Jockey,Referee")]
+    public async Task<ActionResult> DeleteRaceComplaintEvidence(Guid id, Guid evidenceId)
+        => OkR(await _raceComplaint.DeleteEvidenceAsync(id, evidenceId, GetUserId()));
 
     // ── Horse Transfers (Owner creates, Admin approves) ──
 

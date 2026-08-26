@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyTournamentRegistrations, getMyRaceEntries } from "../../services/ownerHorseApi";
-import { createRaceComplaint } from "../../services/managementApi";
+import { createRaceComplaint, uploadRaceComplaintEvidence } from "../../services/managementApi";
 import { apiToVNDisplay } from "../../utils/vnDateTime";
 import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import { getOwnerRaceStatusLabel } from "../../utils/raceStatusDisplay";
 import { getJockeyNameDisplay } from "../../utils/jockeyAssignmentDisplay";
-import { RACE_COMPLAINT_TYPE_OPTIONS } from "../../utils/raceComplaintDisplay";
+import { EVIDENCE_ACCEPT_ATTR, RACE_COMPLAINT_TYPE_OPTIONS, validateEvidenceFile } from "../../utils/raceComplaintDisplay";
 import { RaceButton, RaceModalShell, RaceSelect } from "../../components/ui/RaceUi";
 import {
   getTournamentLifecycleLabel,
@@ -139,6 +139,7 @@ function OwnerParticipationsPage() {
   const [expandedRaces, setExpandedRaces] = useState({});
   const [complaintModal, setComplaintModal] = useState(null); // { entry }
   const [complaintForm, setComplaintForm] = useState({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+  const [complaintFiles, setComplaintFiles] = useState([]);
   const [complaintSubmitting, setComplaintSubmitting] = useState(false);
   const [complaintMsg, setComplaintMsg] = useState(null);
 
@@ -271,8 +272,24 @@ function OwnerParticipationsPage() {
 
   const openComplaintModal = (entry) => {
     setComplaintForm({ type: "ResultJudging", reason: "", evidenceDescription: "" });
+    setComplaintFiles([]);
     setComplaintMsg(null);
     setComplaintModal({ entry });
+  };
+
+  const addComplaintFiles = (fileList) => {
+    const picked = Array.from(fileList || []);
+    const accepted = [];
+    for (const file of picked) {
+      const check = validateEvidenceFile(file);
+      if (check.valid) accepted.push(file);
+      else setComplaintMsg({ type: "error", text: check.error });
+    }
+    if (accepted.length > 0) setComplaintFiles((prev) => [...prev, ...accepted]);
+  };
+
+  const removeComplaintFile = (index) => {
+    setComplaintFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submitComplaint = async () => {
@@ -283,13 +300,25 @@ function OwnerParticipationsPage() {
     }
     setComplaintSubmitting(true);
     try {
-      await createRaceComplaint({
+      const res = await createRaceComplaint({
         raceId: complaintModal.entry.raceId,
         type: complaintForm.type,
         reason: complaintForm.reason.trim(),
         evidenceDescription: complaintForm.evidenceDescription?.trim() || null,
       });
+      const created = res?.data ?? res;
+      // Evidence upload happens AFTER the complaint exists — RaceComplaintEvidence is a child
+      // row keyed by RaceComplaintId, so there is nothing to attach files to beforehand.
+      for (const file of complaintFiles) {
+        try {
+          await uploadRaceComplaintEvidence(created.id ?? created.Id, file);
+        } catch {
+          // Complaint itself already succeeded; a single evidence upload failure shouldn't
+          // block the filer from seeing their complaint was recorded.
+        }
+      }
       setComplaintModal(null);
+      setComplaintFiles([]);
       setError("");
     } catch (err) {
       setComplaintMsg({ type: "error", text: err?.message || "Gửi khiếu nại thất bại." });
@@ -487,6 +516,26 @@ function OwnerParticipationsPage() {
               onChange={(e) => setComplaintForm((prev) => ({ ...prev, evidenceDescription: e.target.value }))}
               placeholder="Mô tả bằng chứng liên quan (không bắt buộc)..."
             />
+          </div>
+          <div className="rm-field">
+            <label className="rm-field__label" htmlFor="op-complaint-files">Ảnh / video bằng chứng (tùy chọn)</label>
+            <input
+              id="op-complaint-files"
+              type="file"
+              multiple
+              accept={EVIDENCE_ACCEPT_ATTR}
+              onChange={(e) => { addComplaintFiles(e.target.files); e.target.value = ""; }}
+            />
+            {complaintFiles.length > 0 && (
+              <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 2 }}>
+                {complaintFiles.map((file, index) => (
+                  <li key={`${file.name}-${index}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--hr-text)" }}>
+                    <span>{file.name}</span>
+                    <button type="button" className="ghost-button" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => removeComplaintFile(index)}>Xóa</button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </RaceModalShell>
       )}

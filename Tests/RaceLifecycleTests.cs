@@ -9,6 +9,7 @@ using HorseRacing.Repositories;
 using HorseRacing.Repositories.Interfaces;
 using HorseRacing.Services;
 using HorseRacing.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -604,6 +605,19 @@ public class RaceLifecycleTests
         public decimal GetPointsPerVnd() => _inner.GetPointsPerVnd();
     }
 
+    private sealed class FakeCloudStorageService : ICloudStorageService
+    {
+        public Task<string> UploadAsync(IFormFile file, string folder = "general") =>
+            Task.FromResult($"https://fake.test/{folder}/{Guid.NewGuid()}");
+        public Task<MediaUploadResult> UploadMediaAsync(IFormFile file, string folder = "general")
+        {
+            var resourceType = file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "video" : "image";
+            var publicId = $"{folder}/{Guid.NewGuid()}";
+            return Task.FromResult(new MediaUploadResult($"https://fake.test/{publicId}", publicId, resourceType, file.Length));
+        }
+        public Task<bool> DeleteAsync(string publicId, string resourceType = "image") => Task.FromResult(true);
+    }
+
     private sealed class FakeNotificationService : INotificationService
     {
         public Task<ServiceResult<NotificationDto>> CreateNotificationAsync(CreateNotificationDto dto)
@@ -701,6 +715,7 @@ public class RaceLifecycleTests
         public IViolationRecordRepository ViolationRepo { get; }
         public IProtestRepository ProtestRepo { get; }
         public IRaceComplaintRepository RaceComplaintRepo { get; }
+        public IRaceComplaintEvidenceRepository RaceComplaintEvidenceRepo { get; }
         public IHealthCheckRepository HealthCheckRepo { get; }
         public IViolationRecordService ViolationSvc { get; }
         public IProtestService ProtestSvc { get; }
@@ -745,6 +760,7 @@ public class RaceLifecycleTests
             ViolationRepo = new ViolationRecordRepository(db);
             ProtestRepo = new ProtestRepository(db);
             RaceComplaintRepo = new RaceComplaintRepository(db);
+            RaceComplaintEvidenceRepo = new RaceComplaintEvidenceRepository(db);
             HealthCheckRepo = new HealthCheckRepository(db);
 
             var config = new ConfigurationBuilder().Build();
@@ -778,8 +794,8 @@ public class RaceLifecycleTests
                 UnitOfWork, new FakeNotificationService(), new FakeAuditLogService());
 
             RaceComplaintSvc = new RaceComplaintService(
-                RaceComplaintRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
-                _assignmentRepo, UnitOfWork, db, new FakeNotificationService(), new FakeAuditLogService());
+                RaceComplaintRepo, RaceComplaintEvidenceRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
+                _assignmentRepo, UnitOfWork, db, new FakeCloudStorageService(), new FakeNotificationService(), new FakeAuditLogService());
 
             HealthCheckSvc = new RefereeHealthCheckService(
                 HealthCheckRepo, RaceRepo, _horseRepo, new RefereeRepository(db), UnitOfWork);

@@ -187,6 +187,25 @@ public class RaceComplaintResponse
     public DateTime? UpdatedAt { get; set; }
     public RaceComplaintResultSummary? CurrentResult { get; set; }
     public List<RaceComplaintAssignmentOption> ConfirmedRefereeAssignments { get; set; } = new();
+    public List<RaceComplaintEvidenceResponse> Evidence { get; set; } = new();
+}
+
+// COMPLAINT-EVIDENCE-V1
+public class RaceComplaintEvidenceResponse
+{
+    public Guid Id { get; set; }
+    public Guid RaceComplaintId { get; set; }
+    public string FileUrl { get; set; } = string.Empty;
+    public string MediaType { get; set; } = string.Empty;
+    // COMPLAINT-EVIDENCE-V1.1: persisted at upload time from the caller's verified relationship to
+    // the complaint — the FE gallery must group/gate on this, not on UploadedByRole.
+    public string EvidenceSource { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public Guid UploadedByUserId { get; set; }
+    public string? UploadedByName { get; set; }
+    public string? UploadedByRole { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public DateTime UploadedAt { get; set; }
 }
 
 public class CreateHorseTransferRequest

@@ -10,9 +10,12 @@ import {
 import { getRefereeRaceComplaints, respondRaceComplaint } from "../../services/managementApi";
 import {
   canRefereeRespond,
+  canRefereeUploadEvidence,
   getRaceComplaintStatusDetails,
   getRaceComplaintTypeLabel,
 } from "../../utils/raceComplaintDisplay";
+import ComplaintEvidenceGallery from "../../components/ComplaintEvidenceGallery";
+import ComplaintEvidenceUploader from "../../components/ComplaintEvidenceUploader";
 import "../RefereeAssignmentPage/RefereeAssignmentPage.css";
 
 const fDate = (v) => (v ? new Date(v).toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" }) : "Chưa xác định");
@@ -82,6 +85,7 @@ export default function RefereeComplaintsPage() {
     const statusDetails = getRaceComplaintStatusDetails(complaint.status);
     const respondable = canRefereeRespond(complaint.status);
     const result = complaint.currentResult;
+    const refereeEvidenceCount = (complaint.evidence || []).filter((e) => (e.evidenceSource ?? e.EvidenceSource) === "Referee").length;
 
     return (
       <RaceDataRow
@@ -99,6 +103,23 @@ export default function RefereeComplaintsPage() {
         ].filter(Boolean)}
       >
         <p className="rm-data-row__reason"><strong>Nội dung khiếu nại:</strong> {complaint.reason}</p>
+        <ComplaintEvidenceGallery
+          evidence={complaint.evidence}
+          complaintId={complaint.id}
+          complaintStatus={complaint.status}
+          viewerRole="referee"
+          onDeleted={load}
+        />
+        {canRefereeUploadEvidence(complaint.status) && (
+          <div style={{ marginTop: 8 }}>
+            <ComplaintEvidenceUploader
+              complaintId={complaint.id}
+              label="Thêm bằng chứng bổ sung"
+              currentCount={refereeEvidenceCount}
+              onUploaded={load}
+            />
+          </div>
+        )}
         {respondable ? (
           <div className="rm-field" style={{ marginTop: 8 }}>
             <label className="rm-field__label" htmlFor={`rc-response-${complaint.id}`}>Giải trình của bạn</label>

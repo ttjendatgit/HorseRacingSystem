@@ -140,6 +140,7 @@ builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IPrizeRepository, PrizeRepository>();
 builder.Services.AddScoped<IProtestRepository, ProtestRepository>();
 builder.Services.AddScoped<IRaceComplaintRepository, RaceComplaintRepository>();
+builder.Services.AddScoped<IRaceComplaintEvidenceRepository, RaceComplaintEvidenceRepository>();
 builder.Services.AddScoped<IHorseTransferRepository, HorseTransferRepository>();
 builder.Services.AddScoped<IContractRepository, ContractRepository>();
 builder.Services.AddScoped<IInjuryRecordRepository, InjuryRecordRepository>();

@@ -158,7 +158,30 @@ public class RaceComplaintRepository : IRaceComplaintRepository
                         .ThenInclude(r => r!.User)
             .Include(c => c.AssignedRefereeAssignment)
                 .ThenInclude(a => a!.Referee)
-                    .ThenInclude(r => r!.User);
+                    .ThenInclude(r => r!.User)
+            .Include(c => c.Evidence)
+                .ThenInclude(e => e.UploadedByUser);
+}
+
+// COMPLAINT-EVIDENCE-V1
+public class RaceComplaintEvidenceRepository : IRaceComplaintEvidenceRepository
+{
+    private readonly ApplicationDbContext _context;
+    public RaceComplaintEvidenceRepository(ApplicationDbContext context) => _context = context;
+
+    public async Task<RaceComplaintEvidence?> GetByIdAsync(Guid id) =>
+        await _context.RaceComplaintEvidence.FirstOrDefaultAsync(e => e.Id == id);
+
+    public async Task<int> CountBySourceAsync(Guid raceComplaintId, EvidenceSource source) =>
+        await _context.RaceComplaintEvidence.CountAsync(e => e.RaceComplaintId == raceComplaintId && e.EvidenceSource == source);
+
+    public async Task AddAsync(RaceComplaintEvidence evidence) => await _context.RaceComplaintEvidence.AddAsync(evidence);
+
+    public Task RemoveAsync(RaceComplaintEvidence evidence)
+    {
+        _context.RaceComplaintEvidence.Remove(evidence);
+        return Task.CompletedTask;
+    }
 }
 
 public class HorseTransferRepository : IHorseTransferRepository
