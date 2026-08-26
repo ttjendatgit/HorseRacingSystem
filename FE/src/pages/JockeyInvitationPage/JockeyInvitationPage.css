@@ -161,22 +161,22 @@
 
 /* ── Card ── */
 .ji-card {
-  background: rgba(255,255,255,0.72);
+  background: rgba(255, 255, 255, 0.85);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.04);
-  box-shadow: 0 4px 16px rgba(15,23,42,0.04);
-  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  padding: 20px 24px;
   display: grid;
-  gap: 10px;
-  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
-  border-left: 3px solid transparent;
+  gap: 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 4px solid transparent;
 }
 
 .ji-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 16px 36px rgba(15,23,42,0.08);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.09);
 }
 
 .ji-card--pending { border-left-color: #f59e0b; }
@@ -194,51 +194,53 @@
 .ji-card__left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
 .ji-card__icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: rgba(242,210,139,0.12);
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(242, 210, 139, 0.2), rgba(215, 170, 77, 0.12));
+  border: 1px solid rgba(215, 170, 77, 0.3);
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
 
 .ji-card__left h3 {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   color: #1a1d23;
-  margin: 0 0 2px;
+  margin: 0 0 3px;
 }
 
 .ji-card__meta {
-  font-size: 12px;
+  font-size: 12.5px;
   color: #64748b;
   margin: 0;
 }
 
-.ji-card__meta strong { color: #1a1d23; }
+.ji-card__meta strong { color: #1a1d23; font-weight: 700; }
 
 .ji-card__right {
   flex-shrink: 0;
 }
 
 .ji-card__extra {
-  font-size: 12px;
-  color: #94a3b8;
-  padding-left: 56px;
+  font-size: 12.5px;
+  color: #64748b;
+  padding-left: 62px;
+  font-weight: 500;
 }
 
 .ji-card__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(0,0,0,0.04);
-  padding-left: 56px;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding-left: 62px;
 }
 
 /* ── Badge ── */
