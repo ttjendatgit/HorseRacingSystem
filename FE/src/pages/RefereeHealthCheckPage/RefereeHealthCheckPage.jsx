@@ -5,6 +5,7 @@ import {
   createHealthCheck,
   approveHorseForRace,
   rejectHorseForRace,
+  getHorseHealthHistory,
 } from "../../services/refereeApi";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import HorseBodyMap from "../../components/HorseBodyMap/HorseBodyMap3D";
@@ -18,11 +19,10 @@ const STATUS_MAP = {
 
 const STATUS_OPTIONS = ["Passed", "Failed", "RequiresRecheck"];
 
-//SVG for the empty state when no race is selected
+/* ── SVG: Vet checking a horse (empty state) ── */
 function VetHorseSVG() {
   return (
     <svg className="rh-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Horse silhouette */}
       <g opacity="0.15">
         <path d="M52 100 C48 94 46 86 50 80 C54 74 62 72 70 74 L78 72 C82 70 86 66 90 66 C94 66 96 70 94 76 L92 82 C98 80 104 82 108 88 L112 86 L114 90 L110 94 L104 96 C106 100 104 106 98 110 C92 114 84 116 76 118 C68 120 58 118 52 112 Z" fill="currentColor" />
         <rect x="58" y="116" width="5" height="24" rx="2" fill="currentColor" />
@@ -30,17 +30,14 @@ function VetHorseSVG() {
         <rect x="86" y="116" width="5" height="24" rx="2" fill="currentColor" />
         <rect x="96" y="116" width="5" height="24" rx="2" fill="currentColor" />
       </g>
-      {/* Vet silhouette */}
       <g opacity="0.12">
         <circle cx="162" cy="54" r="9" fill="currentColor" />
         <rect x="156" y="63" width="12" height="28" rx="4" fill="currentColor" />
         <rect x="150" y="88" width="8" height="22" rx="3" fill="currentColor" />
         <rect x="166" y="88" width="8" height="22" rx="3" fill="currentColor" />
       </g>
-      {/* Stethoscope */}
       <path d="M162 63 C162 56 168 50 174 48" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
       <circle cx="177" cy="46" r="5" stroke="currentColor" strokeWidth="1.2" opacity="0.25" fill="none" />
-      {/* Heartbeat line */}
       <path d="M190 60 L194 56 L198 64 L202 50 L206 58 L210 56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <text x="120" y="140" textAnchor="middle" fill="var(--rh-muted)" fontSize="12" fontFamily="sans-serif" opacity="0.7">
         Chọn cuộc đua để bắt đầu kiểm tra
@@ -49,34 +46,29 @@ function VetHorseSVG() {
   );
 }
 
-//SVG for the empty state when no health checks exist for a race
+/* ── SVG: Empty history ── */
 function EmptyHistorySVG() {
   return (
     <svg className="rh-empty-list-svg" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Clipboard */}
       <rect x="30" y="12" width="60" height="54" rx="6" stroke="currentColor" strokeWidth="1" opacity="0.2" fill="currentColor" fillOpacity="0.04" />
       <rect x="44" y="6" width="32" height="10" rx="3" stroke="currentColor" strokeWidth="1" opacity="0.15" fill="currentColor" fillOpacity="0.04" />
-      {/* Lines of text */}
       <rect x="40" y="30" width="40" height="2" rx="1" fill="currentColor" opacity="0.1" />
       <rect x="40" y="38" width="32" height="2" rx="1" fill="currentColor" opacity="0.08" />
       <rect x="40" y="46" width="36" height="2" rx="1" fill="currentColor" opacity="0.08" />
-      {/* Checkmark */}
       <path d="M40 54 L46 60 L56 48" stroke="var(--rh-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
     </svg>
   );
 }
 
-//SVG for the body map prompt (when form is hidden)
+/* ── SVG: Body map prompt ── */
 function BodyMapPromptSVG() {
   return (
     <svg viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 160, height: 80, color: "var(--rh-muted)" }}>
-      {/* Simple horse outline */}
       <path d="M30 55 C26 50 24 44 28 38 C32 32 40 30 48 32 L56 30 C60 28 64 24 68 24 C72 24 74 28 72 34 L70 40 C76 38 82 40 86 46 L90 44 L92 48 L88 52 L82 54 C84 58 82 64 76 68 C70 72 62 74 54 76 C46 78 36 76 30 70 Z" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.25" />
       <line x1="36" y1="74" x2="36" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
       <line x1="46" y1="74" x2="46" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
       <line x1="64" y1="74" x2="64" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
       <line x1="74" y1="74" x2="74" y2="90" stroke="currentColor" strokeWidth="0.8" opacity="0.2" />
-      {/* Plus icon */}
       <circle cx="110" cy="50" r="14" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" fill="none" />
       <line x1="104" y1="50" x2="116" y2="50" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
       <line x1="110" y1="44" x2="110" y2="56" stroke="var(--rh-gold)" strokeWidth="1.5" opacity="0.4" strokeLinecap="round" />
@@ -103,8 +95,11 @@ function RefereeHealthCheckPage() {
   });
   const [bodyMapData] = useState({});
   const [bodyMapSelected, setBodyMapSelected] = useState(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  //Fetch API assignments on mount
+  //Fetch API load assignments on mount
   useEffect(() => {
     let ignore = false;
     const fn = async () => {
@@ -127,7 +122,7 @@ function RefereeHealthCheckPage() {
     return () => { ignore = true; };
   }, []);
 
-  //Fetch API race entries when a race is selected
+  //Fetch API load race entries
   useEffect(() => {
     if (!selectedRaceId) return;
     let ignore = false;
@@ -150,7 +145,7 @@ function RefereeHealthCheckPage() {
     return () => { ignore = true; };
   }, [selectedRaceId]);
 
-  //Fetch API health checks for a race
+  //Fetch API load health checks for a race
   const loadHealthChecks = async (raceId) => {
     setLoading(true);
     setError("");
@@ -171,7 +166,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  //Handle race selection
+  //Handle race selection change
   const handleRaceSelect = (raceId) => {
     setSelectedRaceId(raceId);
     setError("");
@@ -186,7 +181,23 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  //Handle form submission to create a new health check
+  //Handle view history for a specific horse
+  const handleViewHistory = async (targetHorseId) => {
+    if (!targetHorseId) return;
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const res = await getHorseHealthHistory(targetHorseId);
+      setHistoryData(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
+    } catch (e) {
+      console.error(e);
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  //Handle form submission for creating a new health check
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -215,7 +226,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  //Handle approval of a horse for racing
+  //Handle approve a horse for racing
   const handleApprove = async (checkId) => {
     setError("");
     setSuccess("");
@@ -228,7 +239,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  //Reject a horse for racing with a reason
+  //Handle reject a horse for racing
   const handleReject = async (checkId) => {
     const reason = prompt("Nhập lý do từ chối:");
     if (!reason) return;
@@ -243,7 +254,7 @@ function RefereeHealthCheckPage() {
     }
   };
 
-  //Body map part selection handler
+  //Handle body part selection from the horse body map
   const handleBodyPartClick = (part) => {
     setBodyMapSelected(part);
     setForm((prev) => ({ ...prev, bodyPart: part }));
@@ -255,7 +266,7 @@ function RefereeHealthCheckPage() {
     [assignments]
   );
 
-  //Filter horse entries (approved horses should not be available for new checks)
+  // Filter horse entries
   const availableEntries = useMemo(() => {
     return entries.filter((entry) => {
       const targetHorseId = entry.horseId || entry.HorseId;
@@ -277,7 +288,6 @@ function RefereeHealthCheckPage() {
     return { total: t, passed: p, failed: f, recheck: r };
   }, [healthChecks]);
 
-  //Render the main page
   return (
     <div className="rh-wrap">
       <div className="rh-container">
@@ -380,34 +390,56 @@ function RefereeHealthCheckPage() {
                 <form className="rh-form" onSubmit={handleSubmit}>
                   <div className="rh-form-row">
                     <label className="rh-label rh-label--required">Ngựa</label>
-                    <select
-                      className="rh-form-input"
-                      value={form.horseId}
-                      onChange={(e) =>
-                        setForm({ ...form, horseId: e.target.value })
-                      }
-                      required
-                    >
-                      <option value="">-- Chọn ngựa --</option>
-                      {availableEntries.map((entry) => (
-                        <option key={entry.horseId} value={entry.horseId}>
-                          {entry.horseName}
-                          {entry.jockeyName
-                            ? ` (Nài: ${entry.jockeyName})`
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {entries.length === 0 && (
-                      <p className="rh-hint">
-                        Không có ngựa nào trong cuộc đua này.
-                      </p>
-                    )}
-                    {entries.length > 0 && availableEntries.length === 0 && (
-                      <p className="rh-hint">
-                        Tất cả ngựa đã được kiểm tra xong.
-                      </p>
-                    )}
+                    <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <select
+                          className="rh-form-input"
+                          value={form.horseId}
+                          onChange={(e) =>
+                            setForm({ ...form, horseId: e.target.value })
+                          }
+                          required
+                        >
+                          <option value="">-- Chọn ngựa --</option>
+                          {availableEntries.map((entry) => (
+                            <option key={entry.horseId} value={entry.horseId}>
+                              {entry.horseName}
+                              {entry.jockeyName
+                                ? ` (Nài: ${entry.jockeyName})`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {entries.length === 0 && (
+                          <p className="rh-hint">
+                            Không có ngựa nào trong cuộc đua này.
+                          </p>
+                        )}
+                        {entries.length > 0 && availableEntries.length === 0 && (
+                          <p className="rh-hint">
+                            Tất cả ngựa đã được kiểm tra xong.
+                          </p>
+                        )}
+                      </div>
+                      
+                      {form.horseId && (
+                        <button
+                          type="button"
+                          className="rh-btn"
+                          style={{
+                            padding: "8px 12px",
+                            background: "var(--rh-surface-2)",
+                            color: "var(--rh-gold)",
+                            border: "1px solid var(--rh-gold-soft)",
+                            whiteSpace: "nowrap",
+                            height: "38px"
+                          }}
+                          onClick={() => handleViewHistory(form.horseId)}
+                        >
+                          📋 Lịch sử y tế
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="rh-form-row">
@@ -503,12 +535,31 @@ function RefereeHealthCheckPage() {
                 <div className="rh-list">
                   {healthChecks.map((check) => (
                     <div key={check.id} className="rh-item">
-                      <div className="rh-item__top">
+                      <div className="rh-item__top" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                         <strong className="rh-item__name">
                           {check.horseName || "Ngựa #" + check.horseId}
                         </strong>
+                        
+                        <button
+                          type="button"
+                          style={{
+                            padding: "2px 6px",
+                            fontSize: "11px",
+                            background: "var(--rh-surface-2)",
+                            color: "var(--rh-gold)",
+                            border: "1px solid var(--rh-gold-soft)",
+                            borderRadius: "4px",
+                            cursor: "pointer"
+                          }}
+                          onClick={() => handleViewHistory(check.horseId)}
+                          title="Xem hồ sơ y tế"
+                        >
+                          📋 Lịch sử
+                        </button>
+
                         <span
                           className={`rh-badge rh-badge--${check.status?.toLowerCase()}`}
+                          style={{ marginLeft: "auto" }}
                         >
                           {STATUS_MAP[check.status] || check.status}
                         </span>
@@ -561,6 +612,48 @@ function RefereeHealthCheckPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showHistoryModal && (
+          <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ background: "#1a1d24", border: "1px solid #333", borderRadius: 12, padding: 24, width: "90%", maxWidth: 650, maxHeight: "80vh", overflowY: "auto", color: "#e2e8f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h3 style={{ margin: 0, color: "#f2d28b", fontSize: "1.25rem" }}>Lịch sử y tế</h3>
+                <button type="button" onClick={() => setShowHistoryModal(false)} style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1 }}>&times;</button>
+              </div>
+              
+              {historyLoading ? (
+                <p style={{ textAlign: "center", color: "#94a3b8", padding: "20px 0" }}>Đang tải dữ liệu...</p>
+              ) : historyData.length === 0 ? (
+                <p style={{ textAlign: "center", color: "#94a3b8", padding: "20px 0" }}>Ngựa này chưa có lịch sử khám bệnh.</p>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #333", textAlign: "left" }}>
+                      <th style={{ padding: "10px 8px", color: "#94a3b8", fontWeight: 600 }}>Giải / Cuộc đua</th>
+                      <th style={{ padding: "10px 8px", color: "#94a3b8", fontWeight: 600 }}>Trạng thái</th>
+                      <th style={{ padding: "10px 8px", color: "#94a3b8", fontWeight: 600 }}>Ghi chú</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData.map((h, i) => (
+                      <tr key={h.id || i} style={{ borderBottom: "1px solid #2a2d35" }}>
+                        <td style={{ padding: "12px 8px" }}>{h.raceName || h.RaceName || "Khám tổng quát"}</td>
+                        <td style={{ padding: "12px 8px" }}>
+                          <span className={`rh-badge rh-badge--${(h.status || h.Status)?.toLowerCase()}`}>
+                            {STATUS_MAP[h.status || h.Status] || (h.status || h.Status)}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
+                          {h.notes || h.Notes || h.observations || h.Observations || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
