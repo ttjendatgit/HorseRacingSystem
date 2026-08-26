@@ -1,7 +1,16 @@
+/**
+ * Lấy URL gốc kết nối API Backend từ biến môi trường
+ * @returns {string} URL gốc API (ví dụ: http://localhost:5000)
+ */
 const getApiBaseUrl = () => {
   return import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
 };
 
+/**
+ * Ghép đường dẫn tương đối thành URL đầy đủ của API Backend
+ * @param {string} url - Đường dẫn API tương đối (e.g. /api/auth/login)
+ * @returns {string} URL tuyệt đối
+ */
 export const resolveApiUrl = (url) => {
   if (!url) return "";
   if (/^(https?:)?\/\//i.test(url) || /^data:/i.test(url)) return url;
@@ -10,6 +19,7 @@ export const resolveApiUrl = (url) => {
   return `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
 };
 
+/** Lấy JWT Bearer Token từ localStorage và tự động kiểm tra thời hạn hết hạn */
 const getAuthToken = () => {
   const token = localStorage.getItem("authToken");
   if (!token) return null;
@@ -33,6 +43,7 @@ const getRefreshTokenValue = () => localStorage.getItem("refreshToken");
 let isRefreshing = false;
 let refreshPromise = null;
 
+/** Thực hiện làm mới JWT Token ngầm khi nhận phản hồi 401 Unauthorized */
 async function tryRefreshToken() {
   const refreshToken = getRefreshTokenValue();
   if (!refreshToken) return false;
@@ -78,6 +89,15 @@ async function tryRefreshToken() {
   return refreshPromise;
 }
 
+/**
+ * Hàm wrapper trung tâm thực hiện các yêu cầu HTTP fetch tới Backend
+ * - Tự động đính kèm Bearer Token
+ * - Tự động retry khi Token hết hạn (401)
+ * - Tự động bắt lỗi mạng và chuẩn hóa thông báo lỗi tiếng Việt
+ * @param {string} path - Đường dẫn API tương đối
+ * @param {Object} options - Tùy chọn fetch (method, headers, body)
+ * @returns {Promise<any>} Dữ liệu JSON hoặc kết quả từ API
+ */
 export async function request(path, options = {}) {
   const token = getAuthToken();
   const isFormData = options.body instanceof FormData;
@@ -145,7 +165,6 @@ export async function request(path, options = {}) {
         ? Object.entries(data.errors)
             .map(([, msgs]) => {
               const msgText = Array.isArray(msgs) ? msgs.join(", ") : msgs;
-              // Bỏ tên field nếu message đã chứa context (e.g. "Mật khẩu phải...")
               return msgText || "";
             })
             .filter(Boolean)
