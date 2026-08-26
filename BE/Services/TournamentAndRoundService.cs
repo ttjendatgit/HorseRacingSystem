@@ -596,6 +596,32 @@ public class TournamentService : ITournamentService
                 return ServiceResult<TournamentResponse>.Ok(await MapToResponseAsync(tournament));
             }
 
+            // START-TOURNAMENT-HORSE-READINESS-V1 / TOURNAMENT-REGISTRATION-LOCK-AT-START-V1:
+            // Published -> Ongoing requires BOTH (a) at least one Approved TournamentHorseRegistration
+            // and (b) zero remaining Pending ones — Admin must explicitly resolve every Pending
+            // registration (Approve/Reject) before Start; Start itself never auto-rejects them.
+            // Reuses the exact same TournamentHorseRegistrations table/RegistrationStatus enum
+            // already queried in MapToResponseAsync below (ApprovedRegistrationCount) — no new
+            // repository/query shape. Deliberately NOT ApprovedCount == MaxParticipants, NOT a new
+            // MinParticipants field, NOT a StartDate/UtcNow gate — Race Start readiness
+            // (RaceEntry/Jockey/Gate/HealthCheck) is untouched. IsValidStatusTransition above
+            // guarantees Ongoing is only ever reached from Published, so this never fires for
+            // Ongoing -> Finished.
+            if (newStatus == TournamentStatus.Ongoing)
+            {
+                var approvedRegistrationCount = await _db.TournamentHorseRegistrations
+                    .CountAsync(x => x.TournamentId == tournament.Id && x.Status == RegistrationStatus.Approved);
+                if (approvedRegistrationCount == 0)
+                    return ServiceResult<TournamentResponse>.Fail(400,
+                        "Giải đấu phải có ít nhất một ngựa được duyệt tham gia trước khi bắt đầu.");
+
+                var pendingRegistrationCount = await _db.TournamentHorseRegistrations
+                    .CountAsync(x => x.TournamentId == tournament.Id && x.Status == RegistrationStatus.Pending);
+                if (pendingRegistrationCount > 0)
+                    return ServiceResult<TournamentResponse>.Fail(400,
+                        "Vui lòng xử lý tất cả đăng ký đang chờ duyệt trước khi bắt đầu giải đấu.");
+            }
+
             // Published->Ongoing and Ongoing->Finished: behaviorally unchanged in Phase4B — both
             // depend on registration/RaceEntry-confirmation/qualification/result/prize work that is
             // explicitly out of this phase's scope (see Phase4A §11). Deferred, not implemented here.

@@ -42,12 +42,31 @@ public class Phase5StructuralTests
     private static Task<ServiceResult<TournamentResponse>> PublishAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
         => f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
 
+    // START-TOURNAMENT-HORSE-READINESS-V1: Published -> Ongoing now requires >=1 Approved
+    // TournamentHorseRegistration — seed one so this helper's Ongoing transition still succeeds;
+    // unrelated to what RoundMutation_Ongoing_Rejected/RaceMutation_Ongoing_Rejected actually assert.
+    private static async Task SeedApprovedRegistrationAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
+    {
+        var userId = Guid.NewGuid();
+        var user = new User { Id = userId, Email = $"phase5-owner-{Guid.NewGuid():N}@test.com", PasswordHash = "x", FullName = "Owner", Role = UserRole.HorseOwner };
+        var owner = new Owner { Id = Guid.NewGuid(), UserId = userId, OwnerCode = $"OWN-{Guid.NewGuid():N}" };
+        var horse = new Horse { Id = Guid.NewGuid(), Name = $"Horse-{Guid.NewGuid():N}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
+        var registration = new TournamentHorseRegistration
+        {
+            Id = Guid.NewGuid(), TournamentId = tournamentId, HorseId = horse.Id, OwnerId = owner.Id,
+            Status = RegistrationStatus.Approved, CreatedAt = DateTime.UtcNow
+        };
+        f.Db.AddRange(user, owner, horse, registration);
+        await f.Db.SaveChangesAsync();
+    }
+
     // S-TEST: publishes then advances Published -> Ongoing (the only valid transition into Ongoing),
     // so Round/Race mutation guards can be proven for Ongoing specifically, not just Published.
     private static async Task<ServiceResult<TournamentResponse>> MoveToOngoingAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
     {
         var publish = await PublishAsync(f, tournamentId);
         Assert.True(publish.Result.Success, publish.Result.Message);
+        await SeedApprovedRegistrationAsync(f, tournamentId);
         return await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Ongoing }, Guid.NewGuid());
     }
 

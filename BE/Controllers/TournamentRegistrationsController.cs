@@ -319,6 +319,13 @@ public class TournamentRegistrationsController : ControllerBase
         if (tournament == null)
             return NotFound(new { message = "Không tìm thấy giải đấu" });
 
+        // TOURNAMENT-REGISTRATION-LOCK-AT-START-V1: a Pending registration may only move to
+        // Approved while its Tournament is still Published — once the Tournament leaves Published
+        // (Draft, Ongoing, Finished, Cancelled), the roster is either not open yet or already
+        // frozen, and Admin approval must not still be able to add to it.
+        if (tournament.Status != TournamentStatus.Published)
+            return BadRequest(new { message = "Chỉ có thể duyệt đăng ký khi giải đấu đang ở trạng thái Đã công bố." });
+
         // Capacity gate — Tournament.MaxParticipants, never Race.MaxParticipants.
         var approvedCount = await _db.TournamentHorseRegistrations.CountAsync(x =>
             x.TournamentId == registration.TournamentId && x.Status == RegistrationStatus.Approved);
@@ -372,6 +379,22 @@ public class TournamentRegistrationsController : ControllerBase
         var registration = await _db.TournamentHorseRegistrations.FirstOrDefaultAsync(x => x.Id == id);
         if (registration == null)
             return NotFound(new { message = "Không tìm thấy đăng ký" });
+
+        // TOURNAMENT-REGISTRATION-LOCK-AT-START-V1: Reject only ever applies to a still-Pending
+        // registration — Approved/Rejected/Withdrawn must never be rewritten by a later Reject
+        // call, so this returns before touching Status/Note at all.
+        if (registration.Status != RegistrationStatus.Pending)
+            return BadRequest(new { message = $"Không thể từ chối đăng ký ở trạng thái {registration.Status}." });
+
+        var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == registration.TournamentId);
+        if (tournament == null)
+            return NotFound(new { message = "Không tìm thấy giải đấu" });
+
+        // Same Published-only window as Approve — once the Tournament leaves Published, the
+        // roster is either not open yet or already frozen; Admin must not still be able to reject
+        // a Pending row that Start has just refused to let through unresolved.
+        if (tournament.Status != TournamentStatus.Published)
+            return BadRequest(new { message = "Chỉ có thể từ chối đăng ký khi giải đấu đang ở trạng thái Đã công bố." });
 
         registration.Status = RegistrationStatus.Rejected;
         registration.Note = r?.Reason ?? "Bị từ chối bởi admin";
