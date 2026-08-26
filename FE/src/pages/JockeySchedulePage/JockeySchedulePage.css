@@ -70,23 +70,29 @@
 .js-list { display: grid; gap: 10px; }
 
 .js-card {
-  background: rgba(255,255,255,0.72);
+  background: rgba(255, 252, 245, 0.95);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.04);
-  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(215, 170, 77, 0.2);
+  padding: 18px 20px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: grid;
   gap: 8px;
 }
 
-.js-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15,23,42,0.06); }
+.js-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(215, 170, 77, 0.4);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
 
 .js-card--active {
-  border-color: rgba(242,210,139,0.4);
-  box-shadow: 0 8px 24px rgba(242,210,139,0.08);
+  border-left: 4px solid #8f6420;
+  border-color: rgba(215, 170, 77, 0.5);
+  background: linear-gradient(135deg, #fffdf8 0%, #faf3e2 100%);
+  box-shadow: 0 8px 24px rgba(143, 100, 32, 0.12);
 }
 
 .js-card__top {

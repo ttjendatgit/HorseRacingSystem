@@ -29,6 +29,7 @@
 }
 
 /* ---------- Hero banner ---------- */
+/* ---------- Hero banner ---------- */
 .prw-hero {
   display: flex;
   align-items: center;
@@ -37,8 +38,9 @@
   flex-wrap: wrap;
   padding: 44px;
   border-radius: var(--prw-radius-lg);
-  background: linear-gradient(135deg, #fef9ed 0%, #fffdf8 40%, #ffffff 100%);
-  border: 1px solid rgba(231, 198, 120, 0.25);
+  background: radial-gradient(circle at 92% 12%, rgba(215, 170, 77, 0.14) 0%, transparent 60%),
+              linear-gradient(135deg, #fefcf7 0%, #fffdf8 45%, #ffffff 100%);
+  border: 1.5px solid rgba(215, 170, 77, 0.3);
   box-shadow: var(--prw-shadow-lg);
   position: relative;
   overflow: hidden;
@@ -50,9 +52,9 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 5px;
-  background: linear-gradient(180deg, #e7c678, #d7aa4d, #8f6420);
-  border-radius: 0 3px 3px 0;
+  width: 6px;
+  background: linear-gradient(180deg, #f2d28b, #d7aa4d, #8f6420);
+  border-radius: 0 4px 4px 0;
 }
 
 /* Decorative gold circle */
@@ -64,7 +66,7 @@
   width: 280px;
   height: 280px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(231, 198, 120, 0.12), transparent 70%);
+  background: radial-gradient(circle, rgba(215, 170, 77, 0.14), transparent 70%);
   pointer-events: none;
 }
 
@@ -79,30 +81,34 @@
   display: inline-block;
   padding: 6px 14px;
   border-radius: 999px;
-  background: rgba(215, 170, 77, 0.13);
+  background: linear-gradient(135deg, rgba(215, 170, 77, 0.16), rgba(215, 170, 77, 0.08));
+  border: 1px solid rgba(215, 170, 77, 0.3);
   color: var(--prw-gold-dark);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   margin-bottom: 16px;
 }
 
 .prw-hero__text h1 {
   margin: 0 0 12px;
-  font-size: clamp(36px, 4.5vw, 48px);
-  font-weight: 700;
+  font-size: clamp(34px, 4.2vw, 48px);
+  font-weight: 800;
   line-height: 1.08;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: var(--prw-navy);
+  background: linear-gradient(135deg, var(--prw-navy) 60%, #34415b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .prw-hero__text p {
   margin: 0;
-  max-width: 500px;
+  max-width: 520px;
   color: var(--prw-slate);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 15.5px;
+  line-height: 1.65;
 }
 
 /* ---------- Hero payout display ---------- */
@@ -114,9 +120,9 @@
   gap: 8px;
   padding: 32px 40px;
   border-radius: var(--prw-radius-lg);
-  background: linear-gradient(145deg, #fffaf0, rgba(247, 236, 211, 0.85));
-  border: 1px solid rgba(215, 170, 77, 0.3);
-  box-shadow: var(--prw-shadow-gold);
+  background: linear-gradient(145deg, #ffffff 0%, #fffdf5 50%, #faf3e2 100%);
+  border: 1.5px solid rgba(215, 170, 77, 0.35);
+  box-shadow: 0 10px 30px rgba(143, 100, 32, 0.12);
   min-width: 220px;
   text-align: center;
   position: relative;
@@ -125,19 +131,22 @@
 
 .prw-hero__payout-label {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--prw-gold-dark);
 }
 
 .prw-hero__payout-value {
   font-family: "Sora", system-ui, sans-serif;
-  font-size: 44px;
-  font-weight: 700;
+  font-size: 46px;
+  font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--prw-gold-dark);
   line-height: 1;
+  background: linear-gradient(135deg, #d7aa4d 0%, #8f6420 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .prw-hero__payout-meta {

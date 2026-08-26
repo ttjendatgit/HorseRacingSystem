@@ -86,30 +86,36 @@
 .rv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .rv-btn--gold {
-  background: var(--rv-gold);
-  color: #1a1d23;
+  background: linear-gradient(135deg, #f2d28b 0%, #d7aa4d 50%, #8f6420 100%);
+  color: #120e0a;
   padding: 10px 22px;
+  font-weight: 800;
+  box-shadow: 0 6px 20px rgba(143, 100, 32, 0.3);
 }
 .rv-btn--gold:hover {
-  background: #e8c97a;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(242, 210, 139, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(143, 100, 32, 0.42);
 }
 
 .rv-btn--primary {
-  background: var(--rv-gold-dim);
-  color: #1a1d23;
+  background: linear-gradient(135deg, #e7b55d 0%, #d7aa4d 100%);
+  color: #120e0a;
+  font-weight: 800;
 }
-.rv-btn--primary:hover:not(:disabled) { background: var(--rv-gold); }
+.rv-btn--primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(215, 170, 77, 0.35);
+}
 
 .rv-btn--outline {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(242, 210, 139, 0.08);
   color: var(--rv-gold);
-  border: 1px solid rgba(242, 210, 139, 0.2);
+  border: 1px solid rgba(242, 210, 139, 0.3);
   padding: 10px 16px;
 }
 .rv-btn--outline:hover:not(:disabled) {
-  background: rgba(242, 210, 139, 0.1);
+  background: rgba(242, 210, 139, 0.16);
+  border-color: rgba(242, 210, 139, 0.5);
 }
 
 .rv-btn--cancel {
