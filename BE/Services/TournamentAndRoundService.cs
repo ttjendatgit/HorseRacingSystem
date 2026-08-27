@@ -160,42 +160,195 @@ public class TournamentService : ITournamentService
     }
 
     public async Task<ServiceResult<IEnumerable<TournamentResponse>>> GetAllTournamentsAsync()
+{
+    try
     {
-        try
-        {
-            var tournaments = await _tournamentRepo.GetAllAsync();
-            var responses = new List<TournamentResponse>();
-            foreach (var t in tournaments)
-            {
-                responses.Add(await MapToResponseAsync(t));
-            }
-            return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<IEnumerable<TournamentResponse>>.Fail(
-                500, $"Lỗi truy xuất danh sách giải đấu: {ex.Message}");
-        }
+        var tournaments = await _tournamentRepo.GetAllAsync();
+        var responses = await MapTournamentListAsync(tournaments);
+
+        return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
+    }
+    catch (Exception ex)
+    {
+        return ServiceResult<IEnumerable<TournamentResponse>>.Fail(
+            500,
+            $"Lỗi truy xuất danh sách giải đấu: {ex.Message}");
+    }
+}
+
+private async Task<List<TournamentResponse>> MapTournamentListAsync(
+    IEnumerable<Tournament> tournamentSource)
+{
+    var tournaments = tournamentSource.ToList();
+
+    if (tournaments.Count == 0)
+    {
+        return new List<TournamentResponse>();
     }
 
-    public async Task<ServiceResult<IEnumerable<TournamentResponse>>> GetActiveTournamentsAsync()
+    var tournamentIds = tournaments
+        .Select(t => t.Id)
+        .ToList();
+
+    var approvedCounts = await _db.TournamentHorseRegistrations
+        .Where(x =>
+            tournamentIds.Contains(x.TournamentId) &&
+            x.Status == RegistrationStatus.Approved)
+        .GroupBy(x => x.TournamentId)
+        .Select(g => new
+        {
+            TournamentId = g.Key,
+            Count = g.Count()
+        })
+        .ToDictionaryAsync(
+            x => x.TournamentId,
+            x => x.Count);
+
+    var rawEntryStats = await (
+        from entry in _db.RaceEntries
+        join race in _db.Races
+            on entry.RaceId equals race.Id
+        where tournamentIds.Contains(race.TournamentId)
+        group entry by race.TournamentId into g
+        select new
+        {
+            TournamentId = g.Key,
+
+            EntryCount = g.Count(),
+
+            HorseCount = g
+                .Select(e => e.HorseId)
+                .Distinct()
+                .Count(),
+
+            JockeyCount = g
+                .Where(e => e.JockeyId.HasValue)
+                .Select(e => e.JockeyId!.Value)
+                .Distinct()
+                .Count()
+        })
+        .ToListAsync();
+
+    var entryStats = rawEntryStats.ToDictionary(
+        x => x.TournamentId,
+        x => new TournamentStatsDto
+        {
+            EntryCount = x.EntryCount,
+            HorseCount = x.HorseCount,
+            JockeyCount = x.JockeyCount
+        });
+
+    return tournaments
+        .Select(t => MapToListResponse(
+            t,
+            approvedCounts,
+            entryStats))
+        .ToList();
+}
+    private TournamentResponse MapToListResponse(
+    Tournament tournament,
+    Dictionary<Guid, int> approvedCounts,
+    Dictionary<Guid, TournamentStatsDto> entryStats)
+{
+    int? daysRemaining = null;
+
+    if (tournament.Status == TournamentStatus.Published ||
+        tournament.Status == TournamentStatus.Ongoing)
     {
-        try
-        {
-            var tournaments = await _tournamentRepo.GetActiveAsync();
-            var responses = new List<TournamentResponse>();
-            foreach (var t in tournaments)
-            {
-                responses.Add(await MapToResponseAsync(t));
-            }
-            return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<IEnumerable<TournamentResponse>>.Fail(
-                500, $"Lỗi truy xuất giải đấu đang hoạt động: {ex.Message}");
-        }
+        var daysLeft = (tournament.EndDate - DateTime.UtcNow).Days;
+        daysRemaining = daysLeft > 0 ? daysLeft : 0;
     }
+
+    approvedCounts.TryGetValue(
+        tournament.Id,
+        out var approvedRegistrationCount);
+
+    entryStats.TryGetValue(
+        tournament.Id,
+        out var stats);
+
+    var raceCount = tournament.Races?.Count ?? 0;
+
+    return new TournamentResponse
+    {
+        Id = tournament.Id,
+        Name = tournament.Name,
+        Description = tournament.Description,
+
+        StartDate = tournament.StartDate,
+        EndDate = tournament.EndDate,
+
+        IsActive = tournament.IsActive,
+
+        // Repository GetAllAsync() đã Include Rounds và Races.
+        RoundCount = tournament.Rounds?.Count ?? 0,
+        RaceCount = raceCount,
+
+        ImageUrl = tournament.ImageUrl,
+
+        CreatedAt = tournament.CreatedAt,
+        UpdatedAt = tournament.UpdatedAt,
+
+        Status = tournament.Status,
+        StatusName = tournament.Status.ToString(),
+
+        RegistrationDeadline = tournament.RegistrationDeadline,
+
+        PublishedAt = tournament.PublishedAt,
+        StartedAt = tournament.StartedAt,
+        FinishedAt = tournament.FinishedAt,
+        CancelledAt = tournament.CancelledAt,
+
+        PrizePool = tournament.PrizePool,
+
+        Venue = tournament.Venue,
+        Country = tournament.Country,
+        Category = tournament.Category,
+        SurfaceType = tournament.SurfaceType?.ToString(),
+
+        MinParticipants = tournament.MinParticipants,
+        MaxParticipants = tournament.MaxParticipants,
+
+        ApprovedRegistrationCount = approvedRegistrationCount,
+
+        MaxRounds = tournament.MaxRounds,
+
+        CancelledBy = tournament.CancelledBy,
+        CancellationReason = tournament.CancellationReason,
+
+        Stats = new TournamentStatsDto
+        {
+            RaceCount = raceCount,
+
+            EntryCount = stats?.EntryCount ?? 0,
+
+            HorseCount = stats?.HorseCount ?? 0,
+
+            JockeyCount = stats?.JockeyCount ?? 0,
+
+            DaysRemaining = daysRemaining
+        },
+
+        NextTransitions = GetNextTransitions(tournament.Status)
+    };
+}
+
+    public async Task<ServiceResult<IEnumerable<TournamentResponse>>> GetActiveTournamentsAsync()
+{
+    try
+    {
+        var tournaments = await _tournamentRepo.GetActiveAsync();
+        var responses = await MapTournamentListAsync(tournaments);
+
+        return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
+    }
+    catch (Exception ex)
+    {
+        return ServiceResult<IEnumerable<TournamentResponse>>.Fail(
+            500,
+            $"Lỗi truy xuất giải đấu đang hoạt động: {ex.Message}");
+    }
+}
 
     public async Task<ServiceResult<TournamentResponse>> UpdateTournamentAsync(Guid id, UpdateTournamentRequest request)
     {
