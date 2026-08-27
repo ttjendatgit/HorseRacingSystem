@@ -55,6 +55,517 @@ public static class DemoSeeder
         }
 
         if (changed) await db.SaveChangesAsync();
+
+        await SeedHoangTournamentsInternalAsync(db, logger);
+    }
+
+    public static async Task SeedHoangTournamentsInternalAsync(ApplicationDbContext db, ILogger logger)
+    {
+        var now = DateTime.UtcNow;
+
+        var t1Exists = await db.Tournaments.AnyAsync(t => t.Name == "Giải đua ngựa của hoàng");
+        var t2Exists = await db.Tournaments.AnyAsync(t => t.Name == "Giải đua ngựa quốc gia của hoàng");
+
+        // 1. Tạo hoặc lấy Track
+        var track = await db.Tracks.FirstOrDefaultAsync();
+        if (track == null)
+        {
+            track = new Track
+            {
+                Id = Guid.NewGuid(),
+                Name = "Trường Đua Quốc Gia Hoàng Kim",
+                Length = 2400,
+                Capacity = 16
+            };
+            db.Tracks.Add(track);
+            await db.SaveChangesAsync();
+        }
+
+        // 2. Lấy hoặc tạo danh sách ngựa đã được duyệt (Approved)
+        var horses = await db.Horses
+            .Where(h => h.ApprovalStatus == ApprovalStatus.Approved && !h.IsArchived)
+            .Take(8)
+            .ToListAsync();
+
+        if (horses.Count < 2)
+        {
+            var owner = await db.Owners.FirstOrDefaultAsync();
+            if (owner == null)
+            {
+                var user = await db.Users.FirstOrDefaultAsync(u => u.Role == UserRole.HorseOwner);
+                if (user == null)
+                {
+                    user = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        Email = "hoang.owner@horseracing.com",
+                        FullName = "Nguyễn Hoàng",
+                        Role = UserRole.HorseOwner,
+                        IsActive = true,
+                        CreatedAt = now
+                    };
+                    user.PasswordHash = new PasswordHasher<User>().HashPassword(user, "Owner@123");
+                    db.Users.Add(user);
+                    await db.SaveChangesAsync();
+                }
+                owner = new Owner
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    OwnerCode = "OWN-HOANG01",
+                    OwnerType = "Cá nhân",
+                    JoinDate = now,
+                    Status = "Đang hoạt động"
+                };
+                db.Owners.Add(owner);
+                await db.SaveChangesAsync();
+            }
+
+            var horseNames = new[] { "Xích Thố Hoàng", "Bạch Long Hoàng", "Phi Long Hoàng", "Thần Phong Hoàng", "Hắc Mã Hoàng", "Hoàng Kim Mã" };
+            foreach (var name in horseNames)
+            {
+                var h = new Horse
+                {
+                    Id = Guid.NewGuid(),
+                    Name = name,
+                    OwnerId = owner.Id,
+                    ApprovalStatus = ApprovalStatus.Approved,
+                    Age = 4,
+                    Weight = 480,
+                    Height = 160,
+                    Color = "Vàng Hoàng Kim",
+                    Breed = "Thuần Chủng Hoàng Gia"
+                };
+                db.Horses.Add(h);
+            }
+            await db.SaveChangesAsync();
+            horses = await db.Horses.Where(h => h.ApprovalStatus == ApprovalStatus.Approved && !h.IsArchived).ToListAsync();
+        }
+
+        // 3. Giải 1: "Giải đua ngựa của hoàng"
+        if (!t1Exists)
+        {
+            var t1 = new Tournament
+            {
+                Id = Guid.NewGuid(),
+                Name = "Giải đua ngựa của hoàng",
+                Description = "Giải đua ngựa Hoàng Kim đặc biệt dành cho các kỵ thủ xuất sắc thi đấu và khán giả tham gia cược.",
+                StartDate = now,
+                EndDate = now.AddDays(7),
+                RegistrationDeadline = now.AddHours(24),
+                Status = TournamentStatus.Published,
+                PrizePool = 50000000,
+                MaxRounds = 1,
+                MaxParticipants = 8,
+                Venue = "Trường Đua Hoàng Kim",
+                Country = "Việt Nam",
+                CreatedAt = now,
+                PublishedAt = now
+            };
+            db.Tournaments.Add(t1);
+            await db.SaveChangesAsync();
+
+            var r1 = new Round
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t1.Id,
+                RoundNumber = 1,
+                Name = "Vòng Chung Kết Hoàng Kim"
+            };
+            db.Rounds.Add(r1);
+            await db.SaveChangesAsync();
+
+            var race1 = new Race
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t1.Id,
+                RoundId = r1.Id,
+                Name = "Cuộc Đua Mở Màn - Hoàng Kim Cup",
+                ScheduledAt = now.AddDays(7),
+                ScheduledEndAt = now.AddDays(7).AddHours(1),
+                Status = RaceStatus.RegistrationOpen,
+                TrackId = track.Id,
+                Location = "Trường Đua Hoàng Kim",
+                MaxParticipants = 8,
+                Distance = 2000,
+                CreatedAt = now
+            };
+            db.Races.Add(race1);
+            await db.SaveChangesAsync();
+
+            int gate = 1;
+            var oddsList = new[] { 2.5m, 3.2m, 1.8m, 4.0m, 5.5m, 2.1m, 3.5m, 6.0m };
+            int oIdx = 0;
+            foreach (var h in horses.Take(8))
+            {
+                db.RaceEntries.Add(new RaceEntry
+                {
+                    Id = Guid.NewGuid(),
+                    RaceId = race1.Id,
+                    HorseId = h.Id,
+                    GateNumber = gate++,
+                    Status = RegistrationStatus.Approved,
+                    OwnerConfirmed = true,
+                    Odds = oddsList[oIdx++ % oddsList.Length]
+                });
+            }
+            await db.SaveChangesAsync();
+            logger.LogInformation("Tạo thành công Giải 1: 'Giải đua ngựa của hoàng' kèm cuộc đua và ngựa thi đấu.");
+        }
+
+        // 4. Giải 2: "Giải đua ngựa quốc gia của hoàng"
+        if (!t2Exists)
+        {
+            var t2 = new Tournament
+            {
+                Id = Guid.NewGuid(),
+                Name = "Giải đua ngựa quốc gia của hoàng",
+                Description = "Giải đua ngựa cấp Quốc Gia quy mô đỉnh cao với tổng tiền thưởng lớn, quy tụ các chiến mã hàng đầu.",
+                StartDate = now,
+                EndDate = now.AddDays(14),
+                RegistrationDeadline = now.AddHours(48),
+                Status = TournamentStatus.Published,
+                PrizePool = 200000000,
+                MaxRounds = 2,
+                MaxParticipants = 12,
+                Venue = "Sân Đua Đỉnh Cao Quốc Gia",
+                Country = "Việt Nam",
+                CreatedAt = now,
+                PublishedAt = now
+            };
+            db.Tournaments.Add(t2);
+            await db.SaveChangesAsync();
+
+            var r2 = new Round
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t2.Id,
+                RoundNumber = 1,
+                Name = "Vòng Loại Quốc Gia"
+            };
+            db.Rounds.Add(r2);
+            await db.SaveChangesAsync();
+
+            var race2 = new Race
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t2.Id,
+                RoundId = r2.Id,
+                Name = "Trận Siêu Đua Quốc Gia - Vòng 1",
+                ScheduledAt = now.AddDays(7),
+                ScheduledEndAt = now.AddDays(7).AddHours(2),
+                Status = RaceStatus.RegistrationOpen,
+                TrackId = track.Id,
+                Location = "Sân Đua Đỉnh Cao Quốc Gia",
+                MaxParticipants = 8,
+                Distance = 2400,
+                CreatedAt = now
+            };
+            db.Races.Add(race2);
+            await db.SaveChangesAsync();
+
+            int gate = 1;
+            var oddsList = new[] { 2.5m, 3.2m, 1.8m, 4.0m, 5.5m, 2.1m, 3.5m, 6.0m };
+            int oIdx = 0;
+            foreach (var h in horses.Take(8))
+            {
+                db.RaceEntries.Add(new RaceEntry
+                {
+                    Id = Guid.NewGuid(),
+                    RaceId = race2.Id,
+                    HorseId = h.Id,
+                    GateNumber = gate++,
+                    Status = RegistrationStatus.Approved,
+                    OwnerConfirmed = true,
+                    Odds = oddsList[oIdx++ % oddsList.Length]
+                });
+            }
+            await db.SaveChangesAsync();
+            logger.LogInformation("Tạo thành công Giải 2: 'Giải đua ngựa quốc gia của hoàng' kèm cuộc đua và ngựa thi đấu.");
+        }
+
+        // 5. Giải 3: "Giải xuyên lục địa"
+        var t3 = await db.Tournaments.FirstOrDefaultAsync(t => t.Name == "Giải xuyên lục địa");
+        if (t3 == null)
+        {
+            t3 = new Tournament
+            {
+                Id = Guid.NewGuid(),
+                Name = "Giải xuyên lục địa",
+                Description = "Giải đua ngựa Xuyên Lục Địa Đỉnh Cao quy tụ các kỵ thủ và chiến mã đẳng cấp quốc tế thi đấu tranh cúp vô địch.",
+                StartDate = now,
+                EndDate = now.AddDays(20),
+                RegistrationDeadline = now.AddHours(72),
+                Status = TournamentStatus.Published,
+                PrizePool = 500000000,
+                MaxRounds = 3,
+                MaxParticipants = 16,
+                Venue = "Đấu Trường Siêu Đua Xuyên Lục Địa",
+                Country = "Quốc Tế",
+                CreatedAt = now,
+                PublishedAt = now
+            };
+            db.Tournaments.Add(t3);
+            await db.SaveChangesAsync();
+
+            var r3 = new Round
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t3.Id,
+                RoundNumber = 1,
+                Name = "Vòng Loại Xuyên Lục Địa"
+            };
+            db.Rounds.Add(r3);
+            await db.SaveChangesAsync();
+
+            var race3 = new Race
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = t3.Id,
+                RoundId = r3.Id,
+                Name = "Trận Đại Đua Xuyên Lục Địa - Vòng 1",
+                ScheduledAt = now.AddDays(7),
+                ScheduledEndAt = now.AddDays(7).AddHours(4),
+                Status = RaceStatus.RegistrationOpen,
+                TrackId = track.Id,
+                Location = "Đấu Trường Siêu Đua Xuyên Lục Địa",
+                MaxParticipants = 8,
+                Distance = 3000,
+                CreatedAt = now
+            };
+            db.Races.Add(race3);
+            await db.SaveChangesAsync();
+
+            int gate = 1;
+            var oddsList = new[] { 2.5m, 3.2m, 1.8m, 4.0m, 5.5m, 2.1m, 3.5m, 6.0m };
+            int oIdx = 0;
+            foreach (var h in horses.Take(8))
+            {
+                db.RaceEntries.Add(new RaceEntry
+                {
+                    Id = Guid.NewGuid(),
+                    RaceId = race3.Id,
+                    HorseId = h.Id,
+                    GateNumber = gate++,
+                    Status = RegistrationStatus.Approved,
+                    OwnerConfirmed = true,
+                    Odds = oddsList[oIdx++ % oddsList.Length]
+                });
+            }
+            await db.SaveChangesAsync();
+            logger.LogInformation("Tạo thành công Giải 3: 'Giải xuyên lục địa' kèm cuộc đua và ngựa thi đấu.");
+        }
+
+        // Always refresh all 3 target tournaments and their races to ensure ScheduledAt is in 7 days, Odds assigned, and Jockeys assigned!
+        var jockeys = await db.Jockeys
+            .Where(j => j.ApprovalStatus == ApprovalStatus.Approved)
+            .Take(8)
+            .ToListAsync();
+
+        if (jockeys.Count < 8)
+        {
+            var jockeyNames = new[] { "Nguyễn Văn Hùng", "Trần Quốc Tuấn", "Lê Hoàng Nam", "Phạm Đức Anh", "Vũ Minh Trí", "Đặng Quang Huy", "Hoàng Kim Sang", "Bùi Thành Long" };
+            int jIdx = 1;
+            foreach (var jName in jockeyNames)
+            {
+                var email = $"jockey.hoang{jIdx}@horseracing.com";
+                var jUser = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+                if (jUser == null)
+                {
+                    jUser = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        Email = email,
+                        FullName = jName,
+                        Role = UserRole.Jockey,
+                        IsActive = true,
+                        CreatedAt = now
+                    };
+                    jUser.PasswordHash = new PasswordHasher<User>().HashPassword(jUser, "Jockey@123");
+                    db.Users.Add(jUser);
+                    await db.SaveChangesAsync();
+                }
+
+                var existingJockey = await db.Jockeys.FirstOrDefaultAsync(j => j.UserId == jUser.Id);
+                if (existingJockey == null)
+                {
+                    db.Jockeys.Add(new Jockey
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = jUser.Id,
+                        LicenseNumber = $"JKY-HOANG-00{jIdx}",
+                        Nationality = "Việt Nam",
+                        Gender = "Male",
+                        DateOfBirth = new DateTime(1998, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                        Height = 1.65m,
+                        Weight = 52m,
+                        ExperienceYears = 6,
+                        TotalRaces = 150,
+                        TotalWins = 35,
+                        WinRate = 23.33m,
+                        Rank = jIdx,
+                        Status = "Đang hoạt động",
+                        ApprovalStatus = ApprovalStatus.Approved,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                }
+                jIdx++;
+            }
+            await db.SaveChangesAsync();
+            jockeys = await db.Jockeys.Where(j => j.ApprovalStatus == ApprovalStatus.Approved).Take(8).ToListAsync();
+        }
+
+        var targetNames = new[] { "Giải đua ngựa của hoàng", "Giải đua ngựa quốc gia của hoàng", "Giải xuyên lục địa" };
+        var targetTournaments = await db.Tournaments
+            .Include(t => t.Races)
+                .ThenInclude(r => r.Entries)
+            .Where(t => targetNames.Contains(t.Name))
+            .ToListAsync();
+
+        var tracks = await db.Tracks.ToListAsync();
+        foreach (var trk in tracks)
+        {
+            if (trk.Capacity == null || trk.Capacity <= 0)
+            {
+                trk.Capacity = 12;
+            }
+        }
+        await db.SaveChangesAsync();
+
+        var referee = await db.Referees.FirstOrDefaultAsync();
+        if (referee == null)
+        {
+            var refUser = await db.Users.FirstOrDefaultAsync(u => u.Role == UserRole.Referee);
+            if (refUser == null)
+            {
+                refUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = "trongtai.hoang@horseracing.com",
+                    FullName = "Nguyễn Văn Trọng Tài",
+                    Role = UserRole.Referee,
+                    IsActive = true,
+                    CreatedAt = now
+                };
+                refUser.PasswordHash = new PasswordHasher<User>().HashPassword(refUser, "Ref@123");
+                db.Users.Add(refUser);
+                await db.SaveChangesAsync();
+            }
+            referee = new Referee
+            {
+                Id = Guid.NewGuid(),
+                UserId = refUser.Id,
+                LicenseNumber = "REF-HOANG-001",
+                Certifications = "International Race Rules, Safety Standards",
+                LicenseExpiryDate = now.AddYears(3),
+                IsActive = true,
+                Rating = 4.8m,
+                TotalOfficiated = 120,
+                Specialization = "Chief Referee",
+                Nationality = "Việt Nam",
+                CreatedAt = now
+            };
+            db.Referees.Add(referee);
+            await db.SaveChangesAsync();
+        }
+
+        var refreshOdds = new[] { 2.5m, 3.2m, 1.8m, 4.0m, 5.5m, 2.1m, 3.5m, 6.0m };
+        int tOffset = 7;
+        foreach (var tt in targetTournaments)
+        {
+            tt.Status = TournamentStatus.Ongoing; // Set to Ongoing so races can be started!
+            tt.StartDate = now;
+
+            foreach (var race in tt.Races)
+            {
+                race.Status = RaceStatus.RegistrationOpen;
+                race.ScheduledAt = now.AddDays(tOffset); // Separate days (7, 9, 11) -> NO schedule conflict!
+                race.ScheduledEndAt = now.AddDays(tOffset).AddHours(2);
+
+                // Assign Confirmed Referee to race so Admin can click "Bắt đầu"
+                var hasRefAssignment = await db.RefereeAssignments
+                    .AnyAsync(ra => ra.RaceId == race.Id && ra.Status == RefereeAssignmentStatus.Confirmed);
+
+                if (!hasRefAssignment)
+                {
+                    db.RefereeAssignments.Add(new RefereeAssignment
+                    {
+                        Id = Guid.NewGuid(),
+                        RaceId = race.Id,
+                        RefereeId = referee.Id,
+                        Role = "Chief Referee",
+                        Status = RefereeAssignmentStatus.Confirmed,
+                        AssignedAt = now,
+                        ConfirmedAt = now
+                    });
+                    await db.SaveChangesAsync();
+                }
+
+                int idx = 0;
+                foreach (var entry in race.Entries)
+                {
+                    entry.Status = RegistrationStatus.Approved;
+                    entry.OwnerConfirmed = true;
+                    entry.JockeyConfirmed = true;
+
+                    if (jockeys.Count > 0)
+                    {
+                        entry.JockeyId = jockeys[idx % jockeys.Count].Id;
+                    }
+
+                    if (entry.Odds <= 0)
+                    {
+                        entry.Odds = refreshOdds[idx % refreshOdds.Length];
+                    }
+
+                    var hasHealthCheck = await db.HorseHealthChecks
+                        .AnyAsync(hc => hc.HorseId == entry.HorseId && hc.RaceId == race.Id && hc.Status == HealthCheckStatus.Passed && hc.ApprovedToRace);
+
+                    if (!hasHealthCheck)
+                    {
+                        db.HorseHealthChecks.Add(new HorseHealthCheck
+                        {
+                            Id = Guid.NewGuid(),
+                            HorseId = entry.HorseId,
+                            RaceId = race.Id,
+                            RefereeId = referee.Id,
+                            Status = HealthCheckStatus.Passed,
+                            CheckedAt = now,
+                            ApprovedToRace = true,
+                            Verdict = "Đạt yêu cầu sức khỏe xuất phát",
+                            Observations = "Sức khỏe nhịp tim bình thường, đủ điều kiện thi đấu."
+                        });
+                    }
+
+                    var horse = await db.Horses.FirstOrDefaultAsync(h => h.Id == entry.HorseId);
+                    if (horse != null)
+                    {
+                        var hasOwnerReg = await db.TournamentHorseRegistrations
+                            .AnyAsync(r => r.TournamentId == tt.Id && r.OwnerId == horse.OwnerId);
+
+                        if (!hasOwnerReg)
+                        {
+                            db.TournamentHorseRegistrations.Add(new TournamentHorseRegistration
+                            {
+                                Id = Guid.NewGuid(),
+                                TournamentId = tt.Id,
+                                HorseId = horse.Id,
+                                OwnerId = horse.OwnerId,
+                                Status = RegistrationStatus.Approved,
+                                CreatedAt = now,
+                                ApprovedAt = now
+                            });
+                            await db.SaveChangesAsync();
+                        }
+                    }
+
+                    idx++;
+                }
+            }
+            tOffset += 2;
+        }
+        await db.SaveChangesAsync();
     }
 
     public static async Task SeedAsync(IServiceProvider services)

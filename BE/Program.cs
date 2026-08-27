@@ -291,6 +291,9 @@ using (var scope = app.Services.CreateScope())
     {
         await DemoSeeder.EnsureAdminAsync(app.Services);
     }
+
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<ApplicationDbContext>>();
+    await DemoSeeder.SeedHoangTournamentsInternalAsync(db, logger);
 }
 
 app.Run();

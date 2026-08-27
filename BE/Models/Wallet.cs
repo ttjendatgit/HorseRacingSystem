@@ -4,6 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HorseRacing.Models;
 
+/// <summary>
+/// Thực thể đại diện cho ví điểm giao dịch của người dùng trong hệ thống.
+/// </summary>
 [Table("Wallets")]
 public class Wallet
 {

@@ -5,6 +5,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HorseRacing.Models;
 
+/// <summary>
+/// Thực thể đại diện cho một Trận đua / Cuộc đua ngựa (Race) cụ thể thuộc Giải đấu và Vòng đấu.
+/// </summary>
 [Table("Races")]
 public class Race
 {
