@@ -163,12 +163,13 @@ public class TournamentService : ITournamentService
     {
         try
         {
-            var tournaments = await _tournamentRepo.GetAllAsync();
-            var responses = new List<TournamentResponse>();
-            foreach (var t in tournaments)
-            {
-                responses.Add(await MapToResponseAsync(t));
-            }
+            var tournaments = (await _tournamentRepo.GetAllAsync()).ToList();
+
+            // No per-tournament queries needed at all — Rounds/Races are already eager-loaded
+            // by GetAllAsync's Include(), and this list view never reads EntryCount/HorseCount/
+            // JockeyCount/ApprovedRegistrationCount, so there's nothing left to fetch.
+            var responses = tournaments.Select(MapToListResponse).ToList();
+
             return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
         }
         catch (Exception ex)
@@ -176,6 +177,58 @@ public class TournamentService : ITournamentService
             return ServiceResult<IEnumerable<TournamentResponse>>.Fail(
                 500, $"Lỗi truy xuất danh sách giải đấu: {ex.Message}");
         }
+    }
+
+    private TournamentResponse MapToListResponse(Tournament tournament)
+    {
+        int? daysRemaining = null;
+        if (tournament.Status == TournamentStatus.Published || tournament.Status == TournamentStatus.Ongoing)
+        {
+            var daysLeft = (tournament.EndDate - DateTime.UtcNow).Days;
+            daysRemaining = daysLeft > 0 ? daysLeft : 0;
+        }
+
+        return new TournamentResponse
+        {
+            Id = tournament.Id,
+            Name = tournament.Name,
+            Description = tournament.Description,
+            StartDate = tournament.StartDate,
+            EndDate = tournament.EndDate,
+            IsActive = tournament.IsActive,
+            RoundCount = tournament.Rounds?.Count ?? 0,
+            RaceCount = tournament.Races?.Count ?? 0,
+            ImageUrl = tournament.ImageUrl,
+            CreatedAt = tournament.CreatedAt,
+            UpdatedAt = tournament.UpdatedAt,
+            Status = tournament.Status,
+            StatusName = tournament.Status.ToString(),
+            RegistrationDeadline = tournament.RegistrationDeadline,
+            PublishedAt = tournament.PublishedAt,
+            StartedAt = tournament.StartedAt,
+            FinishedAt = tournament.FinishedAt,
+            CancelledAt = tournament.CancelledAt,
+            PrizePool = tournament.PrizePool,
+            Venue = tournament.Venue,
+            Country = tournament.Country,
+            Category = tournament.Category,
+            SurfaceType = tournament.SurfaceType?.ToString(),
+            MinParticipants = tournament.MinParticipants,
+            MaxParticipants = tournament.MaxParticipants,
+            ApprovedRegistrationCount = 0,   // unused by any current list consumer — see note below
+            MaxRounds = tournament.MaxRounds,
+            CancelledBy = tournament.CancelledBy,
+            CancellationReason = tournament.CancellationReason,
+            Stats = new TournamentStatsDto
+            {
+                RaceCount = tournament.Races?.Count ?? 0,
+                EntryCount = 0,
+                HorseCount = 0,
+                JockeyCount = 0,   // unused by the list view
+                DaysRemaining = daysRemaining
+            },
+            NextTransitions = GetNextTransitions(tournament.Status)
+        };
     }
 
     public async Task<ServiceResult<IEnumerable<TournamentResponse>>> GetActiveTournamentsAsync()
@@ -706,7 +759,7 @@ public class TournamentService : ITournamentService
                 errors.Add("RegistrationDeadline phải nhỏ hơn StartDate (không được bằng hoặc lớn hơn).");
         }
 
-        if (tournament.PrizePool< 0)
+        if (tournament.PrizePool < 0)
             errors.Add("PrizePool không được âm.");
 
         return errors;
