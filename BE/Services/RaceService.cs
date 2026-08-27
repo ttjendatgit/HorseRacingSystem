@@ -97,6 +97,20 @@ public class RaceService : IRaceService
                         .Where(e => e.Horse != null)
                         .ToDictionary(e => e.HorseId, e => e.Horse!.Name)
                         ?? new Dictionary<System.Guid, string>();
+                    var jockeyNameById = race?.Entries?
+                        .Where(e => e.Jockey?.User != null)
+                        .ToDictionary(e => e.HorseId, e => e.Jockey!.User!.FullName ?? "")
+                        ?? new Dictionary<System.Guid, string>();
+
+                    // Mốc so sánh margin: thời gian của (các) ngựa xếp Hạng 1 đã
+                    // hoàn thành đua. Đồng hạng 1 thì lấy thời gian nhỏ nhất trong
+                    // nhóm làm mốc, để margin của các ngựa sau luôn >= 0.
+                    var leaderTime = stored
+                        .Where(r => r.Position == 1 && r.Status == "Completed" && r.TimeTaken.HasValue)
+                        .Select(r => r.TimeTaken!.Value)
+                        .DefaultIfEmpty(double.NaN)
+                        .Min();
+                    double? leaderTimeOrNull = double.IsNaN(leaderTime) ? null : leaderTime;
 
                     rankings = stored
                         .OrderBy(r => r.Position)
@@ -107,7 +121,9 @@ public class RaceService : IRaceService
                             HorseName = horseNameById.TryGetValue(r.HorseId, out var name) ? name : null,
                             // ĐỌC VÀ TRẢ VỀ 2 TRƯỜNG THỜI GIAN VÀ TRẠNG THÁI
                             TimeTaken = r.TimeTaken,
-                            Status = r.Status ?? "Completed"
+                            Status = r.Status ?? "Completed",
+                            JockeyName = jockeyNameById.TryGetValue(r.HorseId, out var jname) ? jname : null,
+                            Margin = ComputeMargin(r, leaderTimeOrNull)
                         })
                         .ToList();
                 }
@@ -136,6 +152,26 @@ public class RaceService : IRaceService
             Rankings = rankings,
             Notes = result.Notes
         });
+    }
+
+    /// <summary>
+    /// "-" cho ngựa dẫn đầu (Hạng 1, Completed) hoặc khi thiếu dữ liệu để so sánh
+    /// (không Completed, không có TimeTaken, hoặc không có leaderTime mốc).
+    /// Ngược lại là cách biệt thời gian so với leaderTime, dạng "0.65s".
+    /// </summary>
+    private static string? ComputeMargin(RaceResultRankingItemResponse r, double? leaderTime)
+    {
+        if (r.Status != "Completed" || r.TimeTaken == null || leaderTime == null)
+        {
+            return "-";
+        }
+
+        if (r.Position == 1)
+        {
+            return "-";
+        }
+
+        return $"{(r.TimeTaken.Value - leaderTime.Value).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}s";
     }
 
     public async Task<ServiceResult<object>> GetTournamentsAsync()

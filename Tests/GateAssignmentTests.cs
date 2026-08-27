@@ -821,12 +821,12 @@ public class GateAssignmentTests
         Assert.True(startResult.Result.Success, startResult.Result.Message);
         Assert.True((await f.RaceManagement.EndRaceAsync(raceA.Result.Data!.Id)).Result.Success);
 
-        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA.Result.Data!.Id, new RaceResultRequest
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA.Result.Data!.Id, new SubmitRaceResultRequest
         {
-            Rankings = new List<RaceResultRankingItemRequest>
+            Rankings = new List<SubmitRankingEntry>
             {
-                new() { HorseId = h1, Position = 1 },
-                new() { HorseId = h2, Position = 2 },
+                new() { HorseId = h1, Position = 1, Status = "Completed" },
+                new() { HorseId = h2, Position = 2, Status = "Completed" },
             }
         });
         Assert.True(submit.Result.Success, submit.Result.Message);

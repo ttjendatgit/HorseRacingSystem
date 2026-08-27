@@ -17,10 +17,10 @@ namespace Tests;
 /// </summary>
 public class R01ResultRefereeSafetyTests
 {
-    private static RaceResultRequest Ranking(params (Guid HorseId, int Position)[] items) =>
+    private static SubmitRaceResultRequest Ranking(params (Guid HorseId, int Position)[] items) =>
         new()
         {
-            Rankings = items.Select(i => new RaceResultRankingItemRequest { HorseId = i.HorseId, Position = i.Position }).ToList()
+            Rankings = items.Select(i => new SubmitRankingEntry { HorseId = i.HorseId, Position = i.Position, Status = "Completed" }).ToList()
         };
 
     private static async Task ProgressToFinishedAsync(RaceLifecycleTests.LifecycleFixture f, Guid raceId)
@@ -130,7 +130,7 @@ public class R01ResultRefereeSafetyTests
         {
             Id = Guid.NewGuid(), RaceId = race.Id, RaceEntryId = winnerEntryId, RefereeId = f.RefereeId,
             ViolationType = ViolationType.Interference, Description = "test violation",
-            RecordedAt = DateTime.UtcNow, Penalty = null,
+            RecordedAt = DateTime.UtcNow, PenaltyType = null,
         });
         await f.Db.SaveChangesAsync();
 
@@ -153,7 +153,7 @@ public class R01ResultRefereeSafetyTests
         {
             Id = Guid.NewGuid(), RaceId = race.Id, RaceEntryId = winnerEntryId, RefereeId = f.RefereeId,
             ViolationType = ViolationType.Interference, Description = "test violation",
-            RecordedAt = DateTime.UtcNow, Penalty = "Cảnh cáo bằng lời",
+            RecordedAt = DateTime.UtcNow, PenaltyType = "Cảnh cáo bằng lời",
         });
         await f.Db.SaveChangesAsync();
 
@@ -273,7 +273,7 @@ public class R01ResultRefereeSafetyTests
         {
             Id = Guid.NewGuid(), RaceId = raceId, RaceEntryId = winnerEntry.Id, RefereeId = f.RefereeId,
             ViolationType = ViolationType.Interference, Description = "post-official simulated violation",
-            RecordedAt = DateTime.UtcNow, Penalty = null,
+            RecordedAt = DateTime.UtcNow, PenaltyType = null,
         };
         f.Db.ViolationRecords.Add(violation);
         await f.Db.SaveChangesAsync();
@@ -376,8 +376,13 @@ public class R01ResultRefereeSafetyTests
         Assert.False(result.Result.Success);
     }
 
+    // NOTE: this test used to be CreateViolation_WhileFinished_IsRejected, asserting
+    // Finished always rejects violation creation. RecordViolationAsync's window was
+    // deliberately widened (see its comments) to also allow Finished-but-not-yet-
+    // Official — only Finished+Official is rejected, which CreateViolation_AfterOfficial_
+    // IsRejected already covers — so this now asserts success instead.
     [Fact]
-    public async Task CreateViolation_WhileFinished_IsRejected()
+    public async Task CreateViolation_WhileFinishedButNotOfficial_Succeeds()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var race = await f.CreateReadyToStartRaceAsync();
@@ -391,6 +396,6 @@ public class R01ResultRefereeSafetyTests
             Description = "post-race violation",
         }, f.RefereeUserId);
 
-        Assert.False(result.Result.Success);
+        Assert.True(result.Result.Success, result.Result.Message);
     }
 }

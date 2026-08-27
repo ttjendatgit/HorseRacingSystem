@@ -31,13 +31,13 @@ public class RaceLifecycleTests
     /// every pre-R0 lifecycle test in this file and in Phase3ContractTests —
     /// LifecycleFixture only ever seeds exactly these two RaceEntries.
     /// </summary>
-    public static RaceResultRequest WinnerLoserRanking(Guid winnerHorseId, Guid loserHorseId) =>
+    public static SubmitRaceResultRequest WinnerLoserRanking(Guid winnerHorseId, Guid loserHorseId) =>
         new()
         {
-            Rankings = new List<RaceResultRankingItemRequest>
+            Rankings = new List<SubmitRankingEntry>
             {
-                new() { HorseId = winnerHorseId, Position = 1 },
-                new() { HorseId = loserHorseId, Position = 2 },
+                new() { HorseId = winnerHorseId, Position = 1, Status = "Completed" },
+                new() { HorseId = loserHorseId, Position = 2, Status = "Completed" },
             }
         };
 

@@ -23,10 +23,10 @@ namespace Tests;
 /// </summary>
 public class R0RaceRankingTests
 {
-    private static RaceResultRequest Ranking(params (Guid HorseId, int Position)[] items) =>
+    private static SubmitRaceResultRequest Ranking(params (Guid HorseId, int Position)[] items) =>
         new()
         {
-            Rankings = items.Select(i => new RaceResultRankingItemRequest { HorseId = i.HorseId, Position = i.Position }).ToList()
+            Rankings = items.Select(i => new SubmitRankingEntry { HorseId = i.HorseId, Position = i.Position, Status = "Completed" }).ToList()
         };
 
     private static async Task<(Guid raceId, Guid a, Guid c, Guid b, Guid d)> Seed4HorseFinishedRaceAsync(RaceLifecycleTests.LifecycleFixture f)
@@ -197,28 +197,10 @@ public class R0RaceRankingTests
         Assert.Equal(400, submit.StatusCode);
     }
 
-    [Fact]
-    public async Task Submit_DuplicatePosition_Returns400()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (raceId, winner, loser) = await Seed2HorseFinishedRaceAsync(f);
-
-        var submit = await f.LiveResult.UpdateRaceResultAsync(raceId, Ranking((winner, 1), (loser, 1)));
-        Assert.False(submit.Result.Success);
-        Assert.Equal(400, submit.StatusCode);
-    }
-
-    [Fact]
-    public async Task Submit_GapInPositions_Returns400()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (raceId, winner, loser) = await Seed2HorseFinishedRaceAsync(f);
-
-        // 1, 3 — not continuous for a 2-participant race.
-        var submit = await f.LiveResult.UpdateRaceResultAsync(raceId, Ranking((winner, 1), (loser, 3)));
-        Assert.False(submit.Result.Success);
-        Assert.Equal(400, submit.StatusCode);
-    }
+    // NOTE: Submit_DuplicatePosition_Returns400 and Submit_GapInPositions_Returns400
+    // were removed here — the new SubmitRaceResultRequest contract deliberately allows
+    // duplicate Position (dead heat) and non-contiguous Position (DNF/DSQ sentinel
+    // values like 99), so both scenarios are now valid submissions, not 400s.
 
     [Fact]
     public async Task Submit_ZeroOrNegativePosition_Returns400()
@@ -277,29 +259,19 @@ public class R0RaceRankingTests
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var (raceId, _, _) = await Seed2HorseFinishedRaceAsync(f);
 
-        var nullRankings = await f.LiveResult.UpdateRaceResultAsync(raceId, new RaceResultRequest { Rankings = null });
+        var nullRankings = await f.LiveResult.UpdateRaceResultAsync(raceId, new SubmitRaceResultRequest { Rankings = null! });
         Assert.False(nullRankings.Result.Success);
         Assert.Equal(400, nullRankings.StatusCode);
 
         var emptyRankings = await f.LiveResult.UpdateRaceResultAsync(
-            raceId, new RaceResultRequest { Rankings = new List<RaceResultRankingItemRequest>() });
+            raceId, new SubmitRaceResultRequest { Rankings = new List<SubmitRankingEntry>() });
         Assert.False(emptyRankings.Result.Success);
         Assert.Equal(400, emptyRankings.StatusCode);
     }
 
-    [Fact]
-    public async Task Submit_WinningHorseIdMismatchesPosition1_Returns400()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var (raceId, winner, loser) = await Seed2HorseFinishedRaceAsync(f);
-
-        var request = Ranking((winner, 1), (loser, 2));
-        request.WinningHorseId = loser; // deliberately disagrees with Rankings[Position==1]
-
-        var submit = await f.LiveResult.UpdateRaceResultAsync(raceId, request);
-        Assert.False(submit.Result.Success);
-        Assert.Equal(400, submit.StatusCode);
-    }
+    // NOTE: Submit_WinningHorseIdMismatchesPosition1_Returns400 was removed here —
+    // SubmitRaceResultRequest no longer has a WinningHorseId field; the winner is
+    // always derived from Rankings, so there is nothing left to disagree with.
 
     [Fact]
     public async Task Submit_WhenRaceNotFinished_ExistingFailurePreserved()

@@ -50,6 +50,7 @@ public class RaceRepository : IRaceRepository
         return _db.Races
             .Include(r => r.Entries)
             .ThenInclude(e => e.Horse)
+            .Include(r => r.Entries).ThenInclude(e => e.Jockey!).ThenInclude(j => j.User)
             .Include(r => r.Result)
             .FirstOrDefaultAsync(r => r.Id == raceId);
     }

@@ -49,7 +49,7 @@ public class CreateViolationRequest
     public int ViolationType { get; set; }
     public string Description { get; set; } = string.Empty;
     public string? Evidence { get; set; }
-    public string PenaltyType { get; set; } = "Warning";
+    public string? PenaltyType { get; set; }
     public int? PenaltyTimeSeconds { get; set; }
 }
 
@@ -67,8 +67,7 @@ public class ViolationResponse
     public string Description { get; set; } = string.Empty;
     public DateTime RecordedAt { get; set; }
     public string? Evidence { get; set; }
-    public string? Penalty { get; set; }
-    public string PenaltyType { get; set; } = "Warning";
+    public string? PenaltyType { get; set; }
     public int? PenaltyTimeSeconds { get; set; }
 }
 

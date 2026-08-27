@@ -523,12 +523,15 @@ public class ProtestHardeningTests
         var protest = await AddOpenProtestForRaceAsync(f, race.Id);
         await RuleAsync(f, protest, ProtestStatus.Upheld);
 
-        var invalid = await f.LiveResult.UpdateRaceResultAsync(race.Id, new RaceResultRequest
+        // Duplicate HorseId (not duplicate Position, which is now a valid dead-heat
+        // under the new contract) — still rejected because a horse may not appear
+        // more than once in the ranking.
+        var invalid = await f.LiveResult.UpdateRaceResultAsync(race.Id, new SubmitRaceResultRequest
         {
-            Rankings = new List<RaceResultRankingItemRequest>
+            Rankings = new List<SubmitRankingEntry>
             {
-                new() { HorseId = race.WinnerHorseId, Position = 1 },
-                new() { HorseId = race.LoserHorseId, Position = 1 },
+                new() { HorseId = race.WinnerHorseId, Position = 1, Status = "Completed" },
+                new() { HorseId = race.WinnerHorseId, Position = 2, Status = "Completed" },
             }
         });
         var result = await f.RaceResultRepo.GetByRaceIdAsync(race.Id);

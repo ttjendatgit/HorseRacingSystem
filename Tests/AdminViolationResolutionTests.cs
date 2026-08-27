@@ -19,19 +19,11 @@ public class AdminViolationResolutionTests
         Assert.Equal(404, result.StatusCode);
     }
 
-    [Fact]
-    public async Task ResolveViolationAsync_AlreadyResolved_ReturnsBadRequest()
-    {
-        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var violation = await CreateViolationAsync(f, "resolved-flow", penalty: "Cấm thi đấu 1 mùa giải");
-
-        var result = await f.Admin.ResolveViolationAsync(violation.Id, "Trừ 50% thưởng");
-
-        Assert.False(result.Result.Success);
-        Assert.Equal(400, result.StatusCode);
-        var stored = await f.Db.ViolationRecords.SingleAsync(v => v.Id == violation.Id);
-        Assert.Equal("Cấm thi đấu 1 mùa giải", stored.Penalty);
-    }
+    // NOTE: ResolveViolationAsync_AlreadyResolved_ReturnsBadRequest was removed here —
+    // the guard it tested for ("resolve only once") was intentionally removed. Admin
+    // may now change a violation's resolution as many times as needed, symmetric with
+    // Referee being able to resubmit rankings — resolving an already-resolved
+    // violation now succeeds instead of returning 400.
 
     [Fact]
     public async Task ResolveViolationAsync_UnresolvedViolationWithValidPenalty_SucceedsAndPersists()
@@ -44,7 +36,21 @@ public class AdminViolationResolutionTests
         Assert.True(result.Result.Success, result.Result.Message);
         Assert.Equal(200, result.StatusCode);
         var stored = await f.Db.ViolationRecords.SingleAsync(v => v.Id == violation.Id);
-        Assert.Equal("Trừ 50% thưởng", stored.Penalty);
+        Assert.Equal("Trừ 50% thưởng", stored.PenaltyType);
+    }
+
+    [Fact]
+    public async Task ResolveViolationAsync_AlreadyResolved_CanBeResolvedAgain()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var violation = await CreateViolationAsync(f, "resolved-flow", penalty: "Cấm thi đấu 1 mùa giải");
+
+        var result = await f.Admin.ResolveViolationAsync(violation.Id, "Trừ 50% thưởng");
+
+        Assert.True(result.Result.Success, result.Result.Message);
+        Assert.Equal(200, result.StatusCode);
+        var stored = await f.Db.ViolationRecords.SingleAsync(v => v.Id == violation.Id);
+        Assert.Equal("Trừ 50% thưởng", stored.PenaltyType);
     }
 
     private static async Task<ViolationRecord> CreateViolationAsync(
@@ -107,7 +113,7 @@ public class AdminViolationResolutionTests
             ViolationType = ViolationType.Interference,
             Description = "Chèn ép ngựa khác trên đường đua",
             RecordedAt = DateTime.UtcNow,
-            Penalty = penalty
+            PenaltyType = penalty
         };
 
         f.Db.AddRange(tournament, round, race, ownerUser, owner, horse, entry, refereeUser, referee, violation);

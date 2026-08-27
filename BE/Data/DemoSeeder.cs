@@ -674,7 +674,12 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         // ── RACE RESULT ──
-        var result1 = new RaceResult { Id = Guid.NewGuid(), RaceId = race1.Id, WinningHorseId = horses[0].Id, TotalParticipants = 3, WinnerFinishTime = 71.24m, RecordedAt = now.AddDays(-2).AddHours(15), PublishedAt = now.AddDays(-2).AddHours(16), ApprovedAt = now.AddDays(-2).AddHours(16), Status = RaceResultStatus.Official, WinnerPurse = 15000m, RankingsJson = "[{\"position\":1,\"horseName\":\"Silver Comet\",\"jockeyName\":\"Marcus Chen\",\"time\":71.24,\"margin\":\"-\"},{\"position\":2,\"horseName\":\"Golden Arrow\",\"jockeyName\":\"Elena Rodriguez\",\"time\":71.89,\"margin\":\"0.65s\"},{\"position\":3,\"horseName\":\"Thunder Strike\",\"jockeyName\":\"Marcus Chen\",\"time\":72.45,\"margin\":\"1.21s\"}]", Notes = "Clean race, no incidents" };
+        var result1 = new RaceResult { Id = Guid.NewGuid(), RaceId = race1.Id, WinningHorseId = horses[0].Id, TotalParticipants = 3, WinnerFinishTime = 71.24m, RecordedAt = now.AddDays(-2).AddHours(15), PublishedAt = now.AddDays(-2).AddHours(16), ApprovedAt = now.AddDays(-2).AddHours(16), Status = RaceResultStatus.Official, WinnerPurse = 15000m, RankingsJson = JsonSerializer.Serialize(new[]
+        {
+            new { HorseId = horses[0].Id, Position = 1, TimeTaken = 71.24, Status = "Completed" },
+            new { HorseId = horses[3].Id, Position = 2, TimeTaken = 71.89, Status = "Completed" },
+            new { HorseId = horses[1].Id, Position = 3, TimeTaken = 72.45, Status = "Completed" },
+        }), Notes = "Clean race, no incidents" };
         db.RaceResults.Add(result1);
         await db.SaveChangesAsync();
 
@@ -1223,12 +1228,23 @@ public static class DemoSeeder
         public Guid HorseId { get; set; }
         public int Position { get; set; }
         public string? HorseName { get; set; }
+        public double TimeTaken { get; set; }
+        public string Status { get; set; } = "Completed";
     }
 
     private static string BuildRankingsJson(IEnumerable<(Horse Horse, int Position)> ranked) =>
         JsonSerializer.Serialize(ranked
             .OrderBy(r => r.Position)
-            .Select(r => new RankingItem { HorseId = r.Horse.Id, Position = r.Position, HorseName = r.Horse.Name })
+            .Select(r => new RankingItem
+            {
+                HorseId = r.Horse.Id,
+                Position = r.Position,
+                HorseName = r.Horse.Name,
+                // Thời gian demo hợp lý, tăng dần đều theo hạng — không phải số liệu thật, chỉ để UI
+                // có gì đó hiển thị thay vì trống.
+                TimeTaken = 70.0 + (r.Position - 1) * 0.6,
+                Status = "Completed"
+            })
             .ToList());
 
     // ── Cluster A — Bến Tre: Published, future-dated, deliberately pre-registration. ──

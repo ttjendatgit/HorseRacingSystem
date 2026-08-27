@@ -8,6 +8,7 @@ using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Services;
 
@@ -645,11 +646,11 @@ public class AdminService : IAdminService
             // for Betting/Q1/Prize, so any legitimate correction must happen
             // via a Provisional resubmit BEFORE approval, not after.
             // Unresolved Violation: current schema has no Status field —
-            // resolution is inferred from Penalty being non-blank (matches
-            // AdminService.ResolveViolationAsync, the only writer of Penalty).
-            //var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
-            //if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.PenaltyType)))
-            //    return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
+            // resolution is inferred from PenaltyType being non-blank (matches
+            // AdminService.ResolveViolationAsync, the only writer of PenaltyType).
+            var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
+            if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.PenaltyType)))
+                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
 
             // Unresolved Protest: Pending/UnderReview are open; Upheld/
             // Rejected/Withdrawn are terminal and never block approval.
@@ -836,8 +837,15 @@ public class AdminService : IAdminService
             violation.PenaltyType = penaltyType;
             violation.PenaltyTimeSeconds = penaltyType == "TimePenalty" ? penaltyTimeSeconds : null;
 
-            await _violationRepo.UpdateAsync(violation);
-            await _unitOfWork.SaveChangesAsync();
+            try
+            {
+                await _violationRepo.UpdateAsync(violation);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return ServiceResult<bool>.Fail(409, "Vi phạm này vừa được cập nhật bởi người khác, vui lòng tải lại và thử lại.");
+            }
 
             return ServiceResult<bool>.Ok(true);
         }

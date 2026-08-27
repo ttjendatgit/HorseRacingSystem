@@ -123,6 +123,8 @@ public class RaceResultRankingItemResponse
     public string? HorseName { get; set; }
     public double? TimeTaken { get; set; }
     public string Status { get; set; } = "Completed";
+    public string? JockeyName { get; set; }
+    public string? Margin { get; set; }
 }
 
 public class JockeyAssignedRaceResponse

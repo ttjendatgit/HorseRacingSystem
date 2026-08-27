@@ -20,9 +20,9 @@ namespace Tests;
 /// </summary>
 public class Q1QualificationTests
 {
-    private static RaceResultRequest Ranking(IEnumerable<Guid> orderedHorseIds) => new()
+    private static SubmitRaceResultRequest Ranking(IEnumerable<Guid> orderedHorseIds) => new()
     {
-        Rankings = orderedHorseIds.Select((h, i) => new RaceResultRankingItemRequest { HorseId = h, Position = i + 1 }).ToList()
+        Rankings = orderedHorseIds.Select((h, i) => new SubmitRankingEntry { HorseId = h, Position = i + 1, Status = "Completed" }).ToList()
     };
 
     /// <summary>Overwrites the stored Official ranking directly — simulates corruption/legacy

@@ -1,5 +1,6 @@
 using HorseRacing.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 namespace HorseRacing.Data;
 
@@ -254,6 +255,19 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<ViolationRecord>()
             .Property(v => v.ViolationType)
             .HasConversion<string>();
+
+        // xmin is a PostgreSQL system column — only map it as the concurrency
+        // token against the real Npgsql provider. The Sqlite in-memory
+        // provider used by the test suite has no such column and would
+        // otherwise create (and require a value for) a plain NOT NULL
+        // "xmin" column on every insert.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<ViolationRecord>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .IsRowVersion();
+        }
 
         modelBuilder.Entity<RaceReport>()
             .HasOne(r => r.Race)
