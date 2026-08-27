@@ -309,10 +309,16 @@ public class ViolationRecordService : IViolationRecordService
             {
                 return ServiceResult<ViolationResponse>.Error("Không tìm thấy cuộc đua", 404);
             }
-            if (raceForGuard.Status != RaceStatus.InProgress)
+            // Cho phép phạt khi đang đua HOẶC đua xong nhưng kết quả chưa chính thức
+            if (raceForGuard.Status != RaceStatus.InProgress && raceForGuard.Status != RaceStatus.Finished)
             {
-                return ServiceResult<ViolationResponse>.Error(
-                    "Vi phạm chỉ có thể được ghi nhận khi cuộc đua đang diễn ra.", 400);
+                return ServiceResult<ViolationResponse>.Error("Vi phạm chỉ có thể được ghi nhận khi cuộc đua đang diễn ra hoặc chờ duyệt kết quả.", 400);
+            }
+
+            // Nếu kết quả đã Official thì khóa vĩnh viễn, không cho phạt thêm
+            if (raceForGuard.Status == RaceStatus.Finished && raceForGuard.Result != null && raceForGuard.Result.Status == RaceResultStatus.Official)
+            {
+                return ServiceResult<ViolationResponse>.Error("Kết quả cuộc đua đã chính thức, không thể ghi nhận thêm vi phạm.", 400);
             }
 
             var violation = new ViolationRecord
@@ -325,7 +331,8 @@ public class ViolationRecordService : IViolationRecordService
                 Description = request.Description,
                 RecordedAt = DateTime.UtcNow,
                 Evidence = request.Evidence,
-                Penalty = request.Penalty
+                PenaltyType = request.PenaltyType,
+                PenaltyTimeSeconds = request.PenaltyType == "TimePenalty" ? request.PenaltyTimeSeconds : null
             };
 
             await _violationRepo.AddAsync(violation);
@@ -461,7 +468,8 @@ public class ViolationRecordService : IViolationRecordService
             Description = v.Description,
             RecordedAt = v.RecordedAt,
             Evidence = v.Evidence,
-            Penalty = v.Penalty
+            PenaltyType = v.PenaltyType,
+            PenaltyTimeSeconds = v.PenaltyTimeSeconds
         };
     }
 }

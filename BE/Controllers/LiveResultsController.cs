@@ -68,7 +68,7 @@ public class LiveResultsController : ControllerBase
     /// <returns>Mã trạng thái HTTP báo kết quả cập nhật.</returns>
     [HttpPost("race/{raceId:guid}/result")]
     [Authorize(Roles = "Admin,Referee")]
-    public async Task<ActionResult> UpdateRaceResult(Guid raceId, [FromBody] RaceResultRequest request)
+    public async Task<ActionResult> UpdateRaceResult(Guid raceId, [FromBody] SubmitRaceResultRequest request)
     {
         var result = await _liveResultService.UpdateRaceResultAsync(raceId, request);
         return StatusCode(result.StatusCode, result.Result);

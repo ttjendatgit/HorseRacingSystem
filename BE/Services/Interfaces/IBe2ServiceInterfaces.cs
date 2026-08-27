@@ -151,7 +151,7 @@ public interface IAdminService
     Task<ServiceResult<bool>> RejectRaceResultAsync(Guid raceId, string reason);
     Task<ServiceResult<object>> GetPredictionsAsync();
     Task<ServiceResult<object>> SettlePredictionsAsync(Guid raceId);
-    Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penalty);
+    Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penaltyType, int? penaltyTimeSeconds = null);
 }
 
 public interface ILiveResultService
@@ -162,7 +162,7 @@ public interface ILiveResultService
     Task<ServiceResult<IEnumerable<CurrentPositionData>>> GetCurrentPositionsAsync(Guid raceId);
 
     // Update Results
-    Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, RaceResultRequest request);
+    Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, SubmitRaceResultRequest request);
     Task<ServiceResult<bool>> UpdateParticipantStatusAsync(Guid raceId, Guid horseId, string status);
 }
 

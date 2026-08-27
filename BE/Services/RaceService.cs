@@ -79,17 +79,17 @@ public class RaceService : IRaceService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy kết quả");
         }
 
-        // R0 §9/§12: expose a bounded, ordered ranking (Position/HorseId/
-        // HorseName) rather than making FE parse RankingsJson itself. A
-        // legacy result (pre-R0, RankingsJson null) or one whose stored JSON
-        // fails to parse degrades safely to Rankings = null — the winner is
-        // still available via WinningHorseId/WinningHorseName below.
         List<RaceResultRankingItemResponse>? rankings = null;
         if (!string.IsNullOrWhiteSpace(result.RankingsJson))
         {
             try
             {
-                var stored = JsonSerializer.Deserialize<List<RaceResultRankingItemRequest>>(result.RankingsJson);
+                // Thêm tuỳ chọn để đọc JSON tự động nhận dạng hoa/thường
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+                // CẬP NHẬT Ở ĐÂY: Parse thẳng ra danh sách Response thay vì Request cũ
+                var stored = JsonSerializer.Deserialize<List<RaceResultRankingItemResponse>>(result.RankingsJson, options);
+
                 if (stored != null)
                 {
                     var race = await _races.GetByIdWithEntriesAsync(raceId);
@@ -104,7 +104,10 @@ public class RaceService : IRaceService
                         {
                             Position = r.Position,
                             HorseId = r.HorseId,
-                            HorseName = horseNameById.TryGetValue(r.HorseId, out var name) ? name : null
+                            HorseName = horseNameById.TryGetValue(r.HorseId, out var name) ? name : null,
+                            // ĐỌC VÀ TRẢ VỀ 2 TRƯỜNG THỜI GIAN VÀ TRẠNG THÁI
+                            TimeTaken = r.TimeTaken,
+                            Status = r.Status ?? "Completed"
                         })
                         .ToList();
                 }

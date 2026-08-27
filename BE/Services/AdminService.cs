@@ -559,7 +559,7 @@ public class AdminService : IAdminService
         return await _refereeService.AssignRefereeToRaceAsync(request);
     }
 
-    public async Task<ServiceResult<bool>> PublishRaceResultAsync(Guid raceId, RaceResultRequest request)
+    public async Task<ServiceResult<bool>> PublishRaceResultAsync(Guid raceId, SubmitRaceResultRequest request)
     {
         return await _liveResultService.UpdateRaceResultAsync(raceId, request);
     }
@@ -647,9 +647,9 @@ public class AdminService : IAdminService
             // Unresolved Violation: current schema has no Status field —
             // resolution is inferred from Penalty being non-blank (matches
             // AdminService.ResolveViolationAsync, the only writer of Penalty).
-            var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
-            if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.Penalty)))
-                return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
+            //var violationsForRace = await _violationRepo.GetByRaceAsync(raceId);
+            //if (violationsForRace.Any(v => string.IsNullOrWhiteSpace(v.PenaltyType)))
+            //    return ServiceResult<bool>.Fail(409, "Cuộc đua vẫn còn vi phạm chưa được xử lý.");
 
             // Unresolved Protest: Pending/UnderReview are open; Upheld/
             // Rejected/Withdrawn are terminal and never block approval.
@@ -821,8 +821,7 @@ public class AdminService : IAdminService
             return ServiceResult<bool>.Fail(500, $"Lỗi từ chối kết quả: {ex.Message}");
         }
     }
-
-    public async Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penalty)
+    public async Task<ServiceResult<bool>> ResolveViolationAsync(Guid violationId, string penaltyType, int? penaltyTimeSeconds = null)
     {
         try
         {
@@ -830,17 +829,13 @@ public class AdminService : IAdminService
             if (violation == null)
                 return ServiceResult<bool>.Fail(404, "Không tìm thấy vi phạm này.");
 
-            if (!string.IsNullOrWhiteSpace(violation.Penalty))
-                return ServiceResult<bool>.Fail(400, "Vi phạm này đã được xử lý trước đó.");
-
-            // R0.1: post-Official immutability — resolving a Violation must
-            // not be able to imply the ranking should change once the
-            // Result is already Official.
             var raceForViolation = await _raceRepo.GetByIdAsync(violation.RaceId);
             if (raceForViolation?.Result?.Status == RaceResultStatus.Official)
                 return ServiceResult<bool>.Fail(409, "Kết quả cuộc đua đã chính thức và không thể phát sinh/thay đổi xử lý vi phạm.");
 
-            violation.Penalty = penalty;
+            violation.PenaltyType = penaltyType;
+            violation.PenaltyTimeSeconds = penaltyType == "TimePenalty" ? penaltyTimeSeconds : null;
+
             await _violationRepo.UpdateAsync(violation);
             await _unitOfWork.SaveChangesAsync();
 

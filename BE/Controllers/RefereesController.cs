@@ -314,7 +314,7 @@ public class RefereesController : ControllerBase
     /// <returns>Mã trạng thái HTTP báo kết quả cập nhật thứ hạng.</returns>
     [HttpPost("race/{raceId:guid}/submit-result")]
     [Authorize(Roles = "Referee")]
-    public async Task<ActionResult> SubmitRaceResult(Guid raceId, [FromBody] RaceResultRequest request)
+    public async Task<ActionResult> SubmitRaceResult(Guid raceId, [FromBody] SubmitRaceResultRequest request)
     {
         var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (uid is null || !Guid.TryParse(uid, out var userId))
