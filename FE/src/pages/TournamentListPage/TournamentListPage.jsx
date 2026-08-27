@@ -10,7 +10,11 @@ function TournamentListPage() {
 
   useEffect(() => {
     getTournaments()
-      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .then((d) => {
+        const list = Array.isArray(d) ? d : [];
+        list.sort((a, b) => (b.prizePool ?? b.PrizePool ?? 0) - (a.prizePool ?? a.PrizePool ?? 0));
+        setItems(list);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

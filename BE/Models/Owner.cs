@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 
 namespace HorseRacing.Models;
 
+/// <summary>
+/// Thực thể đại diện cho hồ sơ của Chủ sở hữu ngựa đua.
+/// </summary>
 [Table("Owners")]
 public class Owner
 {

@@ -4,6 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HorseRacing.Models;
 
+/// <summary>
+/// Thực thể đại diện cho giao dịch nạp tiền qua cổng thanh toán SePay.
+/// </summary>
 [Table("Transactions")]
 public class Transaction
 {
