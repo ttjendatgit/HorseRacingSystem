@@ -2,5 +2,6 @@ namespace HorseRacing.Dtos;
 
 public class ResolveViolationRequest
 {
-    public string? Penalty { get; set; }
+    public string PenaltyType { get; set; } = "Warning";
+    public int? PenaltyTimeSeconds { get; set; }
 }

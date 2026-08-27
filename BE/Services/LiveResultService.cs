@@ -174,15 +174,10 @@ public class LiveResultService : ILiveResultService
     }
 
     /// <summary>
-    /// Handles both first submission and resubmission of a Provisional result.
-    /// Phase2B: gated purely on RaceStatus == Finished (event-progress) and
-    /// RaceResultStatus (result-lifecycle). Never mutates Race.Status. Cannot
-    /// be used to edit an Official result.
-    /// R0: the submitted Rankings[] is the single source of truth for the
-    /// result — WinningHorseId is derived from Rankings[Position == 1], never
-    /// an independently-editable second source (see ValidateAndCanonicalize).
+    /// Lưu bảng xếp hạng dựa trên thời gian thực tế (TimeTaken) và trạng thái (Status).
+    /// Hỗ trợ Đồng hạng (Dead Heat) và các ngựa bỏ cuộc/bị loại (DNF/DSQ).
     /// </summary>
-    public async Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, RaceResultRequest request)
+    public async Task<ServiceResult<bool>> UpdateRaceResultAsync(Guid raceId, SubmitRaceResultRequest request)
     {
         try
         {
@@ -210,43 +205,41 @@ public class LiveResultService : ILiveResultService
                 return ServiceResult<bool>.Error(validationError, 400);
             }
 
-            // Positions are validated continuous 1..N above, so the first
-            // item after ascending sort is always exactly Position 1.
-            var canonicalWinnerId = canonical[0].HorseId;
-            if (request.WinningHorseId.HasValue && request.WinningHorseId.Value != canonicalWinnerId)
-            {
-                return ServiceResult<bool>.Error(
-                    "WinningHorseId không khớp với ngựa xếp vị trí 1 trong Rankings. Bảng xếp hạng là nguồn xác định người thắng cuộc duy nhất.",
-                    400);
-            }
+            // Tự động tìm ngựa Hạng 1 (Phải là ngựa Completed)
+            var winner = canonical.FirstOrDefault(r => r.Position == 1 && r.Status == "Completed");
+
+            // Fallback: Nếu tất cả đều DNF/DSQ (rất hiếm), lấy con đầu tiên trong mảng để không lỗi DB (do WinningHorseId là bắt buộc)
+            var canonicalWinnerId = winner != null ? winner.HorseId : canonical[0].HorseId;
+            var winnerTime = winner?.TimeTaken;
 
             var rankingsJson = JsonSerializer.Serialize(canonical);
 
             if (existingResult != null)
             {
-                // Resubmission: remains Provisional, clears rejection metadata.
+                // Nộp lại (Resubmission)
                 existingResult.WinningHorseId = canonicalWinnerId;
+                existingResult.WinnerFinishTime = winnerTime.HasValue ? (decimal)winnerTime.Value : null;
                 existingResult.RankingsJson = rankingsJson;
-                existingResult.Notes = request.Notes;
                 existingResult.RecordedAt = DateTime.UtcNow;
                 existingResult.Status = RaceResultStatus.Provisional;
                 existingResult.RejectedReason = null;
+
                 await _raceResultRepo.UpdateAsync(existingResult);
                 await _unitOfWork.SaveChangesAsync();
                 return ServiceResult<bool>.Success(true);
             }
 
-            // First submission
+            // Nộp lần đầu (First submission)
             var result = new RaceResult
             {
                 Id = Guid.NewGuid(),
                 RaceId = raceId,
                 WinningHorseId = canonicalWinnerId,
+                WinnerFinishTime = winnerTime.HasValue ? (decimal)winnerTime.Value : null,
                 RankingsJson = rankingsJson,
                 RecordedAt = DateTime.UtcNow,
                 Status = RaceResultStatus.Provisional,
-                RejectedReason = null,
-                Notes = request.Notes
+                RejectedReason = null
             };
 
             await _raceResultRepo.AddAsync(result);
@@ -261,20 +254,16 @@ public class LiveResultService : ILiveResultService
     }
 
     /// <summary>
-    /// R0 full-ranking validation. A submitted result must cover every
-    /// current RaceEntry for this Race exactly once, with continuous
-    /// 1..N positions — there is no DNS/DNF/DQ classification implemented
-    /// yet, so partial rankings are rejected rather than given invented
-    /// semantics. Returns null (canonical populated, sorted ascending by
-    /// Position) on success, or a Vietnamese business-error message on
-    /// failure — never lets a DB exception stand in for validation.
+    /// Validation cho luồng mới:
+    /// - Cho phép đồng hạng (trùng Position).
+    /// - Cho phép nhảy cóc thứ hạng và gán hạng 99 (cho DNF/DSQ).
     /// </summary>
     private static string? ValidateAndCanonicalizeRankings(
-        List<RaceResultRankingItemRequest>? rankings,
+        List<SubmitRankingEntry>? rankings,
         List<RaceEntry> participants,
-        out List<RaceResultRankingItemRequest> canonical)
+        out List<SubmitRankingEntry> canonical)
     {
-        canonical = new List<RaceResultRankingItemRequest>();
+        canonical = new List<SubmitRankingEntry>();
 
         if (rankings == null || rankings.Count == 0)
         {
@@ -283,7 +272,6 @@ public class LiveResultService : ILiveResultService
 
         var participantIds = participants.Select(p => p.HorseId).ToHashSet();
         var seenHorseIds = new HashSet<Guid>();
-        var seenPositions = new HashSet<int>();
 
         foreach (var item in rankings)
         {
@@ -293,29 +281,25 @@ public class LiveResultService : ILiveResultService
             }
             if (item.Position <= 0)
             {
-                return "Vị trí xếp hạng phải là số nguyên dương.";
+                return "Vị trí xếp hạng phải là số dương.";
             }
             if (!seenHorseIds.Add(item.HorseId))
             {
-                return "Một ngựa không được xuất hiện nhiều hơn một lần trong bảng xếp hạng.";
-            }
-            if (!seenPositions.Add(item.Position))
-            {
-                return "Một vị trí không được gán cho nhiều hơn một ngựa.";
+                return "Một con ngựa không được xuất hiện nhiều hơn một lần trong kết quả.";
             }
         }
 
         if (rankings.Count != participants.Count)
         {
-            return "Bảng xếp hạng phải bao gồm đầy đủ và chỉ những ngựa tham gia cuộc đua này.";
+            return "Bảng xếp hạng phải bao gồm đầy đủ tất cả các ngựa tham gia.";
         }
 
-        if (!seenPositions.SetEquals(Enumerable.Range(1, rankings.Count)))
-        {
-            return "Vị trí xếp hạng phải liên tục từ 1 đến hết, không được có khoảng trống.";
-        }
+        // Sắp xếp: Ưu tiên Position nhỏ xếp trước, nếu cùng Position thì ưu tiên Thời gian nhỏ hơn
+        canonical = rankings
+            .OrderBy(r => r.Position)
+            .ThenBy(r => r.TimeTaken ?? double.MaxValue)
+            .ToList();
 
-        canonical = rankings.OrderBy(r => r.Position).ToList();
         return null;
     }
 

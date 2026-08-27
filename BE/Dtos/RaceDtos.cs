@@ -121,6 +121,8 @@ public class RaceResultRankingItemResponse
     public int Position { get; set; }
     public Guid HorseId { get; set; }
     public string? HorseName { get; set; }
+    public double? TimeTaken { get; set; }
+    public string Status { get; set; } = "Completed";
 }
 
 public class JockeyAssignedRaceResponse

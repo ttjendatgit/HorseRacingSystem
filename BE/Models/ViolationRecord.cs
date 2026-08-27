@@ -37,6 +37,8 @@ public class ViolationRecord
     [MaxLength(1000)]
     public string? Evidence { get; set; }
 
-    [MaxLength(500)]
-    public string? Penalty { get; set; }
+    [MaxLength(50)]
+    public string PenaltyType { get; set; } = "Warning"; 
+
+    public int? PenaltyTimeSeconds { get; set; }
 }

@@ -264,9 +264,12 @@ public class AdminController : ControllerBase
     [HttpPost("violations/{violationId:guid}/resolve")]
     public async Task<ActionResult> ResolveViolation(Guid violationId, [FromBody] ResolveViolationRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request?.Penalty))
-            return BadRequest(new { message = "Cần nhập hình phạt." });
-        var result = await _adminService.ResolveViolationAsync(violationId, request.Penalty.Trim());
+        // Kiểm tra loại hình phạt mới
+        if (string.IsNullOrWhiteSpace(request?.PenaltyType))
+            return BadRequest(new { message = "Cần chọn loại hình phạt." });
+
+        // Gọi service với 2 tham số mới
+        var result = await _adminService.ResolveViolationAsync(violationId, request.PenaltyType.Trim(), request.PenaltyTimeSeconds);
         return StatusCode(result.StatusCode, result.Result);
     }
 

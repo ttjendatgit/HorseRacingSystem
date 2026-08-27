@@ -49,8 +49,8 @@ public class CreateViolationRequest
     public int ViolationType { get; set; }
     public string Description { get; set; } = string.Empty;
     public string? Evidence { get; set; }
-    public string? Penalty { get; set; }
-    public string? Severity { get; set; }
+    public string PenaltyType { get; set; } = "Warning";
+    public int? PenaltyTimeSeconds { get; set; }
 }
 
 public class ViolationResponse
@@ -68,6 +68,8 @@ public class ViolationResponse
     public DateTime RecordedAt { get; set; }
     public string? Evidence { get; set; }
     public string? Penalty { get; set; }
+    public string PenaltyType { get; set; } = "Warning";
+    public int? PenaltyTimeSeconds { get; set; }
 }
 
 // Race Report DTOs
@@ -78,6 +80,7 @@ public class CreateRaceReportRequest
     public string Details { get; set; } = string.Empty;
     public string? Incidents { get; set; }
     public string? RecommendedActions { get; set; }
+    public bool IsDraft { get; set; } = true;
 }
 
 public class RaceReportResponse
@@ -94,4 +97,16 @@ public class RaceReportResponse
     public bool IsOfficialReport { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+}
+public class SubmitRaceResultRequest
+{
+    public List<SubmitRankingEntry> Rankings { get; set; } = new();
+}
+
+public class SubmitRankingEntry
+{
+    public Guid HorseId { get; set; }
+    public int Position { get; set; }
+    public double? TimeTaken { get; set; }
+    public string Status { get; set; } = "Completed";
 }
