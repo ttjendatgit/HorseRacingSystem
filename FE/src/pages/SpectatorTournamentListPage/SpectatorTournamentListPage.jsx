@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { unwrapResponseData } from "../../services/authRoleUtils";
 import { getTournaments } from "../../services/spectatorApi";
 import { getPrizesByTournament } from "../../services/managementApi";
@@ -106,7 +106,18 @@ function SpectatorTournamentListPage() {
       try {
         const response = await getTournaments();
         const payload = unwrapResponseData(response);
-        const items = Array.isArray(payload) ? payload.filter((t) => normalizeTournamentStatus(t) !== "Draft").map(mapTournament) : [];
+        const items = Array.isArray(payload) 
+          ? payload
+              .filter((t) => normalizeTournamentStatus(t) !== "Draft")
+              .map(mapTournament)
+              .sort((a, b) => {
+                const priority = { active: 1, upcoming: 2, completed: 3 };
+                const pA = priority[a.status] ?? 4;
+                const pB = priority[b.status] ?? 4;
+                if (pA !== pB) return pA - pB;
+                return b.prizePool - a.prizePool;
+              })
+          : [];
         if (!cancelled) setTournaments(items);
       } catch (err) {
         if (!cancelled) {

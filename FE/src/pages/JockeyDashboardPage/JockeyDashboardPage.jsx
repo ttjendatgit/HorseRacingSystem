@@ -7,8 +7,8 @@ import {
   getMyJockeyProfile,
   normalizeInvitationStatus,
 } from "../../services/jockeyApi";
-import { getProfile } from "../../services/authApi";
 import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
+import { getJockeyDisplayStats } from "../../utils/jockeyStats";
 import JockeyApprovalBanner from "../../components/JockeyApprovalBanner/JockeyApprovalBanner";
 import "./JockeyDashboardPage.css";
 
@@ -26,17 +26,16 @@ function JockeyDashboardPage() {
     const loadDashboard = async () => {
       try {
         setLoading(true);
-        const [raceData, invitationData, profileData, jockeyProfile] = await Promise.all([
+        const [raceData, invitationData, jockeyProfile] = await Promise.all([
           getJockeyAssignedRaces(),
           getJockeyInvitations(),
-          getProfile().then(d => d?.data ?? d).catch(() => null),
           getMyJockeyProfile().catch(() => null),
         ]);
 
         if (!cancelled) {
           setRaces(raceData);
           setInvitations(invitationData);
-          setProfile(profileData);
+          setProfile(jockeyProfile);
           setApproval(getJockeyApprovalDisplay(jockeyProfile));
           setErrorMessage("");
         }
@@ -62,8 +61,9 @@ function JockeyDashboardPage() {
   const totalRacesNum = races.length;
   const confirmedRaces = races.filter(r => r.jockeyConfirmed).length;
   const pendingCount = invitations.filter(i => normalizeInvitationStatus(i.status).toLowerCase() === "pending").length;
-  const winRate = profile?.winRate ?? profile?.WinRate ?? 0;
-  const rank = profile?.rank ?? profile?.Rank ?? null;
+  const jockeyStats = getJockeyDisplayStats(profile);
+  const winRate = jockeyStats.winRate;
+  const rank = jockeyStats.rank;
 
   return (
     <div className="jockey-dashboard">

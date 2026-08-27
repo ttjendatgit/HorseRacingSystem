@@ -5,6 +5,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HorseRacing.Models;
 
+/// <summary>
+/// Thực thể đại diện cho hồ sơ chuyên môn của Kỵ thủ thi đấu.
+/// </summary>
 [Table("Jockeys")]
 public class Jockey
 {

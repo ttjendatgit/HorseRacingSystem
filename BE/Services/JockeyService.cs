@@ -518,6 +518,24 @@ public class JockeyService : IJockeyService
             return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ kỵ sĩ");
         }
 
+        var allJockeys = await _jockeys.GetAllAsync();
+        var leaderboardRank = allJockeys
+            .Where(j => j.User != null && j.Status == "Đang hoạt động")
+            .Select(j => new
+            {
+                j.Id,
+                Points = j.TotalWins * 10 + j.TotalRaces * 2,
+                j.TotalWins,
+                j.TotalRaces,
+                Name = j.User!.FullName ?? j.User.Email ?? string.Empty
+            })
+            .OrderByDescending(j => j.Points)
+            .ThenByDescending(j => j.TotalWins)
+            .ThenByDescending(j => j.TotalRaces)
+            .ThenBy(j => j.Name)
+            .ToList()
+            .FindIndex(j => j.Id == jockey.Id);
+
         return ServiceResult<object>.Ok(new
         {
             id = jockey.Id,
@@ -528,6 +546,7 @@ public class JockeyService : IJockeyService
             totalWins = jockey.TotalWins,
             winRate = jockey.WinRate,
             rank = jockey.Rank,
+            leaderboardRank = leaderboardRank >= 0 ? leaderboardRank + 1 : jockey.Rank,
             approvalStatus = jockey.ApprovalStatus.ToString(),
             // J-ADMIN-REVIEW Part 8: the Jockey's own approval-rejection reason, set by Admin
             // RejectJockeyAsync — J-UX's jockeyApproval.js already reads this defensively.
