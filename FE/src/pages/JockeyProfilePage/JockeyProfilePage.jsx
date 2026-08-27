@@ -6,6 +6,7 @@ import {
 } from "../../services/managementApi";
 import { getMyJockeyProfile } from "../../services/jockeyApi";
 import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
+import { getJockeyDisplayStats } from "../../utils/jockeyStats";
 import {
   EVIDENCE_ACCEPT_ATTR,
   RACE_COMPLAINT_TYPE_OPTIONS,
@@ -38,6 +39,7 @@ const statusColor = (s) => {
 
 export default function JockeyProfilePage() {
   const [profile, setProfile] = useState(null);
+  const [jockeyProfile, setJockeyProfile] = useState(null);
   const [approval, setApproval] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("info");
@@ -65,7 +67,10 @@ export default function JockeyProfilePage() {
     // /api/auth/profile does not expose Jockey.ApprovalStatus — /api/jockeys/me is the
     // authoritative source for competitive-approval state (see jockeyApproval.js).
     getMyJockeyProfile()
-      .then((jockeyProfile) => setApproval(getJockeyApprovalDisplay(jockeyProfile)))
+      .then((jockeyProfileData) => {
+        setJockeyProfile(jockeyProfileData);
+        setApproval(getJockeyApprovalDisplay(jockeyProfileData));
+      })
       .catch(() => setApproval(null));
   }, []);
 
@@ -131,6 +136,7 @@ export default function JockeyProfilePage() {
 
   if (loading) return <div className="spectator-page"><p>Đang tải...</p></div>;
   if (!profile) return <div className="spectator-page"><p>Không tìm thấy hồ sơ.</p></div>;
+  const jockeyStats = getJockeyDisplayStats(jockeyProfile);
 
   return (
     <ProfileLayout profile={profile} roleLabel="Kỵ sĩ" tabs={JOCKEY_TABS} activeTab={activeTab} setActiveTab={setActiveTab}>
@@ -154,14 +160,14 @@ export default function JockeyProfilePage() {
             <Field label="Email" value={profile.email ?? profile.Email ?? ""} readOnly placeholder="Email" />
             <Field label="Số điện thoại" value={info.phoneNumber} onChange={(e) => setInfo((p) => ({ ...p, phoneNumber: e.target.value }))} readOnly={!editMode} placeholder="Nhập số điện thoại" />
           </div>
-          {!editMode && (
-            <div style={grid2}>
-              <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
-              <Detail label="Hạng" value={`#${profile.rank ?? profile.Rank ?? "-"}`} />
-              <Detail label="Tỉ lệ thắng" value={`${profile.winRate ?? profile.WinRate ?? 0}%`} />
-              <Detail label="Giấy phép" value={profile.licenseNumber ?? profile.LicenseNumber ?? "-"} />
-              <Detail label="Quốc tịch" value={profile.nationality ?? profile.Nationality ?? "-"} />
-              <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
+              {!editMode && (
+                <div style={grid2}>
+                  <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
+                  <Detail label="Hạng" value={`#${jockeyStats.rank ?? "-"}`} />
+                  <Detail label="Tỉ lệ thắng" value={`${jockeyStats.winRate}%`} />
+                  <Detail label="Giấy phép" value={profile.licenseNumber ?? profile.LicenseNumber ?? "-"} />
+                  <Detail label="Quốc tịch" value={profile.nationality ?? profile.Nationality ?? "-"} />
+                  <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
               {approval?.isRejected && approval.note && (
                 <Detail label="Lý do từ chối" value={approval.note} />
               )}

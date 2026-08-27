@@ -33,12 +33,15 @@ public class LeaderboardController : ControllerBase
                 points = j.TotalWins * 10 + j.TotalRaces * 2,
                 totalRaces = j.TotalRaces,
                 wins = j.TotalWins,
-                winRate = j.TotalRaces > 0 ? Math.Round((double)j.TotalWins / j.TotalRaces * 100) : 0,
+                winRate = j.WinRate,
                 rank = j.Rank ?? 0,
                 trend = "up",
                 nationality = j.Nationality ?? ""
             })
             .OrderByDescending(j => j.points)
+            .ThenByDescending(j => j.wins)
+            .ThenByDescending(j => j.totalRaces)
+            .ThenBy(j => j.name)
             .ToListAsync();
 
         return Ok(jockeys);

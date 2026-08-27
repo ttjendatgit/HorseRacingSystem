@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { request } from "../../services/apiClient";
+import { getMyJockeyProfile } from "../../services/jockeyApi";
+import { getJockeyDisplayStats } from "../../utils/jockeyStats";
 import "./LeaderboardPage.css";
 
 const FALLBACK_JOCKEYS = [
@@ -53,6 +55,7 @@ function DetailPanel({ item, type, onClose }) {
 export default function LeaderboardPage() {
   const [tab, setTab] = useState("jockey");
   const [data, setData] = useState([]);
+  const [myProfile, setMyProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
@@ -65,10 +68,15 @@ export default function LeaderboardPage() {
     const api = tab === "jockey" ? "/api/leaderboard/jockeys" : "/api/leaderboard/horses";
     (async () => {
       try {
-        const d = await request(api);
+        const [d, me] = await Promise.all([
+          request(api),
+          tab === "jockey" ? getMyJockeyProfile().catch(() => null) : Promise.resolve(null),
+        ]);
         setData(Array.isArray(d) ? d : []);
+        setMyProfile(me);
       } catch {
         setData(tab === "jockey" ? FALLBACK_JOCKEYS : FALLBACK_HORSES);
+        setMyProfile(null);
       } finally {
         setLoading(false);
       }
@@ -92,7 +100,7 @@ export default function LeaderboardPage() {
   const rest = filtered.slice(3);
   const bestWinRate = data.length > 0 ? Math.max(...data.map(d => d.winRate || 0)) : 0;
   const totalWins = data.reduce((s, d) => s + (d.wins || 0), 0);
-  const myRank = 1; // placeholder
+  const myRank = tab === "jockey" ? (getJockeyDisplayStats(myProfile).rank ?? null) : null;
 
   const trendIcon = (t) => {
     const c = TREND_COLORS[t] || "#64748b";
@@ -115,7 +123,7 @@ export default function LeaderboardPage() {
 
       {/* KPI */}
       <div className="lbd-kpis">
-        <div className="lbd-kpi"><span>Hạng của tôi</span><strong>#{myRank}</strong></div>
+        <div className="lbd-kpi"><span>Hạng của tôi</span><strong>#{myRank ?? "--"}</strong></div>
         <div className="lbd-kpi"><span>Tổng điểm</span><strong>{data.reduce((s, d) => s + (d.points || 0), 0).toLocaleString()}</strong></div>
         <div className="lbd-kpi lbd-kpi--light"><span>Tổng thắng</span><strong>{totalWins}</strong></div>
         <div className="lbd-kpi"><span>Win Rate cao nhất</span><strong>{bestWinRate}%</strong></div>

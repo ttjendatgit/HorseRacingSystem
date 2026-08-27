@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getJockeyAssignedRaces, getMyJockeyProfile } from "../../services/jockeyApi";
+import { getJockeyDisplayStats } from "../../utils/jockeyStats";
 import "./JockeyPerformancePage.css";
 
 export default function JockeyPerformancePage() {
@@ -30,9 +31,10 @@ export default function JockeyPerformancePage() {
   const { assignedRaces, confirmed, totalStarts, totalWins, winRate } = useMemo(() => {
     const a = races.length;
     const c = races.filter(r => r.jockeyConfirmed).length;
-    const s = Number(profile?.totalRaces ?? 0);
-    const w = Number(profile?.totalWins ?? 0);
-    const wr = profile?.winRate != null ? Number(profile.winRate) : s > 0 ? Math.round((w / s) * 100) : 0;
+    const stats = getJockeyDisplayStats(profile);
+    const s = stats.totalRaces;
+    const w = stats.totalWins;
+    const wr = stats.winRate;
     return { assignedRaces: a, confirmed: c, totalStarts: s, totalWins: w, winRate: wr };
   }, [races, profile]);
 
