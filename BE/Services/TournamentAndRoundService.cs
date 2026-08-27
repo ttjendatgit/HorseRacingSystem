@@ -164,12 +164,22 @@ public class TournamentService : ITournamentService
         try
         {
             var tournaments = (await _tournamentRepo.GetAllAsync()).ToList();
+            if (tournaments.Count == 0)
+                return ServiceResult<IEnumerable<TournamentResponse>>.Ok(Enumerable.Empty<TournamentResponse>());
 
-            // No per-tournament queries needed at all — Rounds/Races are already eager-loaded
-            // by GetAllAsync's Include(), and this list view never reads EntryCount/HorseCount/
-            // JockeyCount/ApprovedRegistrationCount, so there's nothing left to fetch.
-            var responses = tournaments.Select(MapToListResponse).ToList();
+            var tournamentIds = tournaments.Select(t => t.Id).ToList();
 
+            // ONE grouped query for every tournament's approved-registration count, instead of
+            // either a per-tournament COUNT (old bug) or dropping it entirely (my mistake) —
+            // OwnerTournamentListPage, OwnerTournamentRegisterPage, OwnerDashboardPage, and
+            // Admin's TournamentDetail all depend on this being accurate.
+            var approvedCounts = await _db.TournamentHorseRegistrations
+                .Where(x => tournamentIds.Contains(x.TournamentId) && x.Status == RegistrationStatus.Approved)
+                .GroupBy(x => x.TournamentId)
+                .Select(g => new { TournamentId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.TournamentId, g => g.Count);
+
+            var responses = tournaments.Select(t => MapToListResponse(t, approvedCounts)).ToList();
             return ServiceResult<IEnumerable<TournamentResponse>>.Ok(responses);
         }
         catch (Exception ex)
@@ -179,7 +189,7 @@ public class TournamentService : ITournamentService
         }
     }
 
-    private TournamentResponse MapToListResponse(Tournament tournament)
+    private TournamentResponse MapToListResponse(Tournament tournament, Dictionary<Guid, int> approvedCounts)
     {
         int? daysRemaining = null;
         if (tournament.Status == TournamentStatus.Published || tournament.Status == TournamentStatus.Ongoing)
@@ -187,6 +197,8 @@ public class TournamentService : ITournamentService
             var daysLeft = (tournament.EndDate - DateTime.UtcNow).Days;
             daysRemaining = daysLeft > 0 ? daysLeft : 0;
         }
+
+        approvedCounts.TryGetValue(tournament.Id, out var approvedRegistrationCount);
 
         return new TournamentResponse
         {
@@ -197,7 +209,7 @@ public class TournamentService : ITournamentService
             EndDate = tournament.EndDate,
             IsActive = tournament.IsActive,
             RoundCount = tournament.Rounds?.Count ?? 0,
-            RaceCount = tournament.Races?.Count ?? 0,
+            RaceCount = tournament.Races?.Count ?? 0,       // already eager-loaded, still free
             ImageUrl = tournament.ImageUrl,
             CreatedAt = tournament.CreatedAt,
             UpdatedAt = tournament.UpdatedAt,
@@ -215,7 +227,7 @@ public class TournamentService : ITournamentService
             SurfaceType = tournament.SurfaceType?.ToString(),
             MinParticipants = tournament.MinParticipants,
             MaxParticipants = tournament.MaxParticipants,
-            ApprovedRegistrationCount = 0,   // unused by any current list consumer — see note below
+            ApprovedRegistrationCount = approvedRegistrationCount,   // ← restored, correct now
             MaxRounds = tournament.MaxRounds,
             CancelledBy = tournament.CancelledBy,
             CancellationReason = tournament.CancellationReason,
@@ -224,7 +236,7 @@ public class TournamentService : ITournamentService
                 RaceCount = tournament.Races?.Count ?? 0,
                 EntryCount = 0,
                 HorseCount = 0,
-                JockeyCount = 0,   // unused by the list view
+                JockeyCount = 0,  // confirmed unused by any list consumer
                 DaysRemaining = daysRemaining
             },
             NextTransitions = GetNextTransitions(tournament.Status)
