@@ -26,6 +26,12 @@ const TYPE_LABELS = {
   6: "Khác",
 };
 
+const PENALTY_TYPES = [
+  { value: "Warning", label: "Cảnh cáo" },
+  { value: "TimePenalty", label: "Phạt thời gian (+ giây)" },
+  { value: "DSQ", label: "Loại khỏi cuộc đua" },
+];
+
 const STATUS_MAP = {
   Pending: "Chờ xử lý",
   Resolved: "Đã xử lý",
@@ -90,6 +96,8 @@ function RefereeViolationPage() {
     horseId: "",
     violationType: 3,
     description: "",
+    penaltyType: "Warning",
+    penaltyTimeSeconds: "",
   });
 
   /* ---------- load assignments on mount ---------- */
@@ -178,7 +186,7 @@ function RefereeViolationPage() {
     setShowForm(false);
     if (raceId) {
       loadViolations(raceId);
-      setForm({ horseId: "", violationType: 3, description: "" });
+      setForm({ horseId: "", violationType: 3, description: "", penaltyType: "Warning", penaltyTimeSeconds: "" });
     }
   };
 
@@ -196,6 +204,10 @@ function RefereeViolationPage() {
       setError("Vui lòng nhập mô tả vi phạm.");
       return;
     }
+    if (form.penaltyType === "TimePenalty" && (!form.penaltyTimeSeconds || Number(form.penaltyTimeSeconds) <= 0)) {
+      setError("Vui lòng nhập số giây phạt hợp lệ.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -204,10 +216,12 @@ function RefereeViolationPage() {
         raceId: selectedRaceId,
         violationType: form.violationType,
         description: form.description,
+        penaltyType: form.penaltyType,
+        penaltyTimeSeconds: form.penaltyType === "TimePenalty" ? Number(form.penaltyTimeSeconds) : null,
       });
       setSuccess("Đã ghi nhận vi phạm thành công.");
       setShowForm(false);
-      setForm({ horseId: "", violationType: 3, description: "" });
+      setForm({ horseId: "", violationType: 3, description: "", penaltyType: "Warning", penaltyTimeSeconds: "" });
       loadViolations(selectedRaceId);
     } catch (e) {
       setError(e?.message || "Không thể ghi nhận vi phạm.");
@@ -216,15 +230,13 @@ function RefereeViolationPage() {
     }
   };
 
-  /* ---------- derived data ---------- */
-  // Violations can only be recorded for the race actually active right now —
-  // restrict the selector to RaceStatus.InProgress only. Not Finished (the
-  // race is over), not Tournament.IsActive, not a ScheduledAt comparison.
   const assignedRaces = useMemo(() => {
     const unique = [...new Map(assignments.map((a) => [a.raceId, a])).values()];
     return unique.filter((a) => {
       const status = (a.raceStatus || a.RaceStatus || "").toLowerCase();
-      return status === "inprogress";
+      const resultStatus = (a.resultStatus || a.ResultStatus || "").toLowerCase();
+
+      return status === "inprogress" || (status === "finished" && resultStatus !== "official");
     });
   }, [assignments]);
 
@@ -318,7 +330,7 @@ function RefereeViolationPage() {
             value={selectedRaceId}
             onChange={(e) => handleRaceSelect(e.target.value)}
           >
-            <option value="">-- Chọn một cuộc đua --</option>
+            <option value="">Chọn cuộc đua</option>
             {assignedRaces.map((a) => (
               <option key={a.raceId} value={a.raceId}>
                 {a.raceName || a.raceId}
@@ -406,12 +418,54 @@ function RefereeViolationPage() {
 
                   <div className="rv-form-row">
                     <label className="rv-label rv-label--required">
+                      Hình phạt đề xuất
+                    </label>
+                    <select
+                      className="rv-form-input"
+                      value={form.penaltyType}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          penaltyType: e.target.value,
+                          penaltyTimeSeconds: e.target.value !== "TimePenalty" ? "" : form.penaltyTimeSeconds,
+                        })
+                      }
+                    >
+                      {PENALTY_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {form.penaltyType === "TimePenalty" && (
+                    <div className="rv-form-row">
+                      <label className="rv-label rv-label--required">
+                        Số giây phạt (+)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="rv-form-input"
+                        placeholder="Ví dụ: 5"
+                        value={form.penaltyTimeSeconds}
+                        onChange={(e) =>
+                          setForm({ ...form, penaltyTimeSeconds: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  )}
+
+                  <div className="rv-form-row">
+                    <label className="rv-label rv-label--required">
                       Mô tả
                     </label>
                     <textarea
                       className="rv-textarea"
                       rows={3}
-                      placeholder="Mô tả chi tiết vi phạm..."
+                      placeholder="Mô tả chi tiết diễn biến vi phạm..."
                       value={form.description}
                       onChange={(e) =>
                         setForm({ ...form, description: e.target.value })
@@ -487,6 +541,15 @@ function RefereeViolationPage() {
                       </div>
 
                       <p className="rv-item__desc">{v.description}</p>
+                      
+                      <div style={{ marginTop: 8, fontSize: 13, color: "var(--rv-gold)" }}>
+                        <strong>Hình phạt: </strong>
+                        {v.penaltyType === "TimePenalty" 
+                          ? `Phạt +${v.penaltyTimeSeconds} giây` 
+                          : v.penaltyType === "DSQ" 
+                            ? "Loại khỏi cuộc đua" 
+                            : "Cảnh cáo"}
+                      </div>
 
                       <div className="rv-item__bottom">
                         <span className="rv-item__time">
