@@ -695,12 +695,18 @@ public class TournamentService : ITournamentService
         {
             errors.Add("Hạn đăng ký (RegistrationDeadline) là bắt buộc.");
         }
-        else if (tournament.RegistrationDeadline.Value >= tournament.StartDate)
+        else
         {
-            errors.Add("RegistrationDeadline phải nhỏ hơn StartDate (không được bằng hoặc lớn hơn).");
+            // Must not already be in the past — a tournament can't launch with a registration
+            // window that's already closed before anyone could ever register.
+            if (tournament.RegistrationDeadline.Value < DateTime.UtcNow)
+                errors.Add("Hạn đăng ký (RegistrationDeadline) không được ở trong quá khứ.");
+
+            if (tournament.RegistrationDeadline.Value >= tournament.StartDate)
+                errors.Add("RegistrationDeadline phải nhỏ hơn StartDate (không được bằng hoặc lớn hơn).");
         }
 
-        if (tournament.PrizePool < 0)
+        if (tournament.PrizePool< 0)
             errors.Add("PrizePool không được âm.");
 
         return errors;
