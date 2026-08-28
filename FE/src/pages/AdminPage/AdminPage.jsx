@@ -898,6 +898,8 @@ function ScheduleManagement({ type }) {
   const [busyHorseIdsAll, setBusyHorseIdsAll] = useState(new Set());
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
+  const [rejectingRaceId, setRejectingRaceId] = useState(null);
+  const [rejectRaceReason, setRejectRaceReason] = useState("");
 
   const refreshBusyHorses = async () => {
     try {
@@ -1147,9 +1149,6 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
-  const [rejectingRaceId, setRejectingRaceId] = useState(null);
-  const [rejectRaceReason, setRejectRaceReason] = useState("");
-
     if (action === "reject") {
       setRejectingRaceId(raceId);
       setRejectRaceReason("");
