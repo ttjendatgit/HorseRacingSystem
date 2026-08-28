@@ -34,22 +34,4 @@ public class WalletController : ControllerBase
         var result = await _walletService.GetBalanceAsync(userId);
         return StatusCode(result.StatusCode, result.Result);
     }
-
-    /// <summary>
-    /// Nạp điểm thử nghiệm (+1000 điểm) vào ví khán giả.
-    /// </summary>
-    [HttpPost("topup")]
-    public async Task<ActionResult> TopupPoints([FromBody] TopupRequest? request)
-    {
-        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(uid, out var userId)) return Unauthorized();
-        decimal amount = request?.Points > 0 ? request.Points : 1000m;
-        var result = await _walletService.AddPointsAsync(userId, amount, "Nạp điểm thử nghiệm");
-        return StatusCode(result.StatusCode, result.Result);
-    }
-}
-
-public class TopupRequest
-{
-    public decimal Points { get; set; } = 1000m;
 }

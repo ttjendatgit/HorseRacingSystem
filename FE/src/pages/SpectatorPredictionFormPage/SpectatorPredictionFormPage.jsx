@@ -93,17 +93,6 @@ function SpectatorPredictionFormPage() {
       .catch(() => {});
   }, []);
 
-  const handleTopup = async () => {
-    try {
-      await topupWallet(1000);
-      const d = await getBalance();
-      const b = d?.data ?? d;
-      setWalletBalance(b?.balance ?? b?.Balance ?? 0);
-    } catch {
-      setWalletBalance((prev) => (prev || 0) + 1000);
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
 
@@ -270,23 +259,52 @@ function SpectatorPredictionFormPage() {
 
   const horseOptions = useMemo(() => {
     const entries = raceDetail?.entries ?? [];
-    const mapped = entries.map((entry) => ({
-      id: entry.horseId ?? entry.HorseId,
-      name: entry.horseName ?? entry.HorseName ?? "Không xác định",
-      jockey: entry.jockeyName ?? entry.JockeyName ?? "Chưa xác định",
-      winRate: entry.horseWinRate ?? entry.HorseWinRate ?? 0,
-      jockeyWinRate: entry.jockeyWinRate ?? entry.JockeyWinRate ?? 0,
-      probabilityPercent: entry.probabilityPercent ?? entry.ProbabilityPercent ?? 0,
-      odds: entry.odds ?? entry.Odds ?? 1.0,
-    }));
+    const mapped = entries.map((entry) => {
+      const p = Number(entry.probabilityPercent ?? entry.ProbabilityPercent ?? 0);
+      const o = Number(entry.odds ?? entry.Odds ?? 1.0);
+      const wr = Number(entry.horseWinRate ?? entry.HorseWinRate ?? 0);
+      return {
+        id: entry.horseId ?? entry.HorseId,
+        name: entry.horseName ?? entry.HorseName ?? "Không xác định",
+        jockey: entry.jockeyName ?? entry.JockeyName ?? "Chưa xác định",
+        winRate: wr,
+        jockeyWinRate: Number(entry.jockeyWinRate ?? entry.JockeyWinRate ?? 0),
+        probabilityPercent: p,
+        odds: o,
+        form: entry.form ?? entry.Form ?? "—",
+      };
+    });
 
-    const highestProb = mapped.length > 0 ? Math.max(...mapped.map((h) => h.probabilityPercent)) : 0;
-    const highestOdds = mapped.length > 0 ? Math.max(...mapped.map((h) => h.odds)) : 0;
+    if (mapped.length === 0) return [];
+
+    // Find favorite: highest probabilityPercent, or fallback to highest winRate
+    let maxProb = Math.max(...mapped.map((h) => h.probabilityPercent));
+    let favoriteId = null;
+    if (maxProb > 0) {
+      favoriteId = mapped.find((h) => h.probabilityPercent === maxProb)?.id;
+    } else {
+      let maxWr = Math.max(...mapped.map((h) => h.winRate));
+      favoriteId = mapped.find((h) => h.winRate === maxWr)?.id;
+    }
+
+    // Find underdog: highest odds, or fallback to lowest winRate if distinct
+    let minOdds = Math.min(...mapped.map((h) => h.odds));
+    let maxOdds = Math.max(...mapped.map((h) => h.odds));
+    let underdogId = null;
+    if (maxOdds > minOdds) {
+      underdogId = mapped.find((h) => h.odds === maxOdds && h.id !== favoriteId)?.id;
+    } else {
+      let minWr = Math.min(...mapped.map((h) => h.winRate));
+      let maxWr = Math.max(...mapped.map((h) => h.winRate));
+      if (minWr < maxWr) {
+        underdogId = mapped.find((h) => h.winRate === minWr && h.id !== favoriteId)?.id;
+      }
+    }
 
     return mapped.map((h) => ({
       ...h,
-      isFavorite: highestProb > 0 && h.probabilityPercent === highestProb,
-      isUnderdog: highestOdds > 1.0 && h.odds === highestOdds && (!highestProb || h.probabilityPercent !== highestProb),
+      isFavorite: h.id === favoriteId,
+      isUnderdog: h.id === underdogId,
     }));
   }, [raceDetail]);
 
@@ -508,14 +526,6 @@ function SpectatorPredictionFormPage() {
             {walletBalance !== null && (
               <span style={{ fontSize: 12, fontWeight: 400, color: "#657086", marginLeft: 8 }}>
                 (Số dư: <strong style={{ color: walletBalance >= (parseFloat(betAmount) || 0) ? "#1a7d1a" : "#c41e1e" }}>{Number(walletBalance).toLocaleString()} điểm</strong>)
-                <button
-                  type="button"
-                  style={{ marginLeft: 8, padding: "2px 8px", fontSize: 11, borderRadius: 4, border: "1px solid #10b981", background: "rgba(16,185,129,0.15)", color: "#10b981", cursor: "pointer", fontWeight: 700 }}
-                  onClick={handleTopup}
-                  title="Nạp điểm thử nghiệm để cược demo"
-                >
-                  ⚡ Nạp +1.000 điểm
-                </button>
               </span>
             )}
           </label>
