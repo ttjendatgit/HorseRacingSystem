@@ -171,14 +171,30 @@ public class RefereeService : IRefereeService
         {
             var race = await _raceRepo.GetByIdAsync(request.RaceId);
             if (race == null)
-            {
                 return ServiceResult<RefereeAssignmentResponse>.Fail(404, "Không tìm thấy cuộc đua");
-            }
 
             var referee = await _refereeRepo.GetByIdAsync(request.RefereeId);
             if (referee == null)
-            {
                 return ServiceResult<RefereeAssignmentResponse>.Fail(404, "Không tìm thấy trọng tài");
+
+            if (!referee.IsActive)
+                return ServiceResult<RefereeAssignmentResponse>.Fail(400, "Trọng tài này đang bị vô hiệu hóa.");
+            if (referee.LicenseExpiryDate < DateTime.UtcNow)
+                return ServiceResult<RefereeAssignmentResponse>.Fail(400, "Giấy phép hành nghề của trọng tài đã hết hạn.");
+
+            var existingAssignments = await _assignmentRepo.GetByRefereeAsync(referee.Id);
+            var activeAssignments = existingAssignments.Where(a => a.Status != RefereeAssignmentStatus.Cancelled);
+            foreach (var a in activeAssignments)
+            {
+                var existingRace = await _raceRepo.GetByIdAsync(a.RaceId);
+                if (existingRace != null)
+                {
+                    bool isOverlapping = race.ScheduledAt < existingRace.ScheduledEndAt && race.ScheduledEndAt > existingRace.ScheduledAt;
+                    if (isOverlapping)
+                    {
+                        return ServiceResult<RefereeAssignmentResponse>.Fail(409, $"Trọng tài bị trùng lịch với cuộc đua: {existingRace.Name}");
+                    }
+                }
             }
 
             var assignment = new RefereeAssignment
