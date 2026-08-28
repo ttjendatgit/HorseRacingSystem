@@ -267,7 +267,10 @@ public class TournamentsController : ControllerBase
     [HttpPost("rounds/{roundId:guid}/generate-next")]
     public async Task<ActionResult> GenerateNextRoundEntries(Guid roundId, [FromQuery] bool confirmShortfall = false)
     {
-        var result = await _raceManagementService.GenerateNextRoundEntriesAsync(roundId, confirmShortfall);
+        if (!TryGetActorId(out var actorId))
+            return StatusCode(401, new { success = false, message = "Không thể xác định người dùng thực hiện thao tác." });
+
+        var result = await _raceManagementService.GenerateNextRoundEntriesAsync(roundId, confirmShortfall, actorId);
         return StatusCode(result.StatusCode, result.Result);
     }
 }

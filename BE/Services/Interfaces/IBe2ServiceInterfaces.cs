@@ -58,7 +58,7 @@ public interface IRaceManagementService
     Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId);
 
     // Q1: Qualification — generate Round N+1 RaceEntries from Round N's Official rankings
-    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false);
+    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false, Guid actorId = default);
 
     // GATE-V1: Referee-only starting gate assignment. Caller (RefereesController) is responsible
     // for identity + Confirmed-assignment-to-this-Race authorization before calling this — this

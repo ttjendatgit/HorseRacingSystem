@@ -27,6 +27,7 @@ public class RaceManagementService : IRaceManagementService
     private readonly ILogger<RaceManagementService> _logger;
     private readonly IRaceEntryService _raceEntryService;
     private readonly ApplicationDbContext _db;
+    private readonly ITournamentService _tournamentService;
 
     public RaceManagementService(
         IRaceRepository raceRepo,
@@ -41,7 +42,8 @@ public class RaceManagementService : IRaceManagementService
         IUnitOfWork unitOfWork,
         ILogger<RaceManagementService> logger,
         IRaceEntryService raceEntryService,
-        ApplicationDbContext db)
+        ApplicationDbContext db,
+        ITournamentService tournamentService)
     {
         _raceRepo = raceRepo;
         _entryRepo = entryRepo;
@@ -56,6 +58,7 @@ public class RaceManagementService : IRaceManagementService
         _logger = logger;
         _raceEntryService = raceEntryService;
         _db = db;
+        _tournamentService = tournamentService;
     }
 
     /// <summary>
@@ -944,7 +947,7 @@ public class RaceManagementService : IRaceManagementService
     /// Readiness, qualifier selection, round-robin distribution, capacity, and Jockey carry-forward
     /// all happen server-side; the caller supplies only the current Round's identity.
     /// </summary>
-    public async Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false)
+    public async Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false, Guid actorId = default)
     {
         try
         {
@@ -1049,12 +1052,12 @@ public class RaceManagementService : IRaceManagementService
 
             if (eligible < expectedAdvance)
             {
-                if (eligible <= 1)
+                if (eligible == 0)
                 {
-                    // Không đủ để tổ chức một cuộc đua có nghĩa (cần tối thiểu 2 đối thủ) — đây không
-                    // còn là quyết định ở cấp vòng đấu nữa, phải xử lý ở cấp giải đấu (huỷ giải, dùng
-                    // transition Cancelled có sẵn). Luôn chặn, KHÔNG cho confirmShortfall bypass qua
-                    // nhánh này.
+                    // Không còn ngựa nào đủ điều kiện — không có gì để tổ chức tiếp, kể cả walkover.
+                    // Đây không còn là quyết định ở cấp vòng đấu nữa, phải xử lý ở cấp giải đấu (huỷ
+                    // giải, dùng transition Cancelled có sẵn). Luôn chặn, KHÔNG cho confirmShortfall
+                    // bypass qua nhánh này.
                     return new ServiceResult<GenerateNextRoundResultDto>(409, new ApiResult<GenerateNextRoundResultDto>
                     {
                         Success = false,
@@ -1067,6 +1070,66 @@ public class RaceManagementService : IRaceManagementService
                             EligibleCount = eligible,
                             RequiredAdvanceCount = expectedAdvance
                         }
+                    });
+                }
+
+                if (eligible == 1)
+                {
+                    // Walkover: đúng 1 ngựa đủ điều kiện — giải đấu coi như đã ngã ngũ, không tổ chức
+                    // vòng tiếp theo nữa. Đây là kết quả HỢP LỆ (200), không phải shortfall cần Admin
+                    // xác nhận thêm — confirmShortfall không liên quan tới nhánh này.
+                    //
+                    // Huỷ mọi Race CHƯA diễn ra của giải đấu này — y hệt cascade
+                    // TournamentService.ChangeStatusAsync dùng khi chuyển Cancelled (cùng danh sách
+                    // trạng thái, cùng cách hoàn tiền Prediction đang Pending), nhưng KHÔNG đi qua
+                    // code path Cancelled toàn Tournament vì Tournament ở đây phải thành Finished, không
+                    // phải Cancelled. Mọi Race đã Finished (đã diễn ra) được giữ nguyên, không đụng tới.
+                    var walkoverWinnerHorseId = qualifiers[0];
+
+                    await using var walkoverTransaction = await _db.Database.BeginTransactionAsync();
+
+                    var walkoverCascadeFromStatuses = new[]
+                    {
+                        RaceStatus.Scheduled,
+                        RaceStatus.InProgress,
+                        RaceStatus.RegistrationOpen,
+                        RaceStatus.RegistrationClosed
+                    };
+                    var walkoverRaceIdsToCancel = await _db.Races
+                        .Where(r => r.TournamentId == tournament.Id && walkoverCascadeFromStatuses.Contains(r.Status))
+                        .Select(r => r.Id)
+                        .ToListAsync();
+                    await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                        _db, _walletService, walkoverRaceIdsToCancel, $"tournament_walkover_{tournament.Id}", swallowIndividualFailures: false);
+                    await _db.Races
+                        .Where(r => r.TournamentId == tournament.Id && walkoverCascadeFromStatuses.Contains(r.Status))
+                        .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RaceStatus.Cancelled));
+
+                    // Đúng transition có sẵn (Ongoing -> Finished, whitelist-only, không có precondition
+                    // nào chặn ở nhánh Finished) — không tự set tay tournament.Status để giữ nguyên mọi
+                    // audit/validation hiện có của TournamentService.ChangeStatusAsync.
+                    var finishResult = await _tournamentService.ChangeStatusAsync(
+                        tournament.Id,
+                        new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished },
+                        actorId);
+                    if (!finishResult.Result.Success)
+                    {
+                        // Không nên xảy ra (Ongoing -> Finished luôn hợp lệ, không có precondition nào ở
+                        // nhánh Finished) — nhưng nếu có, để `using` rollback toàn bộ transaction thay vì
+                        // để Race đã bị huỷ mà Tournament vẫn Ongoing.
+                        return ServiceResult<GenerateNextRoundResultDto>.Fail(finishResult.StatusCode,
+                            $"Không thể hoàn tất walkover: {finishResult.Result.Message}");
+                    }
+
+                    await walkoverTransaction.CommitAsync();
+
+                    return ServiceResult<GenerateNextRoundResultDto>.Ok(new GenerateNextRoundResultDto
+                    {
+                        SourceRoundNumber = currentRound.RoundNumber,
+                        TargetRoundNumber = nextRound.RoundNumber,
+                        GeneratedEntries = 0,
+                        IsWalkover = true,
+                        WalkoverWinnerHorseId = walkoverWinnerHorseId
                     });
                 }
 

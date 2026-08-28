@@ -20,6 +20,11 @@ public class GenerateNextRoundResultDto
     public bool RequiresTournamentLevelAction { get; set; } = false;
     public int? EligibleCount { get; set; }
     public int? RequiredAdvanceCount { get; set; }
+
+    // Walkover (eligible == 1): phản hồi thành công (200), không phải lỗi — Tournament đã tự chuyển
+    // sang Finished vì chỉ còn đúng 1 ngựa đủ điều kiện, không cần tổ chức vòng tiếp theo nữa.
+    public bool IsWalkover { get; set; } = false;
+    public Guid? WalkoverWinnerHorseId { get; set; }
 }
 
 public class GenerateNextRoundRaceAssignmentDto

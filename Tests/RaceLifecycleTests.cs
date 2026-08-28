@@ -768,10 +768,16 @@ public class RaceLifecycleTests
             IWalletService walletService = FaultWallet;
             IRaceEntryService raceEntryService = new RaceEntryService(_ownerRepo, _horseRepo, _jockeyRepo, RaceRepo, EntryRepo, UnitOfWork, db);
 
+            // Constructed before RaceManagement — Q1 walkover (GenerateNextRoundEntriesAsync) calls
+            // TournamentSvc.ChangeStatusAsync directly, so RaceManagementService needs it injected.
+            TournamentSvc = new TournamentService(
+                _tournamentRepo, new FakeNotificationService(), _userRepo, RaceRepo, EntryRepo,
+                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork, walletService);
+
             RaceManagement = new RaceManagementService(
                 RaceRepo, EntryRepo, _horseRepo, _jockeyRepo, _tournamentRepo, _roundRepo,
                 PredictionRepo, _assignmentRepo, walletService, UnitOfWork,
-                NullLogger<RaceManagementService>.Instance, raceEntryService, db);
+                NullLogger<RaceManagementService>.Instance, raceEntryService, db, TournamentSvc);
 
             LiveResult = new LiveResultService(
                 RaceRepo, EntryRepo, _horseRepo, _jockeyRepo,
@@ -802,9 +808,6 @@ public class RaceLifecycleTests
 
             TournamentRepo = _tournamentRepo;
             RoundRepoPublic = _roundRepo;
-            TournamentSvc = new TournamentService(
-                _tournamentRepo, new FakeNotificationService(), _userRepo, RaceRepo, EntryRepo,
-                _assignmentRepo, _roundRepo, _horseRepo, _jockeyRepo, db, UnitOfWork, walletService);
             RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
             RaceSvc = new RaceService(RaceRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
         }

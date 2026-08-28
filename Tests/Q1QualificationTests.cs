@@ -610,8 +610,68 @@ public class Q1QualificationTests
         Assert.DoesNotContain(h3, finalHorseIds);
     }
 
+    // eligible == 0: no horse actually finished — nothing to walkover with either. Kept exactly as
+    // the old "eligible <= 1 always rejected" behavior (unchanged). This scenario used to be bundled
+    // conceptually under the old GenerateNextRound_EligibleAtMostOne_* test name, but that test's
+    // actual data only ever exercised eligible == 1 — which is now the walkover success path (see
+    // GenerateNextRound_EligibleEqualsOne_Walkover_FinishesTournamentWithoutTouchingPrizes below). This
+    // is a genuinely new test for the eligible == 0 case specifically, so the old always-rejected
+    // assertion still has real coverage.
     [Fact]
-    public async Task GenerateNextRound_EligibleAtMostOne_AlwaysRejected_RegardlessOfConfirmShortfall()
+    public async Task GenerateNextRound_EligibleEqualsZero_AlwaysRejected_RegardlessOfConfirmShortfall()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+
+        // Both horses DNF/DSQ — nobody actually finishes, so eligible=0 even though the Race awarded
+        // 2 slots and 2 horses ran.
+        await SetTournamentOngoingAsync(f, raceA);
+        await f.RaceManagement.OpenRegistrationAsync(raceA);
+        await f.RaceManagement.CloseRegistrationAsync(raceA);
+        await f.RaceManagement.StartRaceAsync(raceA);
+        await f.RaceManagement.EndRaceAsync(raceA);
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = h1, Position = 99, Status = "DNF" },
+                new() { HorseId = h2, Position = 99, Status = "DSQ" },
+            }
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "All DNF/DSQ.", CreatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+
+        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: false);
+        Assert.False(withoutConfirm.Result.Success);
+        Assert.Equal(409, withoutConfirm.StatusCode);
+        Assert.True(withoutConfirm.Result.Data!.RequiresTournamentLevelAction);
+        Assert.False(withoutConfirm.Result.Data.RequiresShortfallConfirmation);
+        Assert.Equal(0, withoutConfirm.Result.Data.EligibleCount);
+        Assert.Equal(2, withoutConfirm.Result.Data.RequiredAdvanceCount);
+
+        // confirmShortfall=true must NOT bypass this — 0 horses can never make a race.
+        var withConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: true);
+        Assert.False(withConfirm.Result.Success);
+        Assert.Equal(409, withConfirm.StatusCode);
+        Assert.True(withConfirm.Result.Data!.RequiresTournamentLevelAction);
+
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+
+        // eligible==0 is a hard block, not a walkover — Tournament must stay Ongoing, untouched.
+        var tournamentAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == setup.TournamentId);
+        Assert.Equal(TournamentStatus.Ongoing, tournamentAfter.Status);
+    }
+
+    [Fact]
+    public async Task GenerateNextRound_EligibleEqualsOne_Walkover_FinishesTournamentWithoutTouchingPrizes()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
@@ -622,7 +682,9 @@ public class Q1QualificationTests
         var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
 
         // h1 finishes Completed, h2 is a DNF — only 1 horse is actually eligible even though the
-        // Race awarded 2 slots and 2 horses ran.
+        // Race awarded 2 slots and 2 horses ran. This is the walkover scenario: the tournament is
+        // effectively decided (exactly 1 contender remains), so Q1 finishes the tournament outright
+        // instead of asking for shortfall confirmation like a 2+ eligible shortfall would.
         await SetTournamentOngoingAsync(f, raceA);
         await f.RaceManagement.OpenRegistrationAsync(raceA);
         await f.RaceManagement.CloseRegistrationAsync(raceA);
@@ -642,21 +704,38 @@ public class Q1QualificationTests
         var approve = await f.Admin.ApproveRaceResultAsync(raceA);
         Assert.True(approve.Result.Success, approve.Result.Message);
 
-        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: false);
-        Assert.False(withoutConfirm.Result.Success);
-        Assert.Equal(409, withoutConfirm.StatusCode);
-        Assert.True(withoutConfirm.Result.Data!.RequiresTournamentLevelAction);
-        Assert.False(withoutConfirm.Result.Data.RequiresShortfallConfirmation);
-        Assert.Equal(1, withoutConfirm.Result.Data.EligibleCount);
-        Assert.Equal(2, withoutConfirm.Result.Data.RequiredAdvanceCount);
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
 
-        // confirmShortfall=true must NOT bypass this — 1 (or 0) horse can never make a race.
-        var withConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: true);
-        Assert.False(withConfirm.Result.Success);
-        Assert.Equal(409, withConfirm.StatusCode);
-        Assert.True(withConfirm.Result.Data!.RequiresTournamentLevelAction);
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate.Result.Success, generate.Result.Message);
+        Assert.Equal(200, generate.StatusCode);
+        Assert.True(generate.Result.Data!.IsWalkover);
+        Assert.Equal(h1, generate.Result.Data.WalkoverWinnerHorseId);
+        Assert.Equal(0, generate.Result.Data.GeneratedEntries);
 
+        // Tournament finishes — not Cancelled. Must go through the real ChangeStatusAsync transition
+        // (FinishedAt stamped, CancelledAt/CancellationReason stay null — those only ever get set by
+        // the Cancelled branch, never by Finished).
+        var tournamentAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == setup.TournamentId);
+        Assert.Equal(TournamentStatus.Finished, tournamentAfter.Status);
+        Assert.NotNull(tournamentAfter.FinishedAt);
+        Assert.Null(tournamentAfter.CancelledAt);
+        Assert.Null(tournamentAfter.CancellationReason);
+
+        // Round 2's not-yet-run Race is skipped (Cancelled) — never populated with RaceEntries.
+        var raceFinalAfter = await f.Db.Races.AsNoTracking().SingleAsync(r => r.Id == raceFinal);
+        Assert.Equal(RaceStatus.Cancelled, raceFinalAfter.Status);
         Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+
+        // Round 1's already-Finished Race is left untouched by the walkover cascade.
+        var raceAAfter = await f.Db.Races.AsNoTracking().SingleAsync(r => r.Id == raceA);
+        Assert.Equal(RaceStatus.Finished, raceAAfter.Status);
+
+        // No Prize row created/modified by the walkover.
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Empty(prizesBefore);
+        Assert.Empty(prizesAfter);
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
     }
 
     [Fact]

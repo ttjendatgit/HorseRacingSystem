@@ -1075,9 +1075,25 @@ function ScheduleManagement({ type }) {
     try {
       const result = await generateNextRound(roundId, confirmShortfall);
       const data = result?.data ?? result?.Data ?? {};
-      const generated = data.generatedEntries ?? data.GeneratedEntries;
-      setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
-      setItems(await getTournamentRounds(selected));
+      const isWalkover = data.isWalkover ?? data.IsWalkover ?? false;
+      if (isWalkover) {
+        // Không đủ dữ liệu tên ngựa ở state của trang này (chỉ có HorseId) — tránh thêm API call mới
+        // chỉ để lấy tên đẹp; hiển thị đầy đủ hơn để Giai đoạn sau.
+        const winnerHorseId = data.walkoverWinnerHorseId ?? data.WalkoverWinnerHorseId;
+        setMessage(`Giải đấu đã kết thúc do walkover — chỉ còn 1 ngựa đủ điều kiện (HorseId: ${winnerHorseId}), được công nhận vô địch trực tiếp.`);
+      } else {
+        const generated = data.generatedEntries ?? data.GeneratedEntries;
+        setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
+      }
+      // Refetch tournaments alongside rounds (parallel, independent fetches) — a walkover flips
+      // Tournament.Status to Finished server-side, and selectedTournamentStatusName/tournamentEnded
+      // must reflect that immediately (no F5) so the "Tạo vòng tiếp theo" button locks on next render.
+      const [roundsData, tournamentsData] = await Promise.all([
+        getTournamentRounds(selected),
+        getAdminTournaments(),
+      ]);
+      setItems(roundsData);
+      setTournaments(Array.isArray(tournamentsData) ? tournamentsData : []);
     } catch (err) {
       const errData = err.data?.data ?? err.data?.Data ?? {};
       const requiresTournamentLevelAction =
@@ -1226,6 +1242,12 @@ function ScheduleManagement({ type }) {
   const title = type === "round" ? "Quản lý vòng đấu" : "Quản lý cuộc đua & lên lịch";
   const selectedTournament = tournaments.find((t) => (t.id ?? t.Id) === selected);
   const isDraftTournament = (selectedTournament?.statusName ?? selectedTournament?.StatusName) === "Draft";
+  const selectedTournamentStatusName = selectedTournament?.statusName ?? selectedTournament?.StatusName;
+  // Once a Tournament is Finished or Cancelled, no Round can ever "generate next round" again,
+  // regardless of any Round's own entries — reuses the already-fetched tournaments list, no new
+  // API call. Covers both the normal end-of-tournament flow and the Q1 walkover shortcut (which
+  // jumps a Tournament straight to Finished without going through every Round).
+  const tournamentEnded = selectedTournamentStatusName === "Finished" || selectedTournamentStatusName === "Cancelled";
   return (
     <>
       <PageTitle
@@ -1374,8 +1396,8 @@ function ScheduleManagement({ type }) {
               )}
               {!isDraftTournament && !isFinal && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
-                  <button onClick={() => generateNextRoundForRound(itemId)} disabled={nextRoundAlreadyGenerated}>
-                    {nextRoundAlreadyGenerated ? "✓ Đã tạo vòng tiếp theo" : "Tạo vòng tiếp theo"}
+                  <button onClick={() => generateNextRoundForRound(itemId)} disabled={nextRoundAlreadyGenerated || tournamentEnded}>
+                    {tournamentEnded ? "Giải đấu đã kết thúc" : nextRoundAlreadyGenerated ? "✓ Đã tạo vòng tiếp theo" : "Tạo vòng tiếp theo"}
                   </button>
                 </div>
               )}
@@ -1404,7 +1426,16 @@ function ScheduleManagement({ type }) {
             setRaceReport(reportRes?.data ?? reportRes ?? null);
           } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
         }}>
-          <span className="badge">{raceStatusLabel[itemStatus] ?? item.status ?? item.Status}</span>
+          <span className="badge">
+            {itemStatus === "cancelled" && selectedTournamentStatusName === "Finished"
+              // Race Cancelled + Tournament Finished (not Cancelled) can only happen via the Q1
+              // walkover cascade (see GenerateNextRoundEntriesAsync) — every other Cancel path also
+              // cancels the Tournament. Local display-only override — the shared raceStatusLabel map
+              // stays untouched so a genuinely-cancelled Race (Tournament still Cancelled) keeps
+              // showing "Đã hủy" as normal.
+              ? "Đã kết thúc"
+              : (raceStatusLabel[itemStatus] ?? item.status ?? item.Status)}
+          </span>
           {itemResultStatus && (
             <span className="badge" style={{marginLeft:4,background:itemResultStatus==="official"?"rgba(112,139,104,0.16)":"rgba(185,138,69,0.16)",color:itemResultStatus==="official"?"var(--hr-success)":"var(--hr-warning)"}}>
               {resultStatusLabel[itemResultStatus] ?? itemResultStatus}
