@@ -1372,6 +1372,21 @@ function ScheduleManagement({ type }) {
                         const viols = raceViolations.filter(v => (v.horseId || v.HorseId) === hId);
                         const status = rank.status || rank.Status || "Completed";
                         const time = rank.timeTaken || rank.TimeTaken;
+                        const baseTimeMs = time != null ? Math.round(time * 1000) : 0;
+                        const penaltySeconds = viols.reduce((sum, v) => {
+                          const pType = v.penaltyType || v.PenaltyType;
+                          const pSec = v.penaltyTimeSeconds || v.PenaltyTimeSeconds || 0;
+                          return pType === "TimePenalty" ? sum + Number(pSec) : sum;
+                        }, 0);
+                        const totalMs = baseTimeMs + (penaltySeconds * 1000);
+
+                        let displayTime = "—";
+                        if (status === "Completed" && time != null) {
+                          const finalM = Math.floor(totalMs / 60000);
+                          const finalS = Math.floor((totalMs % 60000) / 1000);
+                          const finalMs = totalMs % 1000;
+                          displayTime = `${finalM.toString().padStart(2, '0')}:${finalS.toString().padStart(2, '0')}.${finalMs.toString().padStart(3, '0')}`;
+                        }
 
                         return (
                           <div key={hId} style={{ display: "flex", alignItems: "center", padding: "12px", background: "var(--hr-surface-2)", border: "1px solid var(--hr-border-soft)", borderRadius: 8 }}>
@@ -1407,7 +1422,7 @@ function ScheduleManagement({ type }) {
                             </div>
 
                             <div style={{ width: 100, fontSize: 16, fontWeight: "700", color: "var(--hr-paper)", textAlign: "right", fontFamily: "monospace" }}>
-                              {status === "Completed" && time != null ? formatTime(time) : "—"}
+                              {displayTime}
                             </div>
                           </div>
                         );
