@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createTournament } from "../services/adminApi";
 import { request } from "../services/apiClient";
 import { Input, Textarea, Button } from "./ui/Primitives";
-import { vnInputToApiUtc } from "../utils/vnDateTime";
+import { vnInputToApiUtc, vnNowInput  } from "../utils/vnDateTime";
 
 function TournamentForm({ onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
@@ -86,7 +86,7 @@ function TournamentForm({ onClose, onSuccess }) {
             <Input label="Thời gian kết thúc *" type="datetime-local" value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
           </div>
           <p style={{margin:"-12px 0 16px",fontSize:12,color:"var(--hr-muted)"}}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>
-          <Input label="Hạn đăng ký ngựa *" type="datetime-local" value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} required style={{colorScheme:"dark"}} hint="Thời điểm cuối cùng Chủ ngựa được gửi đăng ký tham gia giải." />
+          <Input label="Hạn đăng ký ngựa *" type="datetime-local" min={vnNowInput()} value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} required style={{colorScheme:"dark"}} hint="Thời điểm cuối cùng Chủ ngựa được gửi đăng ký tham gia giải." />
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             <Input label="Số người tham gia tối thiểu" type="number" value={form.minParticipants} onChange={(e) => updateForm("minParticipants", e.target.value)} min="3" required />
             <Input label="Số người tham gia tối đa" type="number" value={form.maxParticipants} onChange={(e) => updateForm("maxParticipants", e.target.value)} min="1" required />
