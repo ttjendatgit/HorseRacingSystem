@@ -161,9 +161,17 @@ export default function RefereeRaceReportPage() {
             ms = (baseTimeMs % 1000).toString();
           }
 
-          // Cập nhật trạng thái
-          const finalStatus = (autoStatusMap[hId] === "DSQ") ? "DSQ" : status;
-          initialData[hId] = { status: finalStatus, mm, ss, ms, penalty: syncPenalty };
+          let finalStatus = status;
+          let hasDSQViolation = false;
+
+          if (autoStatusMap[hId] === "DSQ") {
+             finalStatus = "DSQ"; 
+             hasDSQViolation = true;
+          } else if (finalStatus === "DSQ") {
+             finalStatus = "Completed"; 
+          }
+
+          initialData[hId] = { status: finalStatus, mm, ss, ms, penalty: syncPenalty, isAutoDSQ: hasDSQViolation };
         } else {
           // Chưa có KQ cũ
           const syncStatus = autoStatusMap[hId] || "Completed";
@@ -472,7 +480,7 @@ export default function RefereeRaceReportPage() {
                             </td>
                             <td style={{ padding: "10px" }}>
                               {(() => {
-                                const isAutoDSQ = data.status === "DSQ";
+                                const isAutoDSQ = data.isAutoDSQ === true;
                                 return (
                                   <select 
                                     className="rr-select" 
