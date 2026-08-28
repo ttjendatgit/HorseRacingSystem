@@ -68,7 +68,32 @@ public class RaceReportsController : ControllerBase
     [HttpPut("reports/{id:guid}")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> Update(Guid id, [FromBody] CreateRaceReportRequest r)
-        => OkR(await _service.UpdateReportAsync(id, r));
+    {
+        var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (uid is null || !Guid.TryParse(uid, out var userId))
+            return Unauthorized(new { message = "Token không hợp lệ" });
+
+        var referee = await _refereeRepo.GetByUserIdAsync(userId);
+        if (referee is null)
+            return NotFound(new { message = "Không tìm thấy hồ sơ trọng tài" });
+
+        // Kéo dữ liệu báo cáo cũ lên để kiểm tra
+        var existingReportResult = await _service.GetReportAsync(id);
+        if (existingReportResult.StatusCode != 200 || existingReportResult.Result.Data == null)
+            return NotFound(new { message = "Không tìm thấy báo cáo" });
+
+        var report = existingReportResult.Result.Data;
+
+        // Cấm sửa báo cáo của Trọng tài khác
+        if (report.RefereeId != referee.Id)
+            return StatusCode(403, new { message = "Từ chối truy cập: Không thể sửa đổi báo cáo của trọng tài khác." });
+
+        // Đã Official thì khóa cứng vĩnh viễn
+        if (report.IsOfficialReport)
+            return BadRequest(new { message = "Báo cáo này đã được duyệt chính thức, không thể thay đổi nội dung." });
+
+        return OkR(await _service.UpdateReportAsync(id, r));
+    }
 
     [HttpPost("reports/{id:guid}/publish")]
     [Authorize(Roles = "Admin")]

@@ -41,5 +41,16 @@ public class ViolationsController : ControllerBase
     public async Task<ActionResult> GetByHorse(Guid horseId)
         => OkR(await _service.GetHorseViolationsAsync(horseId));
 
+    [HttpDelete("violations/{id:guid}")]
+    [Authorize(Roles = "Referee,Admin")]
+    public async Task<ActionResult> Delete(Guid id)
+    {
+        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(uid, out var userId))
+            return Unauthorized(new { message = "Token không hợp lệ" });
+
+        return OkR(await _service.DeleteViolationAsync(id, userId));
+    }
+
     private ActionResult OkR<T>(ServiceResult<T> r) => StatusCode(r.StatusCode, r.Result);
 }

@@ -51,6 +51,7 @@ public class CreateViolationRequest
     public string? Evidence { get; set; }
     public string? PenaltyType { get; set; }
     public int? PenaltyTimeSeconds { get; set; }
+    public string? Severity { get; set; }
 }
 
 public class ViolationResponse
@@ -69,6 +70,7 @@ public class ViolationResponse
     public string? Evidence { get; set; }
     public string? PenaltyType { get; set; }
     public int? PenaltyTimeSeconds { get; set; }
+    public string? Severity { get; set; }
 }
 
 // Race Report DTOs

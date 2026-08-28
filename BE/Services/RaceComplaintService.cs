@@ -88,6 +88,11 @@ public class RaceComplaintService : IRaceComplaintService
             return ServiceResult<RaceComplaintResponse>.Fail(400, "Khong the khieu nai cuoc dua da bi huy.");
         if (race.Status != RaceStatus.Finished)
             return ServiceResult<RaceComplaintResponse>.Fail(400, "Chi co the khieu nai cuoc dua da ket thuc.");
+        var deadline = race.ScheduledAt.AddHours(48);
+        if (DateTime.UtcNow > deadline)
+        {
+            return ServiceResult<RaceComplaintResponse>.Fail(400, "Đã quá thời hạn 48 giờ để nộp khiếu nại cho cuộc đua này.");
+        }
 
         var raceResult = await _raceResultRepo.GetByRaceIdAsync(request.RaceId);
         if (raceResult == null)
