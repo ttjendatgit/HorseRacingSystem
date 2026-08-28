@@ -928,7 +928,15 @@ function ScheduleManagement({ type }) {
   const [selected, setSelected] = useState("");
   const [items, setItems] = useState([]);
   const [approvedHorses, setApprovedHorses] = useState([]);
-  const [message, setMessage] = useState("");
+  const [message, setRawMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
+  // Thin wrapper, same call signature every existing `setMessage(text)` site already uses — those
+  // 20+ call sites need no change at all (they implicitly get isError=false). Only a genuinely
+  // negative outcome (e.g. the void-tournament branch below) needs to opt in with isError=true.
+  const setMessage = (text, isError = false) => {
+    setRawMessage(text);
+    setMessageIsError(isError);
+  };
   const [assignment, setAssignment] = useState({ raceId: "", horseId: "" });
   const [expandedRaceId, setExpandedRaceId] = useState(null);
   const [raceEntries, setRaceEntries] = useState([]);
@@ -1076,7 +1084,12 @@ function ScheduleManagement({ type }) {
       const result = await generateNextRound(roundId, confirmShortfall);
       const data = result?.data ?? result?.Data ?? {};
       const isWalkover = data.isWalkover ?? data.IsWalkover ?? false;
-      if (isWalkover) {
+      const isVoided = data.isVoided ?? data.IsVoided ?? false;
+      if (isVoided) {
+        // Kết quả tiêu cực (giải đấu bị huỷ, không phải "hoàn tất bình thường" như walkover) — dùng
+        // biến thể error của Notice để không hiện y hệt màu/style thành công.
+        setMessage("Giải đấu đã bị huỷ vì không còn ngựa nào đủ điều kiện đi tiếp (toàn bộ vi phạm/bị loại). Các dự đoán liên quan đã được hoàn tiền.", true);
+      } else if (isWalkover) {
         // Không đủ dữ liệu tên ngựa ở state của trang này (chỉ có HorseId) — tránh thêm API call mới
         // chỉ để lấy tên đẹp; hiển thị đầy đủ hơn để Giai đoạn sau.
         const winnerHorseId = data.walkoverWinnerHorseId ?? data.WalkoverWinnerHorseId;
@@ -1256,7 +1269,7 @@ function ScheduleManagement({ type }) {
         description={type === "round" ? "Xây dựng giai đoạn giải đấu và xác định khung thời gian." : "Sắp xếp cuộc đua, đặt lịch và chuẩn bị phân công ngựa."}
         action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null}
       />
-      <Notice message={message} />
+      <Notice message={message} error={messageIsError} />
       {showRaceForm && (
         <RaceForm
           tournamentId={selected}

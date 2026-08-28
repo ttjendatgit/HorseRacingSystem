@@ -610,64 +610,107 @@ public class Q1QualificationTests
         Assert.DoesNotContain(h3, finalHorseIds);
     }
 
-    // eligible == 0: no horse actually finished — nothing to walkover with either. Kept exactly as
-    // the old "eligible <= 1 always rejected" behavior (unchanged). This scenario used to be bundled
-    // conceptually under the old GenerateNextRound_EligibleAtMostOne_* test name, but that test's
-    // actual data only ever exercised eligible == 1 — which is now the walkover success path (see
-    // GenerateNextRound_EligibleEqualsOne_Walkover_FinishesTournamentWithoutTouchingPrizes below). This
-    // is a genuinely new test for the eligible == 0 case specifically, so the old always-rejected
-    // assertion still has real coverage.
+    // eligible == 0: no horse actually finished — nothing to walkover with either. Renamed/rewritten
+    // from GenerateNextRound_EligibleEqualsZero_AlwaysRejected_RegardlessOfConfirmShortfall: eligible==0
+    // is no longer a hard 409 block — it now auto-voids the Tournament (Cancelled) the same way
+    // eligible==1 auto-finishes it (walkover), since ChangeStatusAsync's Cancelled branch already has
+    // its own cascade-cancel + Prediction-refund built in (see GenerateNextRoundEntriesAsync).
     [Fact]
-    public async Task GenerateNextRound_EligibleEqualsZero_AlwaysRejected_RegardlessOfConfirmShortfall()
+    public async Task GenerateNextRound_EligibleEqualsZero_AutoVoidsTournament_RegardlessOfConfirmShortfall()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
-        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
-        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
-        await AssignRefereeAsync(f, raceA, setup.RefereeId);
-        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
-        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
 
-        // Both horses DNF/DSQ — nobody actually finishes, so eligible=0 even though the Race awarded
-        // 2 slots and 2 horses ran.
-        await SetTournamentOngoingAsync(f, raceA);
-        await f.RaceManagement.OpenRegistrationAsync(raceA);
-        await f.RaceManagement.CloseRegistrationAsync(raceA);
-        await f.RaceManagement.StartRaceAsync(raceA);
-        await f.RaceManagement.EndRaceAsync(raceA);
-        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        // Auto-void mutates state (Tournament -> Cancelled) on the very first call, so proving
+        // confirmShortfall=true leads to the identical outcome needs a SECOND, independent Tournament
+        // — calling GenerateNextRoundEntriesAsync twice against the same (now-Cancelled) Tournament
+        // would hit a different guard the second time, not re-exercise eligible==0.
+        async Task<(TwoRoundSetup Setup, Guid RaceA, Guid RaceFinal, Guid H1)> BuildEligibleZeroScenarioAsync(string tag)
         {
-            Rankings = new List<SubmitRankingEntry>
+            var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+            var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: $"Race A {tag}");
+            var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: $"Final {tag}");
+            await AssignRefereeAsync(f, raceA, setup.RefereeId);
+            var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, $"h1-{tag}");
+            var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, $"h2-{tag}");
+
+            // Both horses DNF/DSQ — nobody actually finishes, so eligible=0 even though the Race
+            // awarded 2 slots and 2 horses ran.
+            await SetTournamentOngoingAsync(f, raceA);
+            await f.RaceManagement.OpenRegistrationAsync(raceA);
+            await f.RaceManagement.CloseRegistrationAsync(raceA);
+            await f.RaceManagement.StartRaceAsync(raceA);
+            await f.RaceManagement.EndRaceAsync(raceA);
+            var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
             {
-                new() { HorseId = h1, Position = 99, Status = "DNF" },
-                new() { HorseId = h2, Position = 99, Status = "DSQ" },
-            }
-        });
-        Assert.True(submit.Result.Success, submit.Result.Message);
-        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "All DNF/DSQ.", CreatedAt = DateTime.UtcNow });
-        await f.Db.SaveChangesAsync();
-        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
-        Assert.True(approve.Result.Success, approve.Result.Message);
+                Rankings = new List<SubmitRankingEntry>
+                {
+                    new() { HorseId = h1, Position = 99, Status = "DNF" },
+                    new() { HorseId = h2, Position = 99, Status = "DSQ" },
+                }
+            });
+            Assert.True(submit.Result.Success, submit.Result.Message);
+            f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "All DNF/DSQ.", CreatedAt = DateTime.UtcNow });
+            await f.Db.SaveChangesAsync();
+            var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+            Assert.True(approve.Result.Success, approve.Result.Message);
 
-        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: false);
-        Assert.False(withoutConfirm.Result.Success);
-        Assert.Equal(409, withoutConfirm.StatusCode);
-        Assert.True(withoutConfirm.Result.Data!.RequiresTournamentLevelAction);
-        Assert.False(withoutConfirm.Result.Data.RequiresShortfallConfirmation);
-        Assert.Equal(0, withoutConfirm.Result.Data.EligibleCount);
-        Assert.Equal(2, withoutConfirm.Result.Data.RequiredAdvanceCount);
+            return (setup, raceA, raceFinal, h1);
+        }
 
-        // confirmShortfall=true must NOT bypass this — 0 horses can never make a race.
-        var withConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: true);
-        Assert.False(withConfirm.Result.Success);
-        Assert.Equal(409, withConfirm.StatusCode);
-        Assert.True(withConfirm.Result.Data!.RequiresTournamentLevelAction);
+        // ── confirmShortfall=false: full assertion suite ──
+        var scenarioA = await BuildEligibleZeroScenarioAsync("A");
 
-        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+        // A Pending Prediction on the not-yet-run Final Race — must be refunded by the Cancelled
+        // cascade inside ChangeStatusAsync, same convention asserted by
+        // RaceLifecycleTests.Cancellation_RefundsPendingPredictions.
+        var (spectatorId, walletBefore) = await f.CreateSpectatorWithWalletAsync(0m);
+        await f.AddPendingPredictionAsync(scenarioA.RaceFinal, spectatorId, scenarioA.H1, betAmount: 50m, odds: 2m);
 
-        // eligible==0 is a hard block, not a walkover — Tournament must stay Ongoing, untouched.
-        var tournamentAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == setup.TournamentId);
-        Assert.Equal(TournamentStatus.Ongoing, tournamentAfter.Status);
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
+
+        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(scenarioA.Setup.Round1Id, confirmShortfall: false);
+        Assert.True(withoutConfirm.Result.Success, withoutConfirm.Result.Message);
+        Assert.Equal(200, withoutConfirm.StatusCode);
+        Assert.True(withoutConfirm.Result.Data!.IsVoided);
+
+        // Tournament auto-voided (Cancelled) — not Finished. CancellationReason must be populated
+        // (ChangeStatusAsync's Cancelled branch requires it); FinishedAt stays null (only walkover sets it).
+        var tournamentAAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == scenarioA.Setup.TournamentId);
+        Assert.Equal(TournamentStatus.Cancelled, tournamentAAfter.Status);
+        Assert.NotNull(tournamentAAfter.CancelledAt);
+        Assert.False(string.IsNullOrWhiteSpace(tournamentAAfter.CancellationReason));
+        Assert.Null(tournamentAAfter.FinishedAt);
+
+        // Round 2's not-yet-run Race is cancelled — never populated with RaceEntries.
+        var raceFinalAAfter = await f.Db.Races.AsNoTracking().SingleAsync(r => r.Id == scenarioA.RaceFinal);
+        Assert.Equal(RaceStatus.Cancelled, raceFinalAAfter.Status);
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == scenarioA.RaceFinal));
+
+        // Round 1's already-Finished Race is left untouched by the void cascade.
+        var raceAAAfter = await f.Db.Races.AsNoTracking().SingleAsync(r => r.Id == scenarioA.RaceA);
+        Assert.Equal(RaceStatus.Finished, raceAAAfter.Status);
+
+        // Pending Prediction on the cancelled Final Race was refunded.
+        var predictionAfter = (await f.GetPredictionsFreshAsync(scenarioA.RaceFinal)).Single();
+        Assert.Equal(PredictionStatus.Lost, predictionAfter.Status); // refund marker, per existing convention
+        Assert.Equal(walletBefore + 50m, await f.GetWalletBalanceAsync(spectatorId));
+
+        // No Prize row created/modified by the void.
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Empty(prizesBefore);
+        Assert.Empty(prizesAfter);
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
+
+        // ── confirmShortfall=true, independent Tournament: proves the flag is irrelevant for this
+        // branch (both lead to the identical auto-void outcome), same as it does for walkover. ──
+        var scenarioB = await BuildEligibleZeroScenarioAsync("B");
+        var withConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(scenarioB.Setup.Round1Id, confirmShortfall: true);
+        Assert.True(withConfirm.Result.Success, withConfirm.Result.Message);
+        Assert.Equal(200, withConfirm.StatusCode);
+        Assert.True(withConfirm.Result.Data!.IsVoided);
+
+        var tournamentBAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == scenarioB.Setup.TournamentId);
+        Assert.Equal(TournamentStatus.Cancelled, tournamentBAfter.Status);
     }
 
     [Fact]

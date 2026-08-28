@@ -1054,22 +1054,38 @@ public class RaceManagementService : IRaceManagementService
             {
                 if (eligible == 0)
                 {
-                    // Không còn ngựa nào đủ điều kiện — không có gì để tổ chức tiếp, kể cả walkover.
-                    // Đây không còn là quyết định ở cấp vòng đấu nữa, phải xử lý ở cấp giải đấu (huỷ
-                    // giải, dùng transition Cancelled có sẵn). Luôn chặn, KHÔNG cho confirmShortfall
-                    // bypass qua nhánh này.
-                    return new ServiceResult<GenerateNextRoundResultDto>(409, new ApiResult<GenerateNextRoundResultDto>
-                    {
-                        Success = false,
-                        Message = $"Chỉ còn {eligible} ngựa đủ điều kiện đi tiếp — không đủ để tổ chức vòng tiếp theo. Cần xử lý ở cấp giải đấu (huỷ giải đấu), không thể tiếp tục theo vòng đấu này.",
-                        Data = new GenerateNextRoundResultDto
+                    // Không còn ngựa nào đủ điều kiện — toàn bộ ngựa của Round này đã vi phạm/bị loại
+                    // (DNF/DSQ). Giải đấu coi như không còn ai để thi đấu tiếp — tự động huỷ giải. Đây
+                    // là kết quả HỢP LỆ (200), không phải shortfall cần Admin xác nhận thêm —
+                    // confirmShortfall không liên quan tới nhánh này (cả true/false đều dẫn tới cùng
+                    // kết quả), giống walkover ở điểm này.
+                    //
+                    // Khác với walkover (Finished không có sẵn cascade, phải tự viết tay): nhánh
+                    // Cancelled của ChangeStatusAsync ĐÃ TỰ cascade-cancel mọi Race chưa diễn ra + tự
+                    // hoàn tiền Prediction đang Pending bên trong nó rồi (cùng transaction, cùng
+                    // PredictionRefundHelper) — gọi thẳng, không viết lại cascade/refund thủ công.
+                    var voidResult = await _tournamentService.ChangeStatusAsync(
+                        tournament.Id,
+                        new ChangeTournamentStatusRequest
                         {
-                            SourceRoundNumber = currentRound.RoundNumber,
-                            TargetRoundNumber = nextRound.RoundNumber,
-                            RequiresTournamentLevelAction = true,
-                            EligibleCount = eligible,
-                            RequiredAdvanceCount = expectedAdvance
-                        }
+                            NewStatus = TournamentStatus.Cancelled,
+                            Reason = "Toàn bộ ngựa vi phạm/bị loại — không còn ngựa nào đủ điều kiện thi đấu tiếp."
+                        },
+                        actorId);
+                    if (!voidResult.Result.Success)
+                    {
+                        // Không nên xảy ra (Ongoing -> Cancelled luôn hợp lệ, Reason đã được cung cấp
+                        // sẵn ở trên) — nhưng nếu có, trả lỗi thay vì âm thầm coi như thành công.
+                        return ServiceResult<GenerateNextRoundResultDto>.Fail(voidResult.StatusCode,
+                            $"Không thể tự động huỷ giải đấu: {voidResult.Result.Message}");
+                    }
+
+                    return ServiceResult<GenerateNextRoundResultDto>.Ok(new GenerateNextRoundResultDto
+                    {
+                        SourceRoundNumber = currentRound.RoundNumber,
+                        TargetRoundNumber = nextRound.RoundNumber,
+                        GeneratedEntries = 0,
+                        IsVoided = true
                     });
                 }
 

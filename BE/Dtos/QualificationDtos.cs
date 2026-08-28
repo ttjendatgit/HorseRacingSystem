@@ -25,6 +25,10 @@ public class GenerateNextRoundResultDto
     // sang Finished vì chỉ còn đúng 1 ngựa đủ điều kiện, không cần tổ chức vòng tiếp theo nữa.
     public bool IsWalkover { get; set; } = false;
     public Guid? WalkoverWinnerHorseId { get; set; }
+
+    // Void (eligible == 0): phản hồi thành công (200), không phải lỗi — Tournament đã tự chuyển sang
+    // Cancelled vì không còn ngựa nào đủ điều kiện thi đấu tiếp (toàn bộ vi phạm/bị loại).
+    public bool IsVoided { get; set; } = false;
 }
 
 public class GenerateNextRoundRaceAssignmentDto
