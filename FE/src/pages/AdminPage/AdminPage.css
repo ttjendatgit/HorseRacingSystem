@@ -139,6 +139,96 @@
 .admin-stat-card h3 { font-size: 28px; font-weight: 800; color: var(--hr-paper); margin: 0; line-height: 1.1; }
 .admin-notice { padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; background: rgba(112,139,104,0.16); border: 1px solid rgba(112,139,104,0.32); color: var(--hr-success); }
 .admin-notice--error { background: rgba(201,105,90,0.16); border-color: rgba(201,105,90,0.32); color: var(--hr-danger); }
+
+.hr-toast {
+  position: fixed;
+  top: var(--hr-space-lg, 24px);
+  right: var(--hr-space-lg, 24px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  padding: 14px 16px;
+  border-radius: var(--hr-radius-panel, 10px);
+  box-shadow: var(--hr-shadow-soft);
+  background: var(--hr-surface-elevated, var(--hr-surface));
+  border: 1px solid var(--hr-border);
+  color: var(--hr-text);
+  font-size: 14px;
+  animation: hr-toast-in 0.2s ease-out;
+}
+.hr-toast--success { border-left: 4px solid var(--hr-success); }
+.hr-toast--error { border-left: 4px solid var(--hr-danger); }
+.hr-toast__icon { flex-shrink: 0; font-size: 16px; }
+.hr-toast--success .hr-toast__icon { color: var(--hr-success); }
+.hr-toast--error .hr-toast__icon { color: var(--hr-danger); }
+.hr-toast__message { flex: 1; line-height: 1.4; }
+.hr-toast__close {
+  background: none;
+  border: none;
+  color: var(--hr-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+@keyframes hr-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+.hr-modal {
+  background: var(--hr-surface-elevated, var(--hr-surface));
+  border: 1px solid var(--hr-border);
+  border-radius: var(--hr-radius-panel, 10px);
+  box-shadow: var(--hr-shadow-soft);
+  padding: var(--hr-space-lg, 24px);
+  max-width: 420px;
+  width: 90%;
+}
+.hr-modal__message { color: var(--hr-text); margin: 0 0 16px; line-height: 1.5; }
+.hr-modal__input {
+  width: 100%;
+  height: var(--hr-control-height, 40px);
+  border: 1px solid var(--hr-border);
+  border-radius: var(--hr-radius-compact, 6px);
+  padding: 0 10px;
+  margin-bottom: 16px;
+  background: var(--hr-bg);
+  color: var(--hr-text);
+}
+.hr-modal__actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+.hr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--hr-radius-compact, 8px);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  transition: all 0.2s;
+}
+.hr-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.hr-btn--primary { background: var(--hr-crimson); color: var(--hr-paper); }
+.hr-btn--primary:hover:not(:disabled) { background: var(--hr-crimson-hover); }
+.hr-btn--ghost { background: transparent; border: 1px solid var(--hr-border); color: var(--hr-gold-soft); }
+.hr-btn--ghost:hover:not(:disabled) { background: rgba(184,134,59,0.1); }
+.hr-btn--danger { background: rgba(201,105,90,0.16); color: var(--hr-danger); border: 1px solid rgba(201,105,90,0.35); }
+.hr-btn--danger:hover:not(:disabled) { background: rgba(201,105,90,0.26); }
 .admin-form { display: grid; gap: 14px; background: var(--hr-surface); border-radius: 12px; padding: 22px 24px; border: 1px solid var(--hr-border); }
 .admin-form input, .admin-form select { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--hr-border-soft); background: var(--hr-surface-2); color: var(--hr-text); font-size: 13px; font-family: inherit; color-scheme: dark; }
 .admin-form input::placeholder { color: var(--hr-muted); }
@@ -238,6 +328,7 @@
 .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .admin-actions button, .admin-actions a { padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid var(--hr-border-soft); cursor: pointer; font-family: inherit; text-decoration: none; transition: all 0.15s; background: transparent; color: var(--hr-text); }
 .admin-actions button:hover, .admin-actions a:hover { background: rgba(238,229,212,0.06); border-color: var(--hr-border); }
+.admin-actions button:disabled { opacity: 0.5; cursor: not-allowed; background: transparent; }
 .primary-button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 10px; background: var(--hr-crimson); color: var(--hr-paper); border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
 .primary-button:hover { background: var(--hr-crimson-hover); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(156,50,38,0.35); }
 .primary-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }

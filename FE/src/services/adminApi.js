@@ -93,10 +93,11 @@ export const updateRound = (roundId, payload) =>
   });
 
 /** [ROLE: Admin] Tự động đẩy các ngựa thi đấu đạt thành tích sang vòng kế tiếp */
-export const generateNextRound = (roundId) =>
-  request(`/api/tournaments/rounds/${roundId}/generate-next`, {
-    method: "POST",
-  });
+export const generateNextRound = (roundId, confirmShortfall = false) =>
+  request(
+    `/api/tournaments/rounds/${roundId}/generate-next${confirmShortfall ? "?confirmShortfall=true" : ""}`,
+    { method: "POST" }
+  );
 
 /** [ROLE: Admin] Lấy danh sách các trận đua thuộc về một giải đấu */
 export const getTournamentRaces = async (tournamentId) =>

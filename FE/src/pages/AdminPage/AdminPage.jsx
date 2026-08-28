@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   assignHorseToRace,
@@ -226,7 +226,111 @@ function PageTitle({ eyebrow, title, description, action }) {
 }
 
 function Notice({ message, error }) {
-  return message ? <p className={error ? "admin-notice admin-notice--error" : "admin-notice"}>{message}</p> : null;
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!message) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const timer = setTimeout(() => setVisible(false), 8000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  if (!message || !visible) return null;
+  return (
+    <div className={`hr-toast ${error ? "hr-toast--error" : "hr-toast--success"}`} role="status">
+      <span className="hr-toast__icon">{error ? "⚠" : "✓"}</span>
+      <span className="hr-toast__message">{message}</span>
+      <button
+        type="button"
+        className="hr-toast__close"
+        aria-label="Đóng thông báo"
+        onClick={() => setVisible(false)}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function ConfirmModal({ state, onConfirm, onCancel }) {
+  const [inputValue, setInputValue] = useState("");
+  // Rules-of-Hooks requires this above the `!state` early return — reset the field whenever a new
+  // prompt (a fresh `state` object from confirm()/promptText()) opens, not just on first mount.
+  useEffect(() => {
+    if (state?.needsInput) setInputValue(state.defaultValue ?? "");
+  }, [state]);
+
+  if (!state) return null;
+  const { message, needsInput, danger, optional } = state;
+  return (
+    <div className="hr-modal-overlay" role="presentation" onClick={onCancel}>
+      <div
+        className="hr-modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="hr-modal__message">{message}</p>
+        {needsInput && (
+          <input
+            className="hr-modal__input"
+            autoFocus
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Nhập lý do..."
+          />
+        )}
+        <div className="hr-modal__actions">
+          <button type="button" className="hr-btn hr-btn--ghost" onClick={onCancel}>
+            Huỷ
+          </button>
+          <button
+            type="button"
+            className={danger ? "hr-btn hr-btn--danger" : "hr-btn hr-btn--primary"}
+            onClick={() => onConfirm(needsInput ? inputValue : true)}
+            disabled={needsInput && !optional && !inputValue.trim()}
+          >
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirmModal() {
+  const [state, setState] = useState(null);
+  const resolverRef = useRef(null);
+
+  const confirm = useCallback((message, opts = {}) => {
+    return new Promise((resolve) => {
+      resolverRef.current = resolve;
+      setState({ message, needsInput: false, danger: opts.danger ?? false });
+    });
+  }, []);
+
+  const promptText = useCallback((message, defaultValue = "", opts = {}) => {
+    return new Promise((resolve) => {
+      resolverRef.current = resolve;
+      setState({ message, needsInput: true, defaultValue, danger: false, optional: opts.optional ?? false });
+    });
+  }, []);
+
+  const handleConfirm = useCallback((value) => {
+    resolverRef.current?.(value);
+    setState(null);
+  }, []);
+
+  const handleCancel = useCallback(() => {
+    resolverRef.current?.(state?.needsInput ? null : false);
+    setState(null);
+  }, [state]);
+
+  const modal = <ConfirmModal state={state} onConfirm={handleConfirm} onCancel={handleCancel} />;
+
+  return { confirm, promptText, modal };
 }
 
 function Dashboard() {
@@ -490,6 +594,7 @@ function UserDetail() {
   const [horsesError, setHorsesError] = useState("");
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
+  const { promptText, modal } = useConfirmModal();
 
   useEffect(() => {
     let cancelled = false;
@@ -540,7 +645,7 @@ function UserDetail() {
   const changeHorseStatus = async (horse, status) => {
     let note = null;
     if (status === "Rejected") {
-      note = window.prompt("Nhập lý do từ chối:");
+      note = await promptText("Nhập lý do từ chối:");
       if (!note?.trim()) return;
     }
 
@@ -616,6 +721,7 @@ function UserDetail() {
           })}
         </section>
       </>}
+      {modal}
     </>
   );
 }
@@ -834,6 +940,7 @@ function ScheduleManagement({ type }) {
   const [busyHorseIdsAll, setBusyHorseIdsAll] = useState(new Set());
   const [showRaceForm, setShowRaceForm] = useState(false);
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
+  const { confirm, promptText, modal } = useConfirmModal();
 
   const refreshBusyHorses = async () => {
     try {
@@ -964,14 +1071,46 @@ function ScheduleManagement({ type }) {
 
   // Q1: server is the sole source of truth for readiness — this only sends the current Round's
   // id, never Horse IDs, rankings, or target assignments.
-  const generateNextRoundForRound = async (roundId) => {
+  const generateNextRoundForRound = async (roundId, confirmShortfall = false) => {
     try {
-      const result = await generateNextRound(roundId);
+      const result = await generateNextRound(roundId, confirmShortfall);
       const data = result?.data ?? result?.Data ?? {};
       const generated = data.generatedEntries ?? data.GeneratedEntries;
       setMessage(generated != null ? `Đã tạo vòng tiếp theo: ${generated} ngựa đủ điều kiện.` : "Đã tạo vòng tiếp theo thành công.");
       setItems(await getTournamentRounds(selected));
-    } catch (err) { setMessage(err.message); }
+    } catch (err) {
+      const errData = err.data?.data ?? err.data?.Data ?? {};
+      const requiresTournamentLevelAction =
+        errData.requiresTournamentLevelAction ?? errData.RequiresTournamentLevelAction ?? false;
+      const requiresShortfallConfirmation =
+        errData.requiresShortfallConfirmation ?? errData.RequiresShortfallConfirmation ?? false;
+      const eligibleCount = errData.eligibleCount ?? errData.EligibleCount;
+      const requiredAdvanceCount = errData.requiredAdvanceCount ?? errData.RequiredAdvanceCount;
+
+      if (requiresTournamentLevelAction) {
+        // Nghiêm trọng (≤1 ngựa đủ điều kiện, hoặc round-robin không đủ ngựa cho 1 cuộc đua đích) —
+        // KHÔNG có lựa chọn "vẫn tiếp tục". Hướng dẫn rõ ràng sang xử lý cấp giải đấu, không mời gọi
+        // xác nhận nào cả.
+        setMessage(`${err.message} Vào mục quản lý giải đấu để xử lý (huỷ giải đấu) nếu cần.`);
+        return;
+      }
+
+      if (requiresShortfallConfirmation && !confirmShortfall) {
+        // Thiếu một phần, còn đủ để tổ chức — cho Admin xác nhận rõ ràng bằng đúng pattern
+        // confirm() (modal) đã dùng cho approve-result/end-race trong file này.
+        const proceed = await confirm(
+          `Chỉ có ${eligibleCount}/${requiredAdvanceCount} ngựa đủ điều kiện đi tiếp. Bạn có chắc chắn muốn tạo vòng tiếp theo với ${eligibleCount} ngựa không?`
+        );
+        if (proceed) {
+          await generateNextRoundForRound(roundId, true);
+        }
+        return;
+      }
+
+      // Lỗi khác không liên quan tới shortfall (VD race chưa Finished, chưa Official...) — giữ nguyên
+      // hành vi cũ.
+      setMessage(err.message);
+    }
   };
 
   const submit = async (event) => {
@@ -1042,8 +1181,8 @@ function ScheduleManagement({ type }) {
     const labels = { start: "bắt đầu", end: "kết thúc", cancel: "hủy", approve: "duyệt kết quả", reject: "từ chối kết quả" };
     
     if (action === "approve") {
-      if (!window.confirm("Duyệt kết quả này thành chính thức. Dự đoán sẽ được thanh toán ngay sau khi duyệt.")) return;
-      
+      if (!(await confirm("Duyệt kết quả này thành chính thức. Dự đoán sẽ được thanh toán ngay sau khi duyệt."))) return;
+
       try {
         await approveRaceResult(raceId);
         setMessage("Kết quả đã chính thức. Dự đoán đã được thanh toán.");
@@ -1054,8 +1193,8 @@ function ScheduleManagement({ type }) {
     }
     
     if (action === "reject") {
-      const reason = window.prompt("Lý do từ chối kết quả:");
-      if (!reason) return;
+      const reason = await promptText("Lý do từ chối kết quả:");
+      if (!reason || !reason.trim()) return;
       try {
         await rejectRaceResult(raceId, reason);
         setMessage("Kết quả tạm thời đã bị từ chối. Trọng tài cần nộp lại.");
@@ -1066,9 +1205,14 @@ function ScheduleManagement({ type }) {
     }
     
     if (action === "end") {
-      if (!window.confirm("Kết thúc cuộc đua?")) return;
-    } else if (!window.confirm(`${labels[action].charAt(0).toUpperCase() + labels[action].slice(1)} cuộc đua này?`)) return;
-    
+      if (!(await confirm("Kết thúc cuộc đua?"))) return;
+    } else if (
+      !(await confirm(
+        `${labels[action].charAt(0).toUpperCase() + labels[action].slice(1)} cuộc đua này?`,
+        action === "cancel" ? { danger: true } : undefined
+      ))
+    ) return;
+
     try {
       if (action === "start") await startRace(raceId);
       else if (action === "end") await endRace(raceId);
@@ -1200,7 +1344,16 @@ function ScheduleManagement({ type }) {
         if (type === "round") {
           const roundNumber = item.roundNumber ?? item.RoundNumber;
           const advanceCount = item.advanceCount ?? item.AdvanceCount;
+          const actualParticipants = item.actualParticipants ?? item.ActualParticipants ?? 0;
           const isFinal = isFinalRound(item, selectedTournament);
+
+          // Q1 already populates the NEXT round's RaceEntries when generate-next succeeds — look it
+          // up by RoundNumber+1 in the already-fetched `items` list (no extra API call) so this
+          // Round's button can reflect "already done" instead of looking clickable forever.
+          const nextRound = items.find((r) => (r.roundNumber ?? r.RoundNumber) === roundNumber + 1);
+          const nextRoundActualParticipants = nextRound ? (nextRound.actualParticipants ?? nextRound.ActualParticipants ?? 0) : 0;
+          const nextRoundAlreadyGenerated = nextRoundActualParticipants > 0;
+
           return (
             <article key={itemId} className="admin-simple-card">
               <span className="badge">#{roundNumber}</span>
@@ -1211,7 +1364,8 @@ function ScheduleManagement({ type }) {
               <div style={{ fontSize: 13, color: "var(--hr-text)", marginTop: 4, display: "grid", gap: 2 }}>
                 <span>Bắt đầu: {formatDateTime(item.scheduledStartDate ?? item.ScheduledStartDate)}</span>
                 <span>Kết thúc: {formatDateTime(item.scheduledEndDate ?? item.ScheduledEndDate)}</span>
-                <span>Số ngựa đi tiếp: {advanceCount ?? "Chưa thiết lập"}</span>
+                <span>Số ngựa tối đa đi tiếp (cấu hình): {advanceCount ?? "Chưa thiết lập"}</span>
+                <span>Số ngựa đã vào vòng này: {actualParticipants}</span>
               </div>
               {isDraftTournament && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
@@ -1220,7 +1374,9 @@ function ScheduleManagement({ type }) {
               )}
               {!isDraftTournament && !isFinal && (
                 <div className="admin-actions" style={{ marginTop: 8 }}>
-                  <button onClick={() => generateNextRoundForRound(itemId)}>Tạo vòng tiếp theo</button>
+                  <button onClick={() => generateNextRoundForRound(itemId)} disabled={nextRoundAlreadyGenerated}>
+                    {nextRoundAlreadyGenerated ? "✓ Đã tạo vòng tiếp theo" : "Tạo vòng tiếp theo"}
+                  </button>
                 </div>
               )}
             </article>
@@ -1444,6 +1600,7 @@ function ScheduleManagement({ type }) {
           )}
         </article>;
       })}</section>
+      {modal}
     </>
   );
 }
@@ -1452,6 +1609,7 @@ function RegistrationManagement() {
   const [entryItems, setEntryItems] = useState([]);
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
+  const { promptText, modal } = useConfirmModal();
 
   const load = () =>
     getPendingRaceEntries()
@@ -1478,7 +1636,7 @@ function RegistrationManagement() {
 
   const rejectEntry = async (entry) => {
     const id = entry.entryId ?? entry.EntryId;
-    const reason = window.prompt("Lý do từ chối (tùy chọn):");
+    const reason = await promptText("Lý do từ chối (tùy chọn):", "", { optional: true });
     if (reason === null) return;
     try {
       await rejectRaceEntry(id, reason || "Bị từ chối bởi admin");
@@ -1525,6 +1683,7 @@ function RegistrationManagement() {
             </tbody>
           </table>
       </div>
+      {modal}
     </>
   );
 }
