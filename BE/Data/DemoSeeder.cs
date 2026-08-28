@@ -1563,6 +1563,199 @@ public static class DemoSeeder
         logger.LogInformation("OWNER-DEMO-SEED: Cluster C (TP.Hồ Chí Minh) ready — Tournament {TournamentId}, Race {RaceId}, {Count} entries, Prize pool {PrizePool}.", tournament.Id, race.Id, fillerEntries.Count + 1, tournament.PrizePool);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // Q1-SCENARIO-DEMO: SEED_Q1_SCENARIOS=true — 4 self-contained tournaments, each parked one
+    // approve-result away from exercising exactly one branch of GenerateNextRoundEntriesAsync's
+    // eligible-vs-AdvanceCount decision (see RaceManagementService.GenerateNextRoundEntriesAsync /
+    // RaceResultRankingValidator). Entirely independent of SEED_OWNER_DEMO/SEED_HOANG_TOURNAMENTS —
+    // its own dedicated Owner/Horses/Jockeys, never touching those seeders' data.
+    //
+    // Deliberately stops at Round 1 Result = Provisional with no Round 2 RaceEntries — the whole
+    // point is to manually drive the REAL endpoints (approve-result, then generate-next) against
+    // this fixture, not to pre-seed the outcome.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    public static async Task SeedQ1ScenarioDemoAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<ApplicationDbContext>>();
+
+        // Re-run guard, same spirit as SeedAsync's admin-exists check: this fixture is meant to be
+        // driven through real endpoints and left mutated (approved/generated) by hand, so unlike
+        // SeedOwnerDemoAsync there is no "repair back to canonical" story here — once it exists,
+        // leave it alone rather than risk clobbering whatever state the manual testing has reached.
+        if (await db.Users.AnyAsync(u => u.Email == "q1test-owner@demo.local"))
+        {
+            logger.LogInformation("Q1-SCENARIO-DEMO: already seeded (q1test-owner@demo.local exists). Skipping.");
+            return;
+        }
+
+        var hasher = new PasswordHasher<User>();
+        var now = DateTime.UtcNow;
+
+        // ── Shared fixture: 1 Owner + 8 Horse + 8 Jockey + 1 Referee, reused across all 4
+        // tournaments below. "Official Jockey pairing" (see
+        // RaceEntryRepository.GetOfficialAssignmentForHorseInTournamentAsync) is resolved from ANY
+        // non-Rejected RaceEntry with JockeyId set in the same Tournament — so each tournament's own
+        // Round-1 RaceEntry (created per-scenario below) already satisfies it; no separate
+        // JockeyInvitation record is needed. ──
+        var ownerUser = AddUser(db, hasher, "q1test-owner@demo.local", "Owner@123", "Q1Test Owner", UserRole.HorseOwner, now);
+        await db.SaveChangesAsync();
+        var owner = new Owner { Id = Guid.NewGuid(), UserId = ownerUser.Id, OwnerCode = "OWN-Q1TEST", JoinDate = now, CreatedAt = now, UpdatedAt = now };
+        db.Owners.Add(owner);
+
+        var horses = new List<Horse>();
+        var jockeys = new List<Jockey>();
+        for (var i = 1; i <= 8; i++)
+        {
+            var horse = new Horse { Id = Guid.NewGuid(), Name = $"Q1Test-Horse-{i}", OwnerId = owner.Id, ApprovalStatus = ApprovalStatus.Approved };
+            db.Horses.Add(horse);
+            horses.Add(horse);
+
+            var jockeyUser = AddUser(db, hasher, $"q1test-jockey-{i}@demo.local", "Jockey@123", $"Q1Test Jockey {i}", UserRole.Jockey, now);
+            var jockey = new Jockey { Id = Guid.NewGuid(), UserId = jockeyUser.Id, ApprovalStatus = ApprovalStatus.Approved };
+            db.Jockeys.Add(jockey);
+            jockeys.Add(jockey);
+        }
+
+        var refereeUser = AddUser(db, hasher, "q1test-referee@demo.local", "Referee@123", "Q1Test Referee", UserRole.Referee, now);
+        var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUser.Id, LicenseNumber = "LIC-Q1TEST", IsActive = true, LicenseExpiryDate = now.AddYears(1), CreatedAt = now };
+        db.Referees.Add(referee);
+        await db.SaveChangesAsync();
+
+        // ranking[i] = (Position, Status) for horses[i]/jockeys[i] — index-aligned, horses[0..7].
+        var scenarioA = new (int Position, string Status)[]
+        {
+            (1, "Completed"), (2, "Completed"), (3, "Completed"), (4, "Completed"), (5, "Completed"),
+            (6, "DSQ"), (7, "DSQ"), (8, "DSQ"), // DSQ positions continuous right after 1..5 — must
+                                                  // not be mistaken for extending the Completed range.
+        };
+        var scenarioBC = new (int Position, string Status)[]
+        {
+            (1, "Completed"), (2, "Completed"), (3, "Completed"), (4, "Completed"),
+            (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), // shared sentinel — non-continuous DSQ
+        };
+        var scenarioD = new (int Position, string Status)[]
+        {
+            (1, "Completed"),
+            (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"),
+        };
+        var scenarioE = new (int Position, string Status)[]
+        {
+            (1, "Completed"), (2, "Completed"),
+            (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"), (99, "DSQ"),
+        };
+
+        await SeedQ1ScenarioTournamentAsync(db, logger, now, owner, horses, jockeys, referee,
+            "Q1Test-A", advanceCount: 5, qualificationSlots: 5, round2RaceCount: 1, scenarioA);
+        await SeedQ1ScenarioTournamentAsync(db, logger, now, owner, horses, jockeys, referee,
+            "Q1Test-BC", advanceCount: 5, qualificationSlots: 5, round2RaceCount: 1, scenarioBC);
+        await SeedQ1ScenarioTournamentAsync(db, logger, now, owner, horses, jockeys, referee,
+            "Q1Test-D", advanceCount: 5, qualificationSlots: 5, round2RaceCount: 1, scenarioD);
+        await SeedQ1ScenarioTournamentAsync(db, logger, now, owner, horses, jockeys, referee,
+            "Q1Test-E", advanceCount: 2, qualificationSlots: 2, round2RaceCount: 2, scenarioE);
+
+        logger.LogInformation("Q1-SCENARIO-DEMO: seed complete (Q1Test-A / Q1Test-BC / Q1Test-D / Q1Test-E).");
+    }
+
+    private static async Task SeedQ1ScenarioTournamentAsync(
+        ApplicationDbContext db, ILogger logger, DateTime now,
+        Owner owner, List<Horse> horses, List<Jockey> jockeys, Referee referee,
+        string tournamentName, int advanceCount, int qualificationSlots, int round2RaceCount,
+        (int Position, string Status)[] ranking)
+    {
+        var start = now.AddDays(10);
+
+        var tournament = new Tournament
+        {
+            Id = Guid.NewGuid(), Name = tournamentName, StartDate = start, EndDate = start.AddDays(10),
+            Status = TournamentStatus.Ongoing, IsActive = true, MaxRounds = 2, PrizePool = 0m, CreatedAt = now
+        };
+        db.Tournaments.Add(tournament);
+
+        var round1 = new Round
+        {
+            Id = Guid.NewGuid(), Name = "Round 1", TournamentId = tournament.Id, RoundNumber = 1,
+            AdvanceCount = advanceCount, ScheduledStartDate = start, ScheduledEndDate = start.AddDays(1)
+        };
+        db.Rounds.Add(round1);
+
+        var round2 = new Round
+        {
+            Id = Guid.NewGuid(), Name = "Final", TournamentId = tournament.Id, RoundNumber = 2,
+            AdvanceCount = 0, ScheduledStartDate = start.AddDays(5), ScheduledEndDate = start.AddDays(6)
+        };
+        db.Rounds.Add(round2);
+
+        var race1 = new Race
+        {
+            Id = Guid.NewGuid(), Name = $"{tournamentName} - Vòng 1", TournamentId = tournament.Id, RoundId = round1.Id,
+            ScheduledAt = start, ActualStartTime = start, ActualEndTime = start.AddMinutes(3),
+            Status = RaceStatus.Finished, MaxParticipants = 8, QualificationSlots = qualificationSlots,
+            Distance = 1200, CreatedAt = now
+        };
+        db.Races.Add(race1);
+
+        var round2Races = new List<Race>();
+        for (var i = 0; i < round2RaceCount; i++)
+        {
+            var round2Race = new Race
+            {
+                Id = Guid.NewGuid(), Name = $"{tournamentName} - Chung kết {i + 1}", TournamentId = tournament.Id, RoundId = round2.Id,
+                ScheduledAt = start.AddDays(5).AddHours(i * 3), Status = RaceStatus.Scheduled, MaxParticipants = 8,
+                Distance = 1200, CreatedAt = now
+            };
+            db.Races.Add(round2Race);
+            round2Races.Add(round2Race);
+        }
+        await db.SaveChangesAsync();
+
+        for (var i = 0; i < horses.Count; i++)
+        {
+            db.RaceEntries.Add(new RaceEntry
+            {
+                Id = Guid.NewGuid(), RaceId = race1.Id, HorseId = horses[i].Id, JockeyId = jockeys[i].Id,
+                Status = RegistrationStatus.Approved, OwnerConfirmed = true, JockeyConfirmed = true, GateNumber = i + 1
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var rankingItems = horses.Select((h, i) => new RankingItem
+        {
+            HorseId = h.Id,
+            Position = ranking[i].Position,
+            HorseName = h.Name,
+            TimeTaken = 70.0 + ranking[i].Position * 0.6, // deterministic demo time, not real data
+            Status = ranking[i].Status
+        }).ToList();
+        var rankingsJson = JsonSerializer.Serialize(rankingItems);
+
+        // Winner = the Completed item at Position 1; if nobody Completed (scenario has none), fall
+        // back to the first participant — mirrors LiveResultService.UpdateRaceResultAsync's own
+        // fallback when every entry is DNF/DSQ.
+        var winningHorseId = rankingItems.FirstOrDefault(r => r.Status == "Completed" && r.Position == 1)?.HorseId
+            ?? rankingItems[0].HorseId;
+
+        var raceResult = new RaceResult
+        {
+            Id = Guid.NewGuid(), RaceId = race1.Id, WinningHorseId = winningHorseId, TotalParticipants = horses.Count,
+            RecordedAt = now, Status = RaceResultStatus.Provisional, RankingsJson = rankingsJson
+        };
+        db.RaceResults.Add(raceResult);
+
+        db.RaceReports.Add(new RaceReport
+        {
+            Id = Guid.NewGuid(), RaceId = race1.Id, RefereeId = referee.Id, CompletedAt = now,
+            Details = "Q1-SCENARIO-DEMO: minimal seeded report, satisfies the mandatory-report approve-result gate.",
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Q1-SCENARIO-DEMO [{Name}]: TournamentId={TournamentId} | Round1Id={Round1Id} Race1Id={Race1Id} (approve-result here first) | Round2Id={Round2Id} Round2RaceIds={Round2RaceIds} (generate-next targets Round1Id, lands in these)",
+            tournamentName, tournament.Id, round1.Id, race1.Id, round2.Id, string.Join(", ", round2Races.Select(r => r.Id)));
+    }
+
     private static User AddUser(ApplicationDbContext db, PasswordHasher<User> hasher, string email, string password, string fullName, UserRole role, DateTime now)
     {
         var user = new User

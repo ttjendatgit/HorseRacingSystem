@@ -308,4 +308,16 @@ if (seedOwnerDemo)
     await DemoSeeder.SeedOwnerDemoAsync(app.Services);
 }
 
+// Q1-SCENARIO-DEMO: dedicated explicit gate, independent of SEED_OWNER_DEMO/Features:SeedDemoData —
+// its own dedicated Owner/Horses/Jockeys, never touching those seeders' data.
+var seedQ1Scenarios = string.Equals(
+    Environment.GetEnvironmentVariable("SEED_Q1_SCENARIOS"),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+
+if (seedQ1Scenarios)
+{
+    await DemoSeeder.SeedQ1ScenarioDemoAsync(app.Services);
+}
+
 app.Run();
