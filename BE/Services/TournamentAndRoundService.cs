@@ -802,6 +802,8 @@ public class TournamentService : ITournamentService
                 // A tournament shouldn't go live if not a single referee has actually agreed to
                 // officiate — mirrors the same gate StartRaceAsync already enforces per-race
                 // (RefereeAssignmentStatus.Confirmed), just checked once at the tournament level.
+                // Flipping Status to Ongoing is also what locks those confirmed referees out of
+                // GetActiveRefereesAsync / AssignRefereeToRaceAsync — do not mutate Referee.IsActive.
                 var hasConfirmedReferee = await _db.RefereeAssignments
                 .Include(ra => ra.Race)
                 .AnyAsync(ra => ra.Race!.TournamentId == id && ra.Status == RefereeAssignmentStatus.Confirmed);
