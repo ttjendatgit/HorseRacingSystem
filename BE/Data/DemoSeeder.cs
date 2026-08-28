@@ -512,11 +512,7 @@ public static class DemoSeeder
                     if (jockeys.Count > 0)
                     {
                         entry.JockeyId = jockeys[idx % jockeys.Count].Id;
-                    }
-
-                    if (entry.Odds <= 0)
-                    {
-                        entry.Odds = refreshOdds[idx % refreshOdds.Length];
+                        entry.Jockey = jockeys[idx % jockeys.Count];
                     }
 
                     var hasHealthCheck = await db.HorseHealthChecks
@@ -562,6 +558,7 @@ public static class DemoSeeder
 
                     idx++;
                 }
+                HorseRacing.Services.OddsCalculator.Recalculate(race.Entries.ToList());
             }
             tOffset += 2;
         }
