@@ -944,7 +944,7 @@ public class RaceManagementService : IRaceManagementService
     /// Readiness, qualifier selection, round-robin distribution, capacity, and Jockey carry-forward
     /// all happen server-side; the caller supplies only the current Round's identity.
     /// </summary>
-    public async Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId)
+    public async Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false)
     {
         try
         {
@@ -1030,18 +1030,68 @@ public class RaceManagementService : IRaceManagementService
                         $"Cuộc đua \"{race.Name}\": {ex.Message}");
                 }
 
-                if (ranking.Count < slots)
-                    return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
-                        $"Cuộc đua \"{race.Name}\" không có đủ ngựa trong bảng xếp hạng chính thức để chọn {slots} suất đi tiếp.");
-
-                qualifiers.AddRange(ranking.Take(slots).Select(r => r.HorseId));
+                var completedInRace = ranking.Where(r => r.Status == "Completed").OrderBy(r => r.Position).ToList();
+                qualifiers.AddRange(completedInRace.Take(slots).Select(r => r.HorseId));
             }
 
-            // Defensive runtime invariant — Publish readiness already validates slot sums, but Q1
-            // re-checks the actual selected count against the Round's own AdvanceCount.
-            if (qualifiers.Count != expectedAdvance)
+            // Số ngựa đủ điều kiện thực tế có thể KHÔNG khớp AdvanceCount của vòng (VD một số ngựa
+            // DNF/DSQ khiến 1 race không đủ Completed để lấp đầy slot của nó) — quyết định thật sự
+            // diễn ra ở cấp vòng đấu ngay dưới đây, không fail ngay theo từng race.
+            var eligible = qualifiers.Count;
+
+            if (eligible > expectedAdvance)
+            {
+                // Phòng thủ — không nên xảy ra nếu slot mỗi race đã được validate đúng lúc Publish. Nếu
+                // xảy ra là có bug ở nơi khác, PHẢI fail loud, không được âm thầm cắt bớt qualifiers.
                 return ServiceResult<GenerateNextRoundResultDto>.Fail(409,
-                    $"Số ngựa đủ điều kiện được chọn ({qualifiers.Count}) không khớp với AdvanceCount của vòng ({expectedAdvance}).");
+                    $"Số ngựa đủ điều kiện được chọn ({eligible}) VƯỢT QUÁ AdvanceCount của vòng ({expectedAdvance}) — có sai lệch dữ liệu cần kiểm tra lại cấu hình suất đi tiếp của từng cuộc đua.");
+            }
+
+            if (eligible < expectedAdvance)
+            {
+                if (eligible <= 1)
+                {
+                    // Không đủ để tổ chức một cuộc đua có nghĩa (cần tối thiểu 2 đối thủ) — đây không
+                    // còn là quyết định ở cấp vòng đấu nữa, phải xử lý ở cấp giải đấu (huỷ giải, dùng
+                    // transition Cancelled có sẵn). Luôn chặn, KHÔNG cho confirmShortfall bypass qua
+                    // nhánh này.
+                    return new ServiceResult<GenerateNextRoundResultDto>(409, new ApiResult<GenerateNextRoundResultDto>
+                    {
+                        Success = false,
+                        Message = $"Chỉ còn {eligible} ngựa đủ điều kiện đi tiếp — không đủ để tổ chức vòng tiếp theo. Cần xử lý ở cấp giải đấu (huỷ giải đấu), không thể tiếp tục theo vòng đấu này.",
+                        Data = new GenerateNextRoundResultDto
+                        {
+                            SourceRoundNumber = currentRound.RoundNumber,
+                            TargetRoundNumber = nextRound.RoundNumber,
+                            RequiresTournamentLevelAction = true,
+                            EligibleCount = eligible,
+                            RequiredAdvanceCount = expectedAdvance
+                        }
+                    });
+                }
+
+                if (!confirmShortfall)
+                {
+                    // Thiếu một phần, còn đủ để tổ chức 1 cuộc đua (≥2) — cần Admin xác nhận rõ ràng
+                    // trước khi tiếp tục với số ít hơn kế hoạch. FE dùng EligibleCount/RequiredAdvanceCount
+                    // để dựng popup, rồi gọi lại đúng API này với confirmShortfall=true nếu Admin đồng ý.
+                    return new ServiceResult<GenerateNextRoundResultDto>(409, new ApiResult<GenerateNextRoundResultDto>
+                    {
+                        Success = false,
+                        Message = $"Chỉ có {eligible}/{expectedAdvance} ngựa đủ điều kiện đi tiếp. Cần xác nhận để tạo vòng tiếp theo với {eligible} ngựa.",
+                        Data = new GenerateNextRoundResultDto
+                        {
+                            SourceRoundNumber = currentRound.RoundNumber,
+                            TargetRoundNumber = nextRound.RoundNumber,
+                            RequiresShortfallConfirmation = true,
+                            EligibleCount = eligible,
+                            RequiredAdvanceCount = expectedAdvance
+                        }
+                    });
+                }
+                // confirmShortfall == true và eligible >= 2 → cho đi tiếp, KHÔNG return, chạy tiếp
+                // xuống dưới với đúng `eligible` ngựa trong `qualifiers` (không nhồi thêm gì).
+            }
 
             // ── Idempotency: reject cleanly if Round N+1 already has ANY RaceEntries, including a
             // partial/inconsistent prior attempt — never merge/repair, always reject. ──
@@ -1071,6 +1121,30 @@ public class RaceManagementService : IRaceManagementService
             {
                 var targetRace = targetRaces[i % targetRaces.Count];
                 assignments[targetRace.Id].Add(qualifiers[i]);
+            }
+
+            // ── Round-robin can spread even a sufficient total across too many target Races, leaving
+            // one with 0 or 1 horse (e.g. 2 qualifiers into 3 target Races) — that target Race could
+            // never hold a meaningful race (needs >= 2 competitors), which round-robin distribution
+            // alone cannot fix. This is a tournament-level structural problem, not something a Round-
+            // level confirmShortfall can bypass. ──
+            var underfilledRaces = targetRaces.Where(r => assignments[r.Id].Count < 2).ToList();
+            if (underfilledRaces.Count > 0)
+            {
+                var names = string.Join(", ", underfilledRaces.Select(r => $"\"{r.Name}\" ({assignments[r.Id].Count} ngựa)"));
+                return new ServiceResult<GenerateNextRoundResultDto>(409, new ApiResult<GenerateNextRoundResultDto>
+                {
+                    Success = false,
+                    Message = $"Không thể phân bổ đủ ngựa cho mọi cuộc đua ở vòng tiếp theo — {names} sẽ không đủ 2 ngựa để tổ chức. Cần xử lý ở cấp giải đấu.",
+                    Data = new GenerateNextRoundResultDto
+                    {
+                        SourceRoundNumber = currentRound.RoundNumber,
+                        TargetRoundNumber = nextRound.RoundNumber,
+                        RequiresTournamentLevelAction = true,
+                        EligibleCount = eligible,
+                        RequiredAdvanceCount = expectedAdvance
+                    }
+                });
             }
 
             // ── Capacity: reject the ENTIRE generation if any target Race can't hold its assigned

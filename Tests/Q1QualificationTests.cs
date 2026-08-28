@@ -516,13 +516,20 @@ public class Q1QualificationTests
 
     // ── G: selected count != AdvanceCount ─────────────────────────────────
 
+    // Renamed/updated from the old "Q1's own defensive count check must catch the mismatch — always
+    // Rejected" framing: a shortfall no longer always hard-fails. With eligible(2) >= 2 and
+    // confirmShortfall left at its default (false), this is now specifically the "needs Admin
+    // confirmation before continuing with fewer than planned" branch — still a 409, but the response
+    // is no longer a bare rejection: it carries RequiresShortfallConfirmation/EligibleCount/
+    // RequiredAdvanceCount so the caller can decide whether to retry with confirmShortfall=true. See
+    // GenerateNextRound_Shortfall_ConfirmTrue_AdvancesWithEligibleCount below for that confirmed path.
     [Fact]
-    public async Task GenerateNextRound_QualifierCountMismatchAdvanceCount_Rejected()
+    public async Task GenerateNextRound_QualifierCountMismatchAdvanceCount_WithoutConfirm_RequiresShortfallConfirmation()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         // Round1.AdvanceCount=3 but Race A only awards 2 slots — CreateRaceAsync allows this
-        // (only rejects a SUM exceeding AdvanceCount, not falling short of it), so Q1's own
-        // defensive count check must catch the mismatch.
+        // (only rejects a SUM exceeding AdvanceCount, not falling short of it), so eligible(2) ends
+        // up short of expectedAdvance(3).
         var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 3);
         var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
         var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
@@ -534,7 +541,151 @@ public class Q1QualificationTests
 
         var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
         Assert.False(generate.Result.Success);
+        Assert.Equal(409, generate.StatusCode);
+        Assert.True(generate.Result.Data!.RequiresShortfallConfirmation);
+        Assert.False(generate.Result.Data.RequiresTournamentLevelAction);
+        Assert.Equal(2, generate.Result.Data.EligibleCount);
+        Assert.Equal(3, generate.Result.Data.RequiredAdvanceCount);
         Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+    }
+
+    // eligible == AdvanceCount (the fully-matched, "auto-advance" branch) is already covered by
+    // GenerateNextRound_TopThreeOfFour_QualifyExcludingFourth and
+    // GenerateNextRound_MultipleSourceRaces_DeterministicRoundRobin above — no separate test needed.
+
+    [Fact]
+    public async Task GenerateNextRound_EligibleExceedsAdvanceCount_DefensivelyRejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        // Race A's slots are validated against Round.AdvanceCount at Publish/CreateRace time, so this
+        // scenario (eligible > expectedAdvance) should never arise from the normal flow — simulate it
+        // via a direct data corruption (QualificationSlots bumped after the race is already Official)
+        // to prove the defensive guard fires instead of silently truncating qualifiers.
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+        var (h3, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h3");
+        await FinishRaceOfficialAsync(f, raceA, setup.RefereeId, new List<Guid> { h1, h2, h3 });
+
+        var raceAEntity = await f.Db.Races.SingleAsync(r => r.Id == raceA);
+        raceAEntity.QualificationSlots = 3; // corrupted post-Official — now exceeds Round.AdvanceCount
+        await f.Db.SaveChangesAsync();
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.False(generate.Result.Success);
+        Assert.Equal(409, generate.StatusCode);
+        Assert.Contains("VƯỢT QUÁ", generate.Result.Message);
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+    }
+
+    [Fact]
+    public async Task GenerateNextRound_Shortfall_ConfirmTrue_AdvancesWithExactlyEligibleCount_NoPadding()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 3);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+        var (h3, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h3");
+        await FinishRaceOfficialAsync(f, raceA, setup.RefereeId, new List<Guid> { h1, h2, h3 });
+
+        // Without confirmation: still blocked (mirrors the WithoutConfirm test above).
+        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: false);
+        Assert.False(withoutConfirm.Result.Success);
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+
+        // With confirmation: proceeds with exactly the 2 eligible horses (h1, h2 — slots=2 caps Race
+        // A's contribution regardless of confirmShortfall) — never padded up toward AdvanceCount=3.
+        var confirmed = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: true);
+        Assert.True(confirmed.Result.Success, confirmed.Result.Message);
+        Assert.Equal(2, confirmed.Result.Data!.GeneratedEntries);
+
+        var finalHorseIds = (await f.Db.RaceEntries.AsNoTracking().Where(e => e.RaceId == raceFinal).Select(e => e.HorseId).ToListAsync()).ToHashSet();
+        Assert.Equal(new HashSet<Guid> { h1, h2 }, finalHorseIds);
+        Assert.DoesNotContain(h3, finalHorseIds);
+    }
+
+    [Fact]
+    public async Task GenerateNextRound_EligibleAtMostOne_AlwaysRejected_RegardlessOfConfirmShortfall()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+
+        // h1 finishes Completed, h2 is a DNF — only 1 horse is actually eligible even though the
+        // Race awarded 2 slots and 2 horses ran.
+        await SetTournamentOngoingAsync(f, raceA);
+        await f.RaceManagement.OpenRegistrationAsync(raceA);
+        await f.RaceManagement.CloseRegistrationAsync(raceA);
+        await f.RaceManagement.StartRaceAsync(raceA);
+        await f.RaceManagement.EndRaceAsync(raceA);
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = h1, Position = 1, Status = "Completed" },
+                new() { HorseId = h2, Position = 99, Status = "DNF" },
+            }
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "One DNF.", CreatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+
+        var withoutConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: false);
+        Assert.False(withoutConfirm.Result.Success);
+        Assert.Equal(409, withoutConfirm.StatusCode);
+        Assert.True(withoutConfirm.Result.Data!.RequiresTournamentLevelAction);
+        Assert.False(withoutConfirm.Result.Data.RequiresShortfallConfirmation);
+        Assert.Equal(1, withoutConfirm.Result.Data.EligibleCount);
+        Assert.Equal(2, withoutConfirm.Result.Data.RequiredAdvanceCount);
+
+        // confirmShortfall=true must NOT bypass this — 1 (or 0) horse can never make a race.
+        var withConfirm = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id, confirmShortfall: true);
+        Assert.False(withConfirm.Result.Success);
+        Assert.Equal(409, withConfirm.StatusCode);
+        Assert.True(withConfirm.Result.Data!.RequiresTournamentLevelAction);
+
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+    }
+
+    [Fact]
+    public async Task GenerateNextRound_RoundRobinSpreadsEnoughTotalTooThin_TargetRaceWouldHaveOnlyOneHorse_Rejected()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        // 2 total qualifiers (enough to satisfy AdvanceCount exactly) but 3 target Races in the next
+        // Round — deterministic round-robin gives Race C=1, Race D=1, Race E=0, none of which can
+        // hold a meaningful race even though the round-level total looked fine.
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceC = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Race C");
+        var raceD = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5).AddHours(3), maxParticipants: 10, qualificationSlots: 0, name: "Race D");
+        var raceE = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5).AddHours(6), maxParticipants: 10, qualificationSlots: 0, name: "Race E");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+        await FinishRaceOfficialAsync(f, raceA, setup.RefereeId, new List<Guid> { h1, h2 });
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.False(generate.Result.Success);
+        Assert.Equal(409, generate.StatusCode);
+        Assert.True(generate.Result.Data!.RequiresTournamentLevelAction);
+        Assert.Equal(2, generate.Result.Data.EligibleCount);
+        Assert.Equal(2, generate.Result.Data.RequiredAdvanceCount);
+
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceC));
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceD));
+        Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceE));
     }
 
     // ── H: qualified Horse missing official Jockey ────────────────────────
@@ -589,8 +740,14 @@ public class Q1QualificationTests
     public async Task GenerateNextRound_RetryAfterSuccess_Returns409_NoDuplicateEntries()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
-        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 1);
-        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 1, name: "Race A");
+        // AdvanceCount=2/slots=2 (not 1/1 as originally written) — the new "every target Race must
+        // receive >= 2 horses to be a meaningful race" rule (see the underfilled-race check in
+        // GenerateNextRoundEntriesAsync) now rejects a single qualifier landing alone in the sole
+        // Final race, which the old 1/1 setup here would have hit. Bumped to 2/2 so this test can
+        // keep exercising what it's actually about — retry-after-success idempotency — independent
+        // of that unrelated policy.
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
         var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
         await AssignRefereeAsync(f, raceA, setup.RefereeId);
         var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
@@ -599,12 +756,12 @@ public class Q1QualificationTests
 
         var first = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
         Assert.True(first.Result.Success, first.Result.Message);
-        Assert.Equal(1, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+        Assert.Equal(2, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
 
         var second = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
         Assert.False(second.Result.Success);
         Assert.Equal(409, second.StatusCode);
-        Assert.Equal(1, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal)); // still exactly one, no duplicate
+        Assert.Equal(2, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal)); // still exactly two, no duplicate
     }
 
     // ── L: partial pre-existing next-round entries ────────────────────────

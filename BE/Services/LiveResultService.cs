@@ -253,6 +253,8 @@ public class LiveResultService : ILiveResultService
         }
     }
 
+    private static readonly HashSet<string> AllowedRankingStatuses = new() { "Completed", "DNF", "DSQ" };
+
     /// <summary>
     /// Validation cho luồng mới:
     /// - Cho phép đồng hạng (trùng Position).
@@ -286,6 +288,10 @@ public class LiveResultService : ILiveResultService
             if (!seenHorseIds.Add(item.HorseId))
             {
                 return "Một con ngựa không được xuất hiện nhiều hơn một lần trong kết quả.";
+            }
+            if (!AllowedRankingStatuses.Contains(item.Status))
+            {
+                return $"Trạng thái \"{item.Status}\" không hợp lệ. Chỉ chấp nhận Completed, DNF, hoặc DSQ.";
             }
         }
 

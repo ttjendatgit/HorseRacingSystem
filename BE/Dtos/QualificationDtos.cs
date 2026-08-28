@@ -13,6 +13,13 @@ public class GenerateNextRoundResultDto
     public int TargetRoundNumber { get; set; }
     public int GeneratedEntries { get; set; }
     public List<GenerateNextRoundRaceAssignmentDto> Assignments { get; set; } = new();
+
+    // Chỉ có giá trị khi phản hồi là lỗi (409) mô tả tình trạng thiếu hụt; khi tạo vòng thành công
+    // (200) các field này giữ giá trị mặc định (false/null).
+    public bool RequiresShortfallConfirmation { get; set; } = false;
+    public bool RequiresTournamentLevelAction { get; set; } = false;
+    public int? EligibleCount { get; set; }
+    public int? RequiredAdvanceCount { get; set; }
 }
 
 public class GenerateNextRoundRaceAssignmentDto

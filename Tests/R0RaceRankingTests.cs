@@ -218,6 +218,27 @@ public class R0RaceRankingTests
     }
 
     [Fact]
+    public async Task Submit_InvalidStatus_Returns400()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var (raceId, winner, loser) = await Seed2HorseFinishedRaceAsync(f);
+
+        // Validated at submission time (LiveResultService), not deferred to approval — a referee
+        // typo like lowercase "completed" or a made-up string must be caught here, before it can
+        // silently corrupt downstream qualifier-counting logic.
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceId, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = winner, Position = 1, Status = "completed" }, // wrong casing
+                new() { HorseId = loser, Position = 2, Status = "Completed" },
+            }
+        });
+        Assert.False(submit.Result.Success);
+        Assert.Equal(400, submit.StatusCode);
+    }
+
+    [Fact]
     public async Task Submit_HorseNotInRace_Returns400()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();

@@ -58,7 +58,7 @@ public interface IRaceManagementService
     Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId);
 
     // Q1: Qualification — generate Round N+1 RaceEntries from Round N's Official rankings
-    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId);
+    Task<ServiceResult<GenerateNextRoundResultDto>> GenerateNextRoundEntriesAsync(Guid roundId, bool confirmShortfall = false);
 
     // GATE-V1: Referee-only starting gate assignment. Caller (RefereesController) is responsible
     // for identity + Confirmed-assignment-to-this-Race authorization before calling this — this
@@ -187,4 +187,7 @@ public class RaceResultRankingItemRequest
 {
     public Guid HorseId { get; set; }
     public int Position { get; set; }
+    public string Status { get; set; } = "Completed"; // Chỉ nhận "Completed"/"DNF"/"DSQ".
+    // Default "Completed" đảm bảo RankingsJson cũ (trước khi có field này) parse ra đúng y hệt
+    // hành vi cũ khi deserialize (System.Text.Json giữ giá trị default nếu JSON không có field).
 }

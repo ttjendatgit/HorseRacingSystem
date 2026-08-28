@@ -265,9 +265,9 @@ public class TournamentsController : ControllerBase
     /// <param name="roundId">Mã GUID của vòng thi đấu nguồn.</param>
     /// <returns>Kết quả danh sách ngựa tham gia lượt đua ở vòng tiếp theo.</returns>
     [HttpPost("rounds/{roundId:guid}/generate-next")]
-    public async Task<ActionResult> GenerateNextRoundEntries(Guid roundId)
+    public async Task<ActionResult> GenerateNextRoundEntries(Guid roundId, [FromQuery] bool confirmShortfall = false)
     {
-        var result = await _raceManagementService.GenerateNextRoundEntriesAsync(roundId);
+        var result = await _raceManagementService.GenerateNextRoundEntriesAsync(roundId, confirmShortfall);
         return StatusCode(result.StatusCode, result.Result);
     }
 }
