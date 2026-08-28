@@ -75,6 +75,12 @@ function SpectatorPredictionFormPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [walletBalance, setWalletBalance] = useState(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     getBalance()
@@ -233,7 +239,7 @@ function SpectatorPredictionFormPage() {
           canBet: canBetOnRace(status, scheduledAt),
         };
       });
-  }, [races, selectedTournament]);
+  }, [races, selectedTournament, now]);
 
   useEffect(() => {
     if (raceOptions.length === 0) {

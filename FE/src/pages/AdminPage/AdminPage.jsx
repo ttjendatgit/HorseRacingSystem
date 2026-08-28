@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   assignHorseToRace,
@@ -543,16 +543,38 @@ function UserDetail() {
     } catch (err) { setMessage(err.message); }
   };
 
+  const [rejectingHorse, setRejectingHorse] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
+
   const changeHorseStatus = async (horse, status) => {
-    let note = null;
     if (status === "Rejected") {
-      note = window.prompt("Nhập lý do từ chối:");
-      if (!note?.trim()) return;
+      setRejectingHorse(horse);
+      setRejectNote("");
+      return;
     }
 
     try {
-      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status, note });
+      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status, note: null });
       setMessage(`${horse.name ?? horse.Name} đã đổi thành ${status}.`);
+      const horseData = await getOwnerHorses(id);
+      setHorses(Array.isArray(horseData) ? horseData : []);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
+
+  const confirmRejectHorseInDetail = async () => {
+    if (!rejectingHorse) return;
+    const horse = rejectingHorse;
+    const note = rejectNote.trim();
+    if (!note) {
+      alert("Vui lòng nhập lý do từ chối!");
+      return;
+    }
+    try {
+      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status: "Rejected", note });
+      setMessage(`${horse.name ?? horse.Name} đã bị từ chối.`);
+      setRejectingHorse(null);
       const horseData = await getOwnerHorses(id);
       setHorses(Array.isArray(horseData) ? horseData : []);
     } catch (err) {
@@ -686,6 +708,40 @@ function HorseDetail() {
         </section>
         {(value("approvalNote", "ApprovalNote", "")) && <article className="admin-horse-detail__note"><span>Ghi chú phê duyệt</span><p>{value("approvalNote", "ApprovalNote")}</p></article>}
       </section>}
+
+      {rejectingHorse && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Phê Duyệt Ngựa</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập lý do từ chối chiến mã <strong>{rejectingHorse.name || rejectingHorse.Name}</strong>:
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do từ chối..."
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setRejectingHorse(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmRejectHorseInDetail}
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1091,15 +1147,12 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
+  const [rejectingRaceId, setRejectingRaceId] = useState(null);
+  const [rejectRaceReason, setRejectRaceReason] = useState("");
+
     if (action === "reject") {
-      const reason = window.prompt("Lý do từ chối kết quả:");
-      if (!reason) return;
-      try {
-        await rejectRaceResult(raceId, reason);
-        setMessage("Kết quả tạm thời đã bị từ chối. Trọng tài cần nộp lại.");
-        setItems(await getTournamentRaces(selected));
-        refreshBusyHorses();
-      } catch (err) { setMessage(err.message); }
+      setRejectingRaceId(raceId);
+      setRejectRaceReason("");
       return;
     }
     if (action === "end") {
@@ -1489,6 +1542,54 @@ function ScheduleManagement({ type }) {
           )}
         </article>;
       })}</section>
+
+      {rejectingRaceId && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Kết Quả Của Trọng Tài</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập lý do từ chối kết quả tạm thời (ví dụ: Cần xác minh lại video, sai thứ hạng...):
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do từ chối..."
+              value={rejectRaceReason}
+              onChange={(e) => setRejectRaceReason(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setRejectingRaceId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={async () => {
+                  if (!rejectRaceReason.trim()) {
+                    alert("Vui lòng nhập lý do từ chối!");
+                    return;
+                  }
+                  try {
+                    await rejectRaceResult(rejectingRaceId, rejectRaceReason.trim());
+                    setMessage("Kết quả tạm thời đã bị từ chối. Trọng tài cần nộp lại.");
+                    setRejectingRaceId(null);
+                    setItems(await getTournamentRaces(selected));
+                    refreshBusyHorses();
+                  } catch (err) {
+                    setMessage(err.message);
+                  }
+                }}
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1521,15 +1622,13 @@ function RegistrationManagement() {
     } catch (err) { setMessage(err.message); }
   };
 
-  const rejectEntry = async (entry) => {
+  const [rejectingEntryId, setRejectingEntryId] = useState(null);
+  const [rejectEntryReason, setRejectEntryReason] = useState("");
+
+  const rejectEntry = (entry) => {
     const id = entry.entryId ?? entry.EntryId;
-    const reason = window.prompt("Lý do từ chối (tùy chọn):");
-    if (reason === null) return;
-    try {
-      await rejectRaceEntry(id, reason || "Bị từ chối bởi admin");
-      setMessage("Đã từ chối đăng ký.");
-      load();
-    } catch (err) { setMessage(err.message); }
+    setRejectingEntryId(id);
+    setRejectEntryReason("");
   };
 
   return (
@@ -1570,6 +1669,47 @@ function RegistrationManagement() {
             </tbody>
           </table>
       </div>
+
+      {rejectingEntryId && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Đăng Ký Cuộc Đua</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập lý do từ chối đăng ký ngựa vào cuộc đua (tùy chọn):
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do từ chối tại đây..."
+              value={rejectEntryReason}
+              onChange={(e) => setRejectEntryReason(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setRejectingEntryId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={async () => {
+                  try {
+                    await rejectRaceEntry(rejectingEntryId, rejectEntryReason.trim() || "Bị từ chối bởi admin");
+                    setMessage("Đã từ chối đăng ký.");
+                    setRejectingEntryId(null);
+                    load();
+                  } catch (err) { setMessage(err.message); }
+                }}
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
