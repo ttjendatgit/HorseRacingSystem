@@ -258,7 +258,16 @@ public class RefereesController : ControllerBase
             await _unitOfWork.SaveChangesAsync();
         }
 
-        return Ok(entries.Select(e => new
+        var scores = entries.Select(e =>
+        {
+            decimal hRate = e.Horse != null && e.Horse.TotalRaces > 0 ? ((decimal)e.Horse.TotalWins / e.Horse.TotalRaces) * 100m : 10.0m;
+            decimal jRate = e.Jockey != null && e.Jockey.WinRate > 0 ? e.Jockey.WinRate : 10.0m;
+            decimal sc = (hRate * 0.70m) + (jRate * 0.30m);
+            return sc <= 0m ? 0.01m : sc;
+        }).ToList();
+        decimal totalScore = scores.Sum();
+
+        return Ok(entries.Select((e, idx) => new
         {
             EntryId = e.Id,
             HorseId = e.HorseId,
@@ -272,6 +281,7 @@ public class RefereesController : ControllerBase
             JockeyName = e.Jockey?.User?.FullName,
             JockeyWinRate = e.Jockey?.WinRate ?? 0,
             Odds = e.Odds,
+            ProbabilityPercent = totalScore > 0 ? Math.Round((scores[idx] / totalScore) * 100m, 1) : 0m,
             Status = e.Status.ToString(),
             GateNumber = e.GateNumber
         }));

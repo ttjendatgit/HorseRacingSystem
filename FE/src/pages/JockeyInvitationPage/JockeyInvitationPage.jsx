@@ -88,20 +88,29 @@ function JockeyInvitationPage() {
     return items;
   }, [activeTab, invitations, pending, accepted, declined, withdrawn, search]);
 
-  const handleWithdraw = async (id) => {
-    const reason = window.prompt("Vui lòng nhập lý do xin rút khỏi cuộc đua:");
-    if (reason === null) return;
-    if (reason.trim().length < 3) {
-      setMessage("Lý do xin rút phải có ít nhất 3 ký tự.");
+  const [withdrawingId, setWithdrawingId] = useState(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
+
+  const handleWithdraw = (id) => {
+    setWithdrawingId(id);
+    setWithdrawReason("");
+  };
+
+  const confirmWithdraw = async () => {
+    const reasonStr = withdrawReason.trim();
+    if (reasonStr.length < 3) {
+      alert("Lý do xin rút phải có ít nhất 3 ký tự.");
       return;
     }
+    const id = withdrawingId;
     setLoadingId(id);
     try {
-      await withdrawJockeyInvitation(id, reason.trim());
+      await withdrawJockeyInvitation(id, reasonStr);
       setInvitations((current) => current.map((item) =>
-        item.id === id ? { ...item, status: "Withdrawn", responseNote: reason.trim() } : item));
+        item.id === id ? { ...item, status: "Withdrawn", responseNote: reasonStr } : item));
       setActiveTab("withdrawn");
       setMessage("Đã xin rút khỏi cuộc đua và thông báo cho chủ ngựa.");
+      setWithdrawingId(null);
     } catch (e) { setMessage(e.message || "Không thể xin rút khỏi cuộc đua."); }
     finally { setLoadingId(null); }
   };
@@ -262,6 +271,40 @@ function JockeyInvitationPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {withdrawingId && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>⚠️ Xin Rút Khỏi Cuộc Đua</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập rõ lý do xin rút khỏi cuộc đua để thông báo cho Chủ Ngựa:
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do xin rút (tối thiểu 3 ký tự)..."
+              value={withdrawReason}
+              onChange={(e) => setWithdrawReason(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#f8fafc", cursor: "pointer" }}
+                onClick={() => setWithdrawingId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmWithdraw}
+                disabled={loadingId !== null}
+              >
+                {loadingId ? "..." : "Xác nhận xin rút"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
