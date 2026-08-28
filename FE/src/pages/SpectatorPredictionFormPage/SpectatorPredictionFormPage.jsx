@@ -6,6 +6,8 @@ import {
   getRace,
   getRaces,
   getTournaments,
+  getMyPredictions,
+  topupWallet,
 } from "../../services/spectatorApi";
 import { getRaceEntries } from "../../services/refereeApi";
 import { getBalance } from "../../services/walletApi";
@@ -90,6 +92,17 @@ function SpectatorPredictionFormPage() {
       })
       .catch(() => {});
   }, []);
+
+  const handleTopup = async () => {
+    try {
+      await topupWallet(1000);
+      const d = await getBalance();
+      const b = d?.data ?? d;
+      setWalletBalance(b?.balance ?? b?.Balance ?? 0);
+    } catch {
+      setWalletBalance((prev) => (prev || 0) + 1000);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -495,6 +508,14 @@ function SpectatorPredictionFormPage() {
             {walletBalance !== null && (
               <span style={{ fontSize: 12, fontWeight: 400, color: "#657086", marginLeft: 8 }}>
                 (Số dư: <strong style={{ color: walletBalance >= (parseFloat(betAmount) || 0) ? "#1a7d1a" : "#c41e1e" }}>{Number(walletBalance).toLocaleString()} điểm</strong>)
+                <button
+                  type="button"
+                  style={{ marginLeft: 8, padding: "2px 8px", fontSize: 11, borderRadius: 4, border: "1px solid #10b981", background: "rgba(16,185,129,0.15)", color: "#10b981", cursor: "pointer", fontWeight: 700 }}
+                  onClick={handleTopup}
+                  title="Nạp điểm thử nghiệm để cược demo"
+                >
+                  ⚡ Nạp +1.000 điểm
+                </button>
               </span>
             )}
           </label>
