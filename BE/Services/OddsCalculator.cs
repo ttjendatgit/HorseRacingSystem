@@ -7,16 +7,16 @@ namespace HorseRacing.Services;
 
 public static class OddsCalculator
 {
-    private const decimal HouseEdge = 1.10m; // 10% House Edge
-    private const decimal MinOdds = 1.01m;
-    private const decimal MaxOdds = 99.00m;
-    private const decimal DefaultWinRate = 10.0m; // 10% default for 0 races or missing data
+    private const decimal HouseEdge = 1.10m; // Lợi thế nhà cái (House Edge 10%)
+    private const decimal MinOdds = 1.01m; // Tỷ lệ cược tối thiểu
+    private const decimal MaxOdds = 99.00m; // Tỷ lệ cược tối đa
+    private const decimal DefaultWinRate = 10.0m; // Tỷ lệ thắng mặc định 10% nếu chưa có dữ liệu hoặc chưa đua trận nào
 
     /// <summary>
-    /// Tính tỉ lệ cược cho danh sách race entries trong cùng một cuộc đua theo thuật toán chuẩn hóa:
-    /// STEP 1: Score_i = (HorseWinRate_i * 0.70) + (JockeyWinRate_i * 0.30)
-    /// STEP 2: Probability_i = Score_i / SUM(All Score) -> Total Probability = 100%
-    /// STEP 3 & STEP 4: Odds_i = 1 / (Probability_i * 1.10) [House Edge = 10%]
+    /// Tính tỷ lệ cược (Odds) cho danh sách các chiến mã trong cùng một trận đua theo thuật toán chuẩn hóa 4 bước:
+    /// BƯỚC 1: Điểm Score = (Tỷ lệ thắng Ngựa * 0.70) + (Tỷ lệ thắng Kỵ sĩ * 0.30)
+    /// BƯỚC 2: Chuẩn hóa Xác suất Probability = Score / Tổng Score của tất cả ngựa trong trận -> Tổng Xác suất = 100%
+    /// BƯỚC 3 & BƯỚC 4: Tỷ lệ cược Odds = 1 / (Probability * 1.10) [Đã tính House Edge 10%]
     /// </summary>
     public static void Recalculate(IList<RaceEntry> entries)
     {
@@ -29,28 +29,28 @@ public static class OddsCalculator
             var horse = e.Horse;
             var jockey = e.Jockey;
 
-            // 1. Horse Win Rate (%)
+            // 1. Tỷ lệ thắng của Ngựa (%)
             decimal horseWinRate = DefaultWinRate;
             if (horse != null && horse.TotalRaces > 0)
             {
                 horseWinRate = ((decimal)horse.TotalWins / horse.TotalRaces) * 100m;
             }
 
-            // 2. Jockey Win Rate (%)
+            // 2. Tỷ lệ thắng của Kỵ sĩ (%)
             decimal jockeyWinRate = DefaultWinRate;
             if (jockey != null && jockey.WinRate > 0)
             {
-                jockeyWinRate = jockey.WinRate; // Stored as percentage e.g. 24.12
+                jockeyWinRate = jockey.WinRate; // Lưu dạng phần trăm %, ví dụ 24.12
             }
 
-            // Defensive checks for negative values
+            // Kiểm tra phòng ngừa số âm
             if (horseWinRate < 0m) horseWinRate = 0m;
             if (jockeyWinRate < 0m) jockeyWinRate = 0m;
 
-            // STEP 1: Calculate Score (70% Horse Win Rate + 30% Jockey Win Rate)
+            // BƯỚC 1: Tính điểm Score trọng số (70% Ngựa + 30% Kỵ sĩ)
             decimal score = (horseWinRate * 0.70m) + (jockeyWinRate * 0.30m);
 
-            // Ensure score is strictly positive to prevent divide-by-zero
+            // Đảm bảo điểm score luôn dương để tránh lỗi chia cho 0
             if (score <= 0m) score = 0.01m;
 
             scores.Add((e.Id, score));
@@ -60,17 +60,17 @@ public static class OddsCalculator
 
         foreach (var (entryId, score) in scores)
         {
-            // STEP 2: Normalize Probability
+            // BƯỚC 2: Chuẩn hóa Xác suất chiến thắng (Probability)
             decimal probability = totalScore > 0m
                 ? score / totalScore
                 : 1.0m / entries.Count;
 
             if (probability <= 0m) probability = 0.0001m;
 
-            // STEP 3 & STEP 4: Calculate Odds with 10% House Edge
+            // BƯỚC 3 & BƯỚC 4: Tính Tỷ lệ cược (Odds) có tính thêm 10% House Edge
             decimal odds = Math.Round(1.0m / (probability * HouseEdge), 2);
 
-            // Bound checks
+            // Kiểm tra giới hạn biên tối thiểu và tối đa
             if (odds < MinOdds) odds = MinOdds;
             if (odds > MaxOdds) odds = MaxOdds;
 
