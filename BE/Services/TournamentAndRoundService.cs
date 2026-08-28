@@ -779,6 +779,26 @@ public class TournamentService : ITournamentService
                 if (pendingRegistrationCount > 0)
                     return ServiceResult<TournamentResponse>.Fail(400,
                         "Vui lòng xử lý tất cả đăng ký đang chờ duyệt trước khi bắt đầu giải đấu.");
+
+                // ADD — the approved field must be "settled" before racing begins: it must equal
+                // EITHER the planned Final-round headcount (structural capacity the round sequence
+                // was designed for) OR the number of configured prize positions (small tournament
+                // where every approved horse is already podium-sized). Reuses
+                // PlannedFinalParticipantsHelper — the same structural source of truth PRIZE-V1.1
+                // already uses for Prize.Position's upper bound — instead of re-deriving it here.
+                var plannedFinalParticipants = await PlannedFinalParticipantsHelper.ComputeAsync(
+                    _db, tournament.Id, tournament.MaxRounds, tournament.MaxParticipants);
+                var prizeCount = await _db.Prizes.CountAsync(p => p.TournamentId == tournament.Id);
+
+                var matchesFinalCapacity = plannedFinalParticipants.HasValue
+                    && approvedRegistrationCount == plannedFinalParticipants.Value;
+                var matchesPrizeCount = prizeCount > 0 && approvedRegistrationCount == prizeCount;
+
+                if (!matchesFinalCapacity && !matchesPrizeCount)
+                    return ServiceResult<TournamentResponse>.Fail(400,
+                        $"Không thể bắt đầu giải đấu: số ngựa đã duyệt ({approvedRegistrationCount}) phải bằng số ngựa dự kiến vào Vòng chung kết ({(plannedFinalParticipants?.ToString() ?? "chưa xác định")}) hoặc bằng số lượng giải thưởng ({prizeCount}).");
+
+
                 // A tournament shouldn't go live if not a single referee has actually agreed to
                 // officiate — mirrors the same gate StartRaceAsync already enforces per-race
                 // (RefereeAssignmentStatus.Confirmed), just checked once at the tournament level.
