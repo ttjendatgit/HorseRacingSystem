@@ -102,6 +102,13 @@ public class RacesManagementController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    [HttpPost("{raceId:guid}/recalculate-odds")]
+    public async Task<ActionResult> RecalculateOdds(Guid raceId)
+    {
+        var result = await _raceService.RecalculateOddsForRaceAsync(raceId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
     // Race Control
     [HttpPost("{raceId:guid}/open-registration")]
     public async Task<ActionResult> OpenRegistration(Guid raceId)

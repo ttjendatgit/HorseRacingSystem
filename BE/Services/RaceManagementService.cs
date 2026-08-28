@@ -1234,6 +1234,25 @@ public class RaceManagementService : IRaceManagementService
         return errors;
     }
 
+    public async Task<ServiceResult<bool>> RecalculateOddsForRaceAsync(Guid raceId)
+    {
+        try
+        {
+            var entries = await _entryRepo.GetByRaceAsync(raceId);
+            if (!entries.Any())
+                return ServiceResult<bool>.Fail(400, "Cuộc đua chưa có chiến mã nào để tính lại tỷ lệ cược.");
+
+            OddsCalculator.Recalculate(entries);
+            await _entryRepo.UpdateRangeAsync(entries);
+            await _unitOfWork.SaveChangesAsync();
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (Exception)
+        {
+            return ServiceResult<bool>.Fail(500, "Không thể tính lại tỷ lệ cược. Vui lòng thử lại.");
+        }
+    }
+
     private RaceDetailResponse MapToDetailResponse(Race race) => RaceDetailResponseMapper.ToDetailResponse(race);
 
     private async Task RecalculateOddsAsync(Guid raceId)

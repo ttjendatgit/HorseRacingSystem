@@ -75,6 +75,8 @@ function LiveResultsPage() {
                   <th>#</th>
                   <th>Ngựa</th>
                   <th>Kỵ sĩ</th>
+                  <th>Xác suất thắng</th>
+                  <th>Odds ban đầu</th>
                   <th>Thời gian</th>
                 </tr>
               </thead>
@@ -84,6 +86,8 @@ function LiveResultsPage() {
                     <td>{p.position ?? i + 1}</td>
                     <td>{isOfficial && p.won ? "🏆 " : ""}{p.horseName ?? "-"}</td>
                     <td>{p.jockeyName ?? "-"}</td>
+                    <td>{(p.probabilityPercent ?? p.ProbabilityPercent ?? 0) > 0 ? `${p.probabilityPercent ?? p.ProbabilityPercent}%` : "-"}</td>
+                    <td><strong style={{ color: "#d97706" }}>{(p.odds ?? p.Odds ?? 1.0)}x</strong></td>
                     <td>{p.time ?? "-"}</td>
                   </tr>
                 ))}
