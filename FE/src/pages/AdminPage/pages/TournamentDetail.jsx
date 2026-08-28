@@ -69,6 +69,8 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
   const [raceDetailData, setRaceDetailData] = useState({});
   const [regSummary, setRegSummary] = useState({ approvedCount: 0, pendingCount: 0 });
   const [pendingRegs, setPendingRegs] = useState([]);
+  const [rejectModalData, setRejectModalData] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const viewTournament = async () => {
     try{const d=await getTournamentRaces(tId);setRaces(Array.isArray(d)?d:[]);}catch{setRaces([]);}
@@ -103,14 +105,9 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
     } catch (err) { setMessage(err.message); }
   };
 
-  const handleRejectRegistration = async (id) => {
-    const reason = window.prompt("Lý do từ chối (không bắt buộc):");
-    if (reason === null) return;
-    try {
-      await rejectTournamentRegistration(id, reason);
-      setMessage("Đã từ chối đăng ký.");
-      refreshRegistrations();
-    } catch (err) { setMessage(err.message); }
+  const handleRejectRegistration = (id) => {
+    setRejectModalData({ type: "registration", targetId: id });
+    setRejectReason("");
   };
 
   const regDeadlineRaw = t.registrationDeadline ?? t.RegistrationDeadline;
@@ -311,7 +308,7 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
                 notes={det.result.notes||det.result.Notes}
                 actions={isProvisional?(
                   <>
-                    <button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"rgba(201,105,90,0.16)",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();const reason=window.prompt("Lý do từ chối:");if(!reason)return;try{await request(`/api/admin/races/${id}/reject-result`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});setMessage("Đã từ chối kết quả tạm thời. Trọng tài cần nộp lại.");viewTournament()}catch(err){setMessage(err.message)}}}>Từ chối</button>
+                    <button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(201,105,90,.4)",background:"rgba(201,105,90,0.16)",color:"var(--hr-danger)",cursor:"pointer",fontWeight:600}} onClick={(e)=>{e.stopPropagation();setRejectModalData({type:"result",targetId:id});setRejectReason("");}}>Từ chối</button>
                     <button style={{padding:"6px 14px",fontSize:12,borderRadius:6,border:"1px solid rgba(112,139,104,.4)",background:"rgba(112,139,104,0.16)",color:"var(--hr-success)",cursor:"pointer",fontWeight:600}} onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Duyệt kết quả này thành chính thức (Official)?"))return;try{await request(`/api/admin/races/${id}/approve-result`,{method:"POST"});setMessage("Đã duyệt kết quả chính thức!");viewTournament()}catch(err){setMessage(err.message)}}}>Duyệt KQ</button>
                   </>
                 ):null}
@@ -322,6 +319,66 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
         </div>}
       </div>;
     })}</div>}
+
+    {rejectModalData && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+          <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>
+            ❌ {rejectModalData.type === "result" ? "Từ Chối Kết Quả Của Trọng Tài" : "Từ Chối Đăng Ký Giải Đấu"}
+          </h3>
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+            {rejectModalData.type === "result"
+              ? "Vui lòng nhập rõ lý do từ chối kết quả tạm thời (ví dụ: Cần xác minh lại video, sai thứ hạng,...):"
+              : "Vui lòng nhập lý do từ chối đơn đăng ký thi đấu này:"}
+          </p>
+          <textarea
+            style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+            placeholder="Nhập lý do chi tiết tại đây..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button
+              className="ghost-button"
+              style={{ padding: "6px 14px", fontSize: 12 }}
+              onClick={() => setRejectModalData(null)}
+            >
+              Hủy
+            </button>
+            <button
+              style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+              onClick={async () => {
+                const reasonStr = rejectReason.trim();
+                if (rejectModalData.type === "result" && !reasonStr) {
+                  alert("Vui lòng nhập lý do từ chối!");
+                  return;
+                }
+                try {
+                  if (rejectModalData.type === "result") {
+                    await request(`/api/admin/races/${rejectModalData.targetId}/reject-result`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ reason: reasonStr }),
+                    });
+                    setMessage("Đã từ chối kết quả tạm thời. Trọng tài cần nộp lại.");
+                    viewTournament();
+                  } else {
+                    await rejectTournamentRegistration(rejectModalData.targetId, reasonStr);
+                    setMessage("Đã từ chối đăng ký.");
+                    refreshRegistrations();
+                  }
+                  setRejectModalData(null);
+                } catch (err) {
+                  setMessage(err.message);
+                }
+              }}
+            >
+              Xác nhận từ chối
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

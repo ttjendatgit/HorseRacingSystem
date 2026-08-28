@@ -224,15 +224,26 @@ function RefereeHealthCheckPage() {
     }
   };
 
+  const [rejectingCheckId, setRejectingCheckId] = useState(null);
+  const [rejectReasonText, setRejectReasonText] = useState("");
+
   /* ---------- reject a horse for racing ---------- */
-  const handleReject = async (checkId) => {
-    const reason = prompt("Nhập lý do từ chối:");
-    if (!reason) return;
+  const handleReject = (checkId) => {
+    setRejectingCheckId(checkId);
+    setRejectReasonText("");
+  };
+
+  const confirmRejectCheck = async () => {
+    if (!rejectReasonText.trim()) {
+      alert("Vui lòng nhập lý do từ chối!");
+      return;
+    }
     setError("");
     setSuccess("");
     try {
-      await rejectHorseForRace(checkId, reason);
+      await rejectHorseForRace(rejectingCheckId, rejectReasonText.trim());
       setSuccess("Đã từ chối ngựa thi đấu.");
+      setRejectingCheckId(null);
       loadHealthChecks(selectedRaceId);
     } catch (e) {
       setError(e?.message || "Không thể từ chối.");
@@ -652,6 +663,39 @@ function RefereeHealthCheckPage() {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        )}
+
+        {rejectingCheckId && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+              <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Sức Khỏe Ngựa Thi Đấu</h3>
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+                Vui lòng nhập chi tiết lý do ngựa không đạt sức khỏe (ví dụ: Chấn thương chân trái, sốt cao, chưa tiêm phòng...):
+              </p>
+              <textarea
+                style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+                placeholder="Nhập lý do không đạt..."
+                value={rejectReasonText}
+                onChange={(e) => setRejectReasonText(e.target.value)}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "1px solid #475569", background: "transparent", color: "#f8fafc", cursor: "pointer" }}
+                  onClick={() => setRejectingCheckId(null)}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                  onClick={confirmRejectCheck}
+                >
+                  Xác nhận từ chối
+                </button>
+              </div>
             </div>
           </div>
         )}
