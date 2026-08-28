@@ -153,10 +153,8 @@ export default function RefereeRaceReportPage() {
           let mm = "", ss = "", ms = "";
           const t = prevRank.timeTaken || prevRank.TimeTaken; // Thời gian này ĐÃ BỊ CỘNG PHẠT ở backend
 
-          if (status === "Completed" && t != null) {
-            // CÔNG THỨC QUAN TRỌNG: Trừ đi số giây bị phạt để trả lại đúng số giây gốc mà Trọng tài đã gõ
-            let baseTimeMs = Math.round(t * 1000) - (Number(syncPenalty) * 1000);
-            if (baseTimeMs < 0) baseTimeMs = 0; // Đề phòng lỗi âm
+        if (status === "Completed" && t != null) {
+            let baseTimeMs = Math.round(t * 1000);
 
             mm = Math.floor(baseTimeMs / 60000).toString();
             ss = Math.floor((baseTimeMs % 60000) / 1000).toString();
@@ -192,10 +190,11 @@ export default function RefereeRaceReportPage() {
     return failed;
   }, [healthChecks]);
 
-  const rankings = useMemo(() => {
+    const rankings = useMemo(() => {
     const arr = Object.keys(timeData).map(horseId => {
       const data = timeData[horseId];
       let totalMs = Infinity;
+      let baseMs = null;
       let displayTime = "-";
 
       if (data.status === "Completed") {
@@ -205,14 +204,15 @@ export default function RefereeRaceReportPage() {
         const p = parseInt(data.penalty || 0);
         
         if (m > 0 || s > 0 || ms > 0) {
-          totalMs = (m * 60 * 1000) + (s * 1000) + ms + (p * 1000); 
+          baseMs = (m * 60 * 1000) + (s * 1000) + ms;
+          totalMs = baseMs + (p * 1000); 
           const finalM = Math.floor(totalMs / 60000);
           const finalS = Math.floor((totalMs % 60000) / 1000);
           const finalMs = totalMs % 1000;
           displayTime = `${finalM.toString().padStart(2, '0')}:${finalS.toString().padStart(2, '0')}.${finalMs.toString().padStart(3, '0')}`;
         }
       }
-      return { horseId, status: data.status, totalMs, displayTime };
+      return { horseId, status: data.status, totalMs, baseMs, displayTime }; 
     });
 
     arr.sort((a, b) => {
@@ -227,14 +227,17 @@ export default function RefereeRaceReportPage() {
     const result = {};
     let currentRank = 1;
     for (let i = 0; i < arr.length; i++) {
-      if (arr[i].status !== "Completed" || arr[i].totalMs === Infinity) {
-        result[arr[i].horseId] = { rank: arr[i].status === "DNF" ? "Bỏ cuộc" : "Bị loại", displayTime: "-", totalMs: null };
+      if (arr[i].status !== "Completed" || arr[i].totalMs === Infinity) {     
+        let textRank = "-";
+        if (arr[i].status === "DNF") textRank = "Bỏ cuộc";
+        else if (arr[i].status === "DSQ") textRank = "Bị loại";
+        result[arr[i].horseId] = { rank: textRank, displayTime: "-", totalMs: null, baseMs: null };
       } else {
         if (i > 0 && arr[i].totalMs === arr[i-1].totalMs && arr[i].status === "Completed") {
-          result[arr[i].horseId] = { rank: currentRank, displayTime: arr[i].displayTime, totalMs: arr[i].totalMs };
+          result[arr[i].horseId] = { rank: currentRank, displayTime: arr[i].displayTime, totalMs: arr[i].totalMs, baseMs: arr[i].baseMs };
         } else {
           currentRank = i + 1;
-          result[arr[i].horseId] = { rank: currentRank, displayTime: arr[i].displayTime, totalMs: arr[i].totalMs };
+          result[arr[i].horseId] = { rank: currentRank, displayTime: arr[i].displayTime, totalMs: arr[i].totalMs, baseMs: arr[i].baseMs };
         }
       }
     }
@@ -266,11 +269,7 @@ export default function RefereeRaceReportPage() {
         ...prev, 
         [horseId]: { 
           ...currentHorseData, 
-          status: value, 
-          mm: "", 
-          ss: "", 
-          ms: "", 
-          penalty: currentHorseData.penalty || "0" 
+          status: value
         } 
       };
     });
@@ -350,7 +349,7 @@ export default function RefereeRaceReportPage() {
         return {
           horseId: hId,
           position: typeof rankInfo.rank === "number" ? rankInfo.rank : 99,
-          timeTaken: rankInfo.totalMs ? (rankInfo.totalMs / 1000) : null,
+          timeTaken: rankInfo.baseMs ? (rankInfo.baseMs / 1000) : null,
           status: timeData[hId].status
         };
       });
@@ -487,7 +486,7 @@ export default function RefereeRaceReportPage() {
                                     value={data.status} 
                                     onChange={(e) => handleStatusChange(hId, e.target.value)} 
                                     disabled={!canEditRanking || isAutoDSQ}
-                                    title={isAutoDSQ ? "Ngựa đã bị tước quyền đua" : ""}
+                                    title={isAutoDSQ ? "Ngựa bị loại do vi phạm." : ""}
                                   >
                                     <option value="Completed">Hoàn thành</option>
                                     <option value="DNF">Bỏ cuộc</option>
