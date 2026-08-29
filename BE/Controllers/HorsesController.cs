@@ -166,6 +166,8 @@ public class HorsesController : ControllerBase
                     e.Id,
                     e.RaceId,
                     e.JockeyId,
+                    e.GateNumber,
+                    e.FinishPosition,
                     e.Status,
                     e.OwnerConfirmed,
                     e.JockeyConfirmed,
@@ -245,9 +247,16 @@ public class HorsesController : ControllerBase
                 e.Id,
                 e.RaceId,
                 e.JockeyId,
+                e.GateNumber,
+                e.FinishPosition,
                 e.Status,
                 e.OwnerConfirmed,
                 e.JockeyConfirmed,
+                Jockey = e.Jockey != null ? new
+                {
+                    e.Jockey.Id,
+                    User = e.Jockey.User != null ? new { e.Jockey.User.FullName } : null
+                } : null,
                 Race = e.Race != null ? new
                 {
                     e.Race.Id,

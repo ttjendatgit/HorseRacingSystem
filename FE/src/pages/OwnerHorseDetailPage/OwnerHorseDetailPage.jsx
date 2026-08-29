@@ -338,8 +338,8 @@ function OwnerHorseDetailPage() {
           {horse ? (
             <section className="horse-detail-stack" style={{ marginTop: "24px" }}>
               <div className="section-heading">
-                <h2>Tham gia cuộc đua</h2>
-                <p>Danh sách các cuộc đua ngựa này đã đăng ký.</p>
+                <h2>Lịch sử & Đăng ký tham gia cuộc đua</h2>
+                <p>Danh sách các cuộc đua ngựa này đã đăng ký và kết quả thứ hạng thi đấu.</p>
               </div>
               {raceEntries.length === 0 ? (
                 <p className="muted">Chưa tham gia cuộc đua nào</p>
@@ -347,6 +347,18 @@ function OwnerHorseDetailPage() {
                 <div className="horse-info-list">
                   {raceEntries.map((entry) => {
                     const entryId = entry?.id ?? entry?.Id;
+                    const pos = entry?.finishPosition ?? entry?.FinishPosition;
+                    const rawStatus = entry?.race?.status ?? entry?.Race?.Status;
+                    const statusStr = String(rawStatus ?? "").toLowerCase();
+                    const isFinished = rawStatus === 3 || statusStr === "finished";
+                    const isInProgress = rawStatus === 2 || statusStr === "inprogress";
+                    const jockeyName =
+                      entry?.jockey?.user?.fullName ??
+                      entry?.Jockey?.User?.FullName ??
+                      entry?.jockey?.user?.FullName ??
+                      entry?.Jockey?.user?.fullName ??
+                      "Chưa phân công";
+
                     return (
                       <article key={entryId} className="horse-entry-card">
                         <div className="horse-entry-card__row">
@@ -354,16 +366,40 @@ function OwnerHorseDetailPage() {
                           <strong>{getRaceName(entry)}</strong>
                         </div>
                         <div className="horse-entry-card__row">
-                          <span>Ngày</span>
+                          <span>Kỵ sĩ</span>
+                          <strong>{jockeyName}</strong>
+                        </div>
+                        <div className="horse-entry-card__row">
+                          <span>Ngày đua</span>
                           <strong>{getRaceDate(entry)}</strong>
                         </div>
                         <div className="horse-entry-card__row">
-                          <span>Cổng</span>
+                          <span>Cổng xuất phát</span>
                           <strong>{getEntryGateNumber(entry)}</strong>
                         </div>
                         <div className="horse-entry-card__row">
-                          <span>Trạng thái</span>
-                          <strong>{getEntryStatusLabel(entry)}</strong>
+                          <span>Kết quả / Thứ hạng</span>
+                          {pos === 1 ? (
+                            <strong style={{ color: "#f59e0b", fontSize: 13, fontWeight: 700 }}>
+                              🏆 Vô địch (Hạng 1)
+                            </strong>
+                          ) : pos > 1 ? (
+                            <strong style={{ color: "var(--hr-text)", fontSize: 13 }}>
+                              🏅 Hạng {pos}
+                            </strong>
+                          ) : isFinished ? (
+                            <strong style={{ color: "var(--hr-muted)", fontSize: 12 }}>
+                              Đã kết thúc
+                            </strong>
+                          ) : isInProgress ? (
+                            <strong style={{ color: "#3b82f6", fontSize: 12 }}>
+                              🏎️ Đang thi đấu
+                            </strong>
+                          ) : (
+                            <strong style={{ color: "var(--hr-success)", fontSize: 12 }}>
+                              {getEntryStatusLabel(entry)} (Chờ đua)
+                            </strong>
+                          )}
                         </div>
                       </article>
                     );
