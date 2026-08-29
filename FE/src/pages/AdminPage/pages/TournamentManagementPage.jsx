@@ -277,6 +277,7 @@ export default function TournamentManagementPage() {
       <TournamentDetail
         t={selectedT}
         onBack={() => setSelectedT(null)}
+        message={message}          // ADD
         setMessage={setMessage}
         getTournamentRaces={getTournamentRaces}
         getTournamentRounds={getTournamentRounds}
