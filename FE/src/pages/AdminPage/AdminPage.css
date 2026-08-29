@@ -1671,6 +1671,22 @@
   font-weight: 700;
 }
 
+.rr-final-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(184, 134, 59, 0.16);
+  border: 1px solid rgba(184, 134, 59, 0.35);
+  color: var(--hr-gold-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+
 .rr-race h3 {
   margin: 0;
   color: var(--hr-paper);

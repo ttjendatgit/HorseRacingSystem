@@ -245,4 +245,13 @@ describe("getPlacementLabel", () => {
   test("missing position returns empty string", () => {
     assert.equal(getPlacementLabel({ isFinal: false, qualificationSlots: 3 }), "");
   });
+
+  test("returns '--' when status is DNF or DSQ, regardless of isFinal/qualificationSlots", () => {
+    assert.equal(getPlacementLabel({ position: 99, isFinal: true, status: "DNF" }), "--");
+    assert.equal(getPlacementLabel({ position: 99, isFinal: false, qualificationSlots: 4, status: "DSQ" }), "--");
+  });
+
+  test("keeps prior behavior when status is not passed", () => {
+    assert.equal(getPlacementLabel({ position: 1, isFinal: true }), "Vô địch");
+  });
 });

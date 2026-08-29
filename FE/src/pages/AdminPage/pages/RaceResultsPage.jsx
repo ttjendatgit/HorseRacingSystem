@@ -85,10 +85,11 @@ function ResultStatusBadge({ status }) {
 function ResultRow({ entry }) {
   const isWinner = Number(entry.position) === 1;
   const placementTone = getPlacementTone(entry.label);
+  const isEliminatedResult = Boolean(entry.status) && entry.status !== "Completed";
 
   return (
     <div className={`rr-result-row ${isWinner ? "rr-result-row--winner" : ""}`}>
-      <span className="rr-rank">#{entry.position}</span>
+      <span className="rr-rank">{isEliminatedResult ? "--" : `#${entry.position}`}</span>
       <strong className="rr-runner-name">{entry.horseName ?? "Chưa xác định"}</strong>
       <span className="rr-jockey">{entry.jockeyName ? `Kỵ sĩ: ${entry.jockeyName}` : "Chưa có kỵ sĩ"}</span>
       {entry.label ? (
@@ -179,7 +180,7 @@ export default function RaceResultsPage() {
               // loại"/"Vô địch") stays Official-only, since that outcome isn't final until then.
               const rankedEntries = buildRankingDisplayList(rankings, entries).map((r) => ({
                 ...r,
-                label: isOfficial ? getPlacementLabel({ position: r.position, isFinal, qualificationSlots }) : "",
+                label: isOfficial ? getPlacementLabel({ position: r.position, isFinal, qualificationSlots, status: r.status }) : "",
               }));
 
               return {
@@ -189,6 +190,7 @@ export default function RaceResultsPage() {
                   resultStatus,
                   rejectedReason,
                   rankedEntries,
+                  isFinal,
                   winnerHorseName:
                     winnerEntry?.horseName ??
                     winnerEntry?.HorseName ??
@@ -210,6 +212,7 @@ export default function RaceResultsPage() {
                   entries: [],
                   resultStatus: "",
                   rankedEntries: [],
+                  isFinal: false,
                   winnerHorseName: null,
                 },
               };
@@ -341,7 +344,10 @@ export default function RaceResultsPage() {
                   <article key={id} className="rr-race">
                     <header className="rr-race__header">
                       <div>
-                        <span className="rr-round">{formatRoundLabel(race)}</span>
+                        <span className="rr-round">
+                          {formatRoundLabel(race)}
+                          {det.isFinal ? <span className="rr-final-badge">🏆 Chung kết</span> : null}
+                        </span>
                         <h3>{raceName}</h3>
                       </div>
                       <span className={`rr-status rr-status--${statusTone}`}>

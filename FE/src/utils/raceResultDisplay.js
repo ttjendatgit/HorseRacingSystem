@@ -57,14 +57,21 @@ export const buildRankingDisplayList = (rankings, entries) => {
       horseName: r.horseName ?? r.HorseName ?? entry?.horseName ?? entry?.HorseName ?? null,
       jockeyName: entry?.jockeyName ?? entry?.JockeyName ?? null,
       isWinner: position === 1,
+      status: r.status ?? r.Status ?? "Completed",
     };
   });
 };
 
 // isFinal: Round.RoundNumber === Tournament.MaxRounds (V0/V0.1) — never AdvanceCount/QualificationSlots.
 // qualificationSlots: only meaningful for a non-final Race; missing/invalid never guesses a label.
-export const getPlacementLabel = ({ position, isFinal, qualificationSlots }) => {
+export const getPlacementLabel = ({ position, isFinal, qualificationSlots, status }) => {
   if (position === null || position === undefined) return "";
+
+  // DNF/DSQ entries carry the backend's 99 sentinel position (see LiveResultService.cs) so they
+  // sort to the bottom without disturbing real finishers' ranks — 99 has no display meaning of
+  // its own, so a non-Completed status always short-circuits before the isFinal/qualificationSlots
+  // logic below, regardless of what that sentinel position number happens to be.
+  if (status && status !== "Completed") return "--";
 
   if (isFinal) {
     return position === 1 ? "Vô địch" : `Hạng ${position}`;

@@ -8,6 +8,7 @@
 // helper) that decides how RankingsJson becomes a display list.
 
 function RankingRow({ row }) {
+  const isEliminated = Boolean(row.status) && row.status !== "Completed";
   return (
     <div
       style={{
@@ -26,7 +27,7 @@ function RankingRow({ row }) {
           color: row.isWinner ? "var(--hr-gold-soft)" : "var(--hr-muted)",
         }}
       >
-        #{row.position}
+        {isEliminated ? "--" : `#${row.position}`}
       </span>
       <span style={{ display: "grid", gap: 1 }}>
         <strong style={{ fontSize: 13, color: row.isWinner ? "var(--hr-gold-soft)" : "var(--hr-paper)" }}>
