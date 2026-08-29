@@ -1017,6 +1017,30 @@ function ScheduleManagement({ type }) {
   const [assignmentsByRace, setAssignmentsByRace] = useState(new Map());
   const { confirm, promptText, modal } = useConfirmModal();
 
+  // Shared by the card's expand-on-click handler and every race-mutating action below — an
+  // approve/reject/start/end/cancel changes what this fetches (e.g. RaceResult.resultStatus),
+  // so whichever code path just mutated an expanded card must re-run this, not just refresh the
+  // outer `items` list, or the card keeps showing stale state (e.g. Duyệt/Từ chối buttons that
+  // should have disappeared) until a full page reload resets everything.
+  const loadRaceDetail = async (raceId) => {
+    try {
+      const [entriesRes, refsRes, violRes, resultRes, reportRes] = await Promise.all([
+        request(`/api/referees/race/${raceId}/entries`),
+        request(`/api/referees/race/${raceId}/assignments`),
+        request(`/api/referees/race/${raceId}/violations`),
+        request(`/api/races/${raceId}/result`).catch(() => null),
+        request(`/api/referees/race/${raceId}/report`).catch(() => null),
+      ]);
+      setRaceEntries(Array.isArray(entriesRes) ? entriesRes : entriesRes?.data ?? []);
+      const refs = Array.isArray(refsRes) ? refsRes : refsRes?.data ?? [];
+      setRaceReferees(Array.isArray(refs) ? refs : []);
+      const viols = Array.isArray(violRes) ? violRes : violRes?.data ?? [];
+      setRaceViolations(Array.isArray(viols) ? viols : []);
+      setRaceResult(resultRes?.data ?? resultRes ?? null);
+      setRaceReport(reportRes?.data ?? reportRes ?? null);
+    } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
+  };
+
   const refreshBusyHorses = async () => {
     try {
       const res = await request("/api/races/management/busy-horses");
@@ -1283,6 +1307,7 @@ function ScheduleManagement({ type }) {
         await approveRaceResult(raceId);
         setMessage("Kết quả đã chính thức. Dự đoán đã được thanh toán.");
         setItems(await getTournamentRaces(selected));
+        if (expandedRaceId === raceId) await loadRaceDetail(raceId);
         refreshBusyHorses();
       } catch (err) { setMessage(err.message); }
       return;
@@ -1295,6 +1320,7 @@ function ScheduleManagement({ type }) {
         await rejectRaceResult(raceId, reason);
         setMessage("Kết quả tạm thời đã bị từ chối. Trọng tài cần nộp lại.");
         setItems(await getTournamentRaces(selected));
+        if (expandedRaceId === raceId) await loadRaceDetail(raceId);
         refreshBusyHorses();
       } catch (err) { setMessage(err.message); }
       return;
@@ -1315,6 +1341,18 @@ function ScheduleManagement({ type }) {
       else if (action === "cancel") await cancelRace(raceId);
       setMessage(`Cuộc đua đã ${labels[action]} thành công.`);
       setItems(await getTournamentRaces(selected));
+      if (expandedRaceId === raceId) await loadRaceDetail(raceId);
+      refreshBusyHorses();
+    } catch (err) { setMessage(err.message); }
+  };
+
+  // Soft refresh (re-fetches the same data the page already loads) instead of
+  // window.location.reload() — keeps scroll position, no white-flash reload, and re-loads the
+  // currently-expanded card's detail too, not just the outer list.
+  const refreshCurrentView = async () => {
+    try {
+      setItems(type === "round" ? await getTournamentRounds(selected) : await getTournamentRaces(selected));
+      if (expandedRaceId) await loadRaceDetail(expandedRaceId);
       refreshBusyHorses();
     } catch (err) { setMessage(err.message); }
   };
@@ -1334,7 +1372,12 @@ function ScheduleManagement({ type }) {
         eyebrow="Quản lý giải đấu"
         title={title}
         description={type === "round" ? "Xây dựng giai đoạn giải đấu và xác định khung thời gian." : "Sắp xếp cuộc đua, đặt lịch và chuẩn bị phân công ngựa."}
-        action={type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null}
+        action={
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost-button" onClick={refreshCurrentView} title="Làm mới dữ liệu">⟳ Làm mới</button>
+            {type === "race" ? <button className="primary-button" onClick={() => setShowRaceForm(true)}>+ Tạo cuộc đua</button> : null}
+          </div>
+        }
       />
       <Notice message={message} error={messageIsError} />
       {showRaceForm && (
@@ -1489,22 +1532,7 @@ function ScheduleManagement({ type }) {
           if (type !== "race") return;
           if (expandedRaceId === itemId) { setExpandedRaceId(null); return; }
           setExpandedRaceId(itemId);
-          try {
-            const [entriesRes, refsRes, violRes, resultRes, reportRes] = await Promise.all([
-              request(`/api/referees/race/${itemId}/entries`),
-              request(`/api/referees/race/${itemId}/assignments`),
-              request(`/api/referees/race/${itemId}/violations`),
-              request(`/api/races/${itemId}/result`).catch(() => null),
-              request(`/api/referees/race/${itemId}/report`).catch(() => null),
-            ]);
-            setRaceEntries(Array.isArray(entriesRes) ? entriesRes : entriesRes?.data ?? []);
-            const refs = Array.isArray(refsRes) ? refsRes : refsRes?.data ?? [];
-            setRaceReferees(Array.isArray(refs) ? refs : []);
-            const viols = Array.isArray(violRes) ? violRes : violRes?.data ?? [];
-            setRaceViolations(Array.isArray(viols) ? viols : []);
-            setRaceResult(resultRes?.data ?? resultRes ?? null);
-            setRaceReport(reportRes?.data ?? reportRes ?? null);
-          } catch { setRaceEntries([]); setRaceReferees([]); setRaceViolations([]); setRaceResult(null); setRaceReport(null); }
+          await loadRaceDetail(itemId);
         }}>
           <span className="badge">
             {itemStatus === "cancelled" && selectedTournamentStatusName === "Finished"
