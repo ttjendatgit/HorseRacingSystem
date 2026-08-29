@@ -790,14 +790,15 @@ public class TournamentService : ITournamentService
                     _db, tournament.Id, tournament.MaxRounds, tournament.MaxParticipants);
                 var prizeCount = await _db.Prizes.CountAsync(p => p.TournamentId == tournament.Id);
 
-                var matchesFinalCapacity = plannedFinalParticipants.HasValue
-                    && approvedRegistrationCount == plannedFinalParticipants.Value;
-                var matchesPrizeCount = prizeCount > 0 && approvedRegistrationCount == prizeCount;
+                var meetsFinalCapacity = plannedFinalParticipants.HasValue
+                    && approvedRegistrationCount >= plannedFinalParticipants.Value;
 
-                if (!matchesFinalCapacity && !matchesPrizeCount)
+                var meetsPrizeCount = prizeCount > 0
+                    && approvedRegistrationCount >= prizeCount;
+
+                if (!meetsFinalCapacity && !meetsPrizeCount)
                     return ServiceResult<TournamentResponse>.Fail(400,
-                        $"Không thể bắt đầu giải đấu: số ngựa đã duyệt ({approvedRegistrationCount}) phải bằng số ngựa dự kiến vào Vòng chung kết ({(plannedFinalParticipants?.ToString() ?? "chưa xác định")}) hoặc bằng số lượng giải thưởng ({prizeCount}).");
-
+                        $"Không thể bắt đầu giải đấu: số ngựa đã duyệt ({approvedRegistrationCount}) phải bằng hoặc lớn hơn số ngựa dự kiến vào Vòng chung kết ({(plannedFinalParticipants?.ToString() ?? "chưa xác định")}) hoặc số lượng giải thưởng ({prizeCount}).");
 
                 // A tournament shouldn't go live if not a single referee has actually agreed to
                 // officiate — mirrors the same gate StartRaceAsync already enforces per-race
