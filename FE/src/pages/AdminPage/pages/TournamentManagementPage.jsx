@@ -16,6 +16,7 @@ import {
   RaceTabs,
 } from "../../../components/ui/RaceUi";
 import TournamentForm from "../../../components/TournamentForm";
+import ErrorDetailModal from "../../../components/ErrorDetailModal";
 import TournamentDetail from "./TournamentDetail";
 import { apiToVNInput, apiToVNDisplay, vnInputToApiUtc, vnNowInput } from "../../../utils/vnDateTime";
 import {
@@ -298,8 +299,13 @@ export default function TournamentManagementPage() {
         <RaceButton onClick={() => { setEditingId(""); setShowForm(true); }}>Tạo giải đấu</RaceButton>
       </section>
 
-      {message && <p className="admin-notice">{message}</p>}
-      {error && <p className="admin-notice admin-notice--error">{error}</p>}
+      {/* error takes priority when both are set (e.g. a page-load failure followed by a Start
+          Tournament failure) — closing that modal clears `error`, and the component then
+          re-renders showing `message` next, rather than stacking two modals. */}
+      <ErrorDetailModal
+        message={error || message}
+        onClose={() => { if (error) setError(""); else setMessage(""); }}
+      />
       {showPrizeCta && (
         <RaceButton variant="ghost" size="compact" style={{ marginBottom: 16 }} onClick={() => navigate("/admin/prizes")}>
           Đi tới cấu hình giải thưởng

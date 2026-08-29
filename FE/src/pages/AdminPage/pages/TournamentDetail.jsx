@@ -12,6 +12,7 @@ import { apiToVNDate, apiToVNDisplay } from "../../../utils/vnDateTime";
 import { canEditTournamentStructure, getTournamentRegistrationState, isFinalRound } from "../../../utils/tournamentRegistration";
 import { buildRankingDisplayList } from "../../../utils/raceResultDisplay";
 import RaceRankingPanel from "../../../components/RaceRankingPanel";
+import ErrorDetailModal from "../../../components/ErrorDetailModal";
 
 // Race progress (RaceStatus) — event lifecycle only. RegistrationOpen/
 // RegistrationClosed are transitional compatibility values and display as neutral pre-race state.
@@ -28,32 +29,6 @@ const resultStatusLabel = (s) => ({provisional:"Tạm thời (chờ duyệt)",of
 // Vietnam-timezone policy (Asia/Ho_Chi_Minh, UTC+7) — see FE/src/utils/vnDateTime.js.
 const fmtDate2 = (v) => apiToVNDate(v);
 const fmtDateTime2 = (v) => apiToVNDisplay(v);
-
-// Reuses AdminPage.jsx's ConfirmModal CSS classes (hr-modal-overlay/hr-modal/hr-modal__message/
-// hr-modal__actions/hr-btn) for visual consistency, but is its own component here since
-// ConfirmModal itself is not exported from AdminPage.jsx. Multi-line backend messages (e.g.
-// RaceEntryService's "Entry chưa đủ điều kiện xuất phát:\n<ngựa 1> [lý do]\n...") render as a
-// list instead of one dense run-on line.
-function ErrorDetailModal({ message, onClose }) {
-  if (!message) return null;
-  const lines = message.split("\n").map((s) => s.trim()).filter(Boolean);
-  return (
-    <div className="hr-modal-overlay" role="presentation" onClick={onClose}>
-      <div className="hr-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        {lines.length > 1 ? (
-          <ul className="hr-modal__message" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-            {lines.map((line, i) => <li key={i}>{line}</li>)}
-          </ul>
-        ) : (
-          <p className="hr-modal__message">{lines[0] ?? message}</p>
-        )}
-        <div className="hr-modal__actions">
-          <button type="button" className="hr-btn hr-btn--primary" onClick={onClose}>Đóng</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function OddsEditor({ raceId, horseId, odds, setMessage }) {
   const [val, setVal] = useState(String(odds));
