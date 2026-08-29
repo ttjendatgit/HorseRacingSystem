@@ -305,9 +305,6 @@ function JockeyReviewModal({ jockeyId, onClose, onChanged }) {
                   {approval?.isRejected && (
                     <>
                       <button type="button" onClick={onClose} disabled={busy}>Đóng</button>
-                      <button type="button" className="primary-button" onClick={handleApprove} disabled={busy}>
-                        {busy ? "Đang xử lý..." : "Phê duyệt lại"}
-                      </button>
                     </>
                   )}
                   {isLocked ? (

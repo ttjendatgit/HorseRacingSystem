@@ -101,6 +101,15 @@ public class JockeysController : ControllerBase
         return StatusCode(result.StatusCode, result.Result);
     }
 
+    [HttpPut("profile")]
+    [Authorize(Roles = "Jockey")]
+    public async Task<ActionResult> UpdateJockeyProfile(UpdateJockeyProfileRequest request)
+    {
+        var userId = GetUserId();
+        var result = await _jockeyService.UpdateJockeyProfileAsync(userId, request);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
     private Guid GetUserId()
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

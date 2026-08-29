@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -6,6 +6,7 @@ import {
   Routes,
   useLocation,
   Outlet,
+  Link,
 } from "react-router-dom";
 import Header from "./components/Header/Header";
 import Footer from "./components/Footer/Footer";
@@ -14,6 +15,8 @@ import JockeyHeader from "./components/JockeyHeader/JockeyHeader";
 import OwnerHeader from "./components/OwnerHeader/OwnerHeader";
 import RefereeHeader from "./components/RefereeHeader/RefereeHeader";
 import AdminHeader from "./components/AdminHeader/AdminHeader";
+import { getMyJockeyProfile } from "./services/jockeyApi";
+import { getJockeyApprovalDisplay } from "./utils/jockeyApproval";
 
 const HomePage = lazy(() => import("./pages/HomePage/HomePage"));
 const TournamentListPage = lazy(() => import("./pages/TournamentListPage/TournamentListPage"));
@@ -87,6 +90,64 @@ function RequireAuth({ roles }) {
   return <Outlet />;
 }
 
+function JockeyApprovalGuard() {
+  const authUser = getStoredAuthUser();
+  const isJockey = authUser?.role === "jockey";
+
+  const [status, setStatus] = useState(isJockey ? "loading" : "Approved");
+  const [note, setNote] = useState("");
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!isJockey) return;
+
+    getMyJockeyProfile()
+      .then((data) => {
+        const appDisplay = getJockeyApprovalDisplay(data);
+        setStatus(appDisplay.status);
+        setNote(appDisplay.note || "");
+      })
+      .catch(() => {
+        setStatus("error");
+      });
+  }, [isJockey, location.pathname]);
+
+  if (!isJockey) {
+    return <Outlet />;
+  }
+
+  if (status === "loading") {
+    return <div className="page-loading">Đang tải trạng thái phê duyệt...</div>;
+  }
+
+  if (status === "Approved") {
+    return <Outlet />;
+  }
+
+  const isProfilePath = location.pathname === "/jockey/profile" || location.pathname === "/owner/profile";
+  if (isProfilePath) {
+    return <Outlet />;
+  }
+
+  return (
+    <div style={{ padding: "40px 20px", maxWidth: "600px", margin: "80px auto", textAlign: "center", background: "var(--hr-surface, #fff)", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1px solid var(--hr-border, #e2e8f0)" }}>
+      <h2 style={{ color: status === "Rejected" ? "#ef4444" : "#f59e0b", marginBottom: "16px", fontSize: "24px" }}>
+        {status === "Rejected" ? "Hồ sơ kỵ sĩ bị từ chối" : "Hồ sơ đang chờ phê duyệt"}
+      </h2>
+      <p style={{ color: "#64748b", fontSize: "16px", lineHeight: "1.6", marginBottom: "24px" }}>
+        {status === "Rejected"
+          ? `Hồ sơ kỵ sĩ của bạn đã bị từ chối phê duyệt. Lý do từ chối: "${note || "Không có lý do cụ thể"}"`
+          : "Hồ sơ đăng ký tài khoản kỵ sĩ của bạn đang chờ Admin xác minh và duyệt. Bạn không thể thực hiện các thao tác khác trong thời gian này."}
+      </p>
+      <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>
+        <Link to="/jockey/profile" className="primary-button" style={{ textDecoration: "none", display: "inline-block", padding: "10px 20px" }}>
+          {status === "Rejected" ? "Chỉnh sửa & Gửi lại" : "Xem hồ sơ của tôi"}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function AppLayout() {
   const location = useLocation();
   const authUser = getStoredAuthUser();
@@ -139,23 +200,27 @@ function AppLayout() {
 
             {/* Jockey */}
             <Route element={<RequireAuth roles={["jockey"]} />}>
-              <Route path="/jockey" element={<JockeyDashboardPage />} />
-              <Route path="/jockey/invitations" element={<JockeyInvitationPage />} />
-              <Route path="/jockey/invitations/:id" element={<JockeyInvitationDetailPage />} />
-              <Route path="/jockey/schedule" element={<JockeySchedulePage />} />
-              <Route path="/jockey/performance" element={<JockeyPerformancePage />} />
-              <Route path="/jockey/leaderboard" element={<LeaderboardPage />} />
+              <Route element={<JockeyApprovalGuard />}>
+                <Route path="/jockey" element={<JockeyDashboardPage />} />
+                <Route path="/jockey/invitations" element={<JockeyInvitationPage />} />
+                <Route path="/jockey/invitations/:id" element={<JockeyInvitationDetailPage />} />
+                <Route path="/jockey/schedule" element={<JockeySchedulePage />} />
+                <Route path="/jockey/performance" element={<JockeyPerformancePage />} />
+                <Route path="/jockey/leaderboard" element={<LeaderboardPage />} />
+              </Route>
               <Route path="/jockey/profile" element={<JockeyProfilePage />} />
             </Route>
 
             {/* Owner — browsing/read routes remain shared with Jockey (unchanged Owner UI) */}
             <Route element={<RequireAuth roles={["horse_owner", "jockey"]} />}>
-              <Route path="/owner" element={<OwnerDashboardPage />} />
-              <Route path="/owner/horses" element={<OwnerHorseListPage />} />
-              <Route path="/owner/horses/:id" element={<OwnerHorseDetailPage />} />
-              <Route path="/owner/tournaments" element={<OwnerTournamentListPage />} />
-              <Route path="/owner/schedule" element={<OwnerRaceConfirmationPage />} />
-              <Route path="/owner/race-confirmations" element={<Navigate to="/owner/schedule" replace />} />
+              <Route element={<JockeyApprovalGuard />}>
+                <Route path="/owner" element={<OwnerDashboardPage />} />
+                <Route path="/owner/horses" element={<OwnerHorseListPage />} />
+                <Route path="/owner/horses/:id" element={<OwnerHorseDetailPage />} />
+                <Route path="/owner/tournaments" element={<OwnerTournamentListPage />} />
+                <Route path="/owner/schedule" element={<OwnerRaceConfirmationPage />} />
+                <Route path="/owner/race-confirmations" element={<Navigate to="/owner/schedule" replace />} />
+              </Route>
               <Route path="/owner/profile" element={<OwnerProfilePage />} />
             </Route>
 
