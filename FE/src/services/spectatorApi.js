@@ -114,3 +114,10 @@ export const getMyPredictions = () => request("/api/predictions/mine");
 export const getRaceEntries = async (raceId) =>
   unwrap(await request(`/api/referees/race/${raceId}/entries`));
 
+export const topupWallet = (points = 1000) =>
+  request("/api/wallet/topup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ points }),
+  });
+

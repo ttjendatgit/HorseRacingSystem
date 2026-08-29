@@ -225,16 +225,18 @@ export default function TournamentManagementPage() {
   // serializes as the raw int (no global string enum converter).
   const CANCELLED_STATUS = 4;
 
+  const [cancellingTournamentId, setCancellingTournamentId] = useState(null);
+  const [cancelReasonText, setCancelReasonText] = useState("");
+
   const changeStatus = async (id, newStatus) => {
     setShowPrizeCta(false);
+    if (newStatus === CANCELLED_STATUS) {
+      setCancellingTournamentId(id);
+      setCancelReasonText("");
+      return;
+    }
     try {
       const body = { newStatus };
-      if (newStatus === CANCELLED_STATUS) {
-        const reason = window.prompt("Nhập lý do hủy giải đấu:");
-        if (reason === null) return; // dismissed — do not call the API
-        if (!reason.trim()) { setMessage("Lý do hủy giải đấu không được để trống."); return; }
-        body.reason = reason.trim();
-      }
       await request(`/api/tournaments/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -244,10 +246,29 @@ export default function TournamentManagementPage() {
       load();
     } catch (err) {
       setMessage(err.message);
-      // Backend authoritative validation is the only source of truth here — this is purely a
-      // text-match on its own Vietnamese error strings ("giải thưởng" appears in every Prize
-      // readiness message), not a redecided business rule.
       setShowPrizeCta(typeof err.message === "string" && err.message.includes("giải thưởng"));
+    }
+  };
+
+  const confirmCancelTournament = async () => {
+    if (!cancellingTournamentId) return;
+    const reasonStr = cancelReasonText.trim();
+    if (!reasonStr) {
+      alert("Lý do hủy giải đấu không được để trống.");
+      return;
+    }
+    const id = cancellingTournamentId;
+    try {
+      await request(`/api/tournaments/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newStatus: CANCELLED_STATUS, reason: reasonStr }),
+      });
+      setMessage("Đã hủy giải đấu.");
+      setCancellingTournamentId(null);
+      load();
+    } catch (err) {
+      setMessage(err.message);
     }
   };
 
@@ -356,6 +377,40 @@ export default function TournamentManagementPage() {
           </div>
         )}
       </section>
+
+      {cancellingTournamentId && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Hủy Giải Đấu</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập rõ lý do hủy giải đấu này:
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do hủy giải đấu..."
+              value={cancelReasonText}
+              onChange={(e) => setCancelReasonText(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setCancellingTournamentId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmCancelTournament}
+              >
+                Xác nhận hủy giải
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

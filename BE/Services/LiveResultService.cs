@@ -59,14 +59,24 @@ public class LiveResultService : ILiveResultService
             var entries = await _raceManagementRepo.GetRaceEntriesAsync(raceId);
             var result = await _raceManagementRepo.GetRaceResultAsync(raceId);
 
+            var entriesList = entries.ToList();
+            var scores = entriesList.Select(e =>
+            {
+                decimal hRate = e.Horse != null && e.Horse.TotalRaces > 0 ? ((decimal)e.Horse.TotalWins / e.Horse.TotalRaces) * 100m : 10.0m;
+                decimal jRate = e.Jockey != null && e.Jockey.WinRate > 0 ? e.Jockey.WinRate : 10.0m;
+                decimal sc = (hRate * 0.70m) + (jRate * 0.30m);
+                return sc <= 0m ? 0.01m : sc;
+            }).ToList();
+            decimal totalScore = scores.Sum();
+
             var response = new LiveRaceResultResponse
             {
                 RaceId = race.Id,
                 RaceName = race.Name,
                 Status = race.Status.ToString(),
                 ActualStartTime = race.ActualStartTime,
-                TotalParticipants = entries.Count(),
-                FinishedCount = entries.Count(e => e != null), // In real scenario, check status
+                TotalParticipants = entriesList.Count,
+                FinishedCount = entriesList.Count(e => e != null),
                 TimingData = new RaceTimingData
                 {
                     StartTime = race.ActualStartTime,
@@ -75,7 +85,7 @@ public class LiveResultService : ILiveResultService
                         ? (race.ActualEndTime.Value - race.ActualStartTime.Value).TotalSeconds
                         : null
                 },
-                CurrentPositions = entries.Select((e, i) => new CurrentPositionData
+                CurrentPositions = entriesList.Select((e, i) => new CurrentPositionData
                 {
                     Position = i + 1,
                     HorseId = e.HorseId,
@@ -83,7 +93,9 @@ public class LiveResultService : ILiveResultService
                     JockeyId = e.JockeyId,
                     JockeyName = e.Jockey?.User?.FullName,
                     Status = e.Status.ToString(),
-                    TimeTaken = null // In real scenario, calculate from tracking data
+                    TimeTaken = null,
+                    Odds = e.Odds,
+                    ProbabilityPercent = totalScore > 0 ? Math.Round((scores[i] / totalScore) * 100m, 1) : 0m
                 }).ToArray()
             };
 
@@ -113,7 +125,17 @@ public class LiveResultService : ILiveResultService
             var entries = await _raceManagementRepo.GetRaceEntriesAsync(raceId);
             var result = await _raceManagementRepo.GetRaceResultAsync(raceId);
 
-            var rankings = entries
+            var entriesList = entries.ToList();
+            var scores = entriesList.Select(e =>
+            {
+                decimal hRate = e.Horse != null && e.Horse.TotalRaces > 0 ? ((decimal)e.Horse.TotalWins / e.Horse.TotalRaces) * 100m : 10.0m;
+                decimal jRate = e.Jockey != null && e.Jockey.WinRate > 0 ? e.Jockey.WinRate : 10.0m;
+                decimal sc = (hRate * 0.70m) + (jRate * 0.30m);
+                return sc <= 0m ? 0.01m : sc;
+            }).ToList();
+            decimal totalScore = scores.Sum();
+
+            var rankings = entriesList
                 .Select((e, i) => new RankingEntry
                 {
                     Position = i + 1,
@@ -121,8 +143,10 @@ public class LiveResultService : ILiveResultService
                     HorseName = e.Horse?.Name ?? "Không xác định",
                     JockeyId = e.JockeyId,
                     JockeyName = e.Jockey?.User?.FullName,
-                    TimeTaken = null, // Calculate from tracking
-                    Won = result?.WinningHorseId == e.HorseId
+                    TimeTaken = null,
+                    Won = result?.WinningHorseId == e.HorseId,
+                    Odds = e.Odds,
+                    ProbabilityPercent = totalScore > 0 ? Math.Round((scores[i] / totalScore) * 100m, 1) : 0m
                 })
                 .OrderByDescending(r => r.Won)
                 .ThenBy(r => r.Position)
@@ -150,8 +174,17 @@ public class LiveResultService : ILiveResultService
         try
         {
             var entries = await _raceManagementRepo.GetRaceEntriesAsync(raceId);
+            var entriesList = entries.ToList();
+            var scores = entriesList.Select(e =>
+            {
+                decimal hRate = e.Horse != null && e.Horse.TotalRaces > 0 ? ((decimal)e.Horse.TotalWins / e.Horse.TotalRaces) * 100m : 10.0m;
+                decimal jRate = e.Jockey != null && e.Jockey.WinRate > 0 ? e.Jockey.WinRate : 10.0m;
+                decimal sc = (hRate * 0.70m) + (jRate * 0.30m);
+                return sc <= 0m ? 0.01m : sc;
+            }).ToList();
+            decimal totalScore = scores.Sum();
 
-            var positions = entries
+            var positions = entriesList
                 .Select((e, i) => new CurrentPositionData
                 {
                     Position = i + 1,
@@ -160,7 +193,9 @@ public class LiveResultService : ILiveResultService
                     JockeyId = e.JockeyId,
                     JockeyName = e.Jockey?.User?.FullName,
                     Status = e.Status.ToString(),
-                    TimeTaken = null
+                    TimeTaken = null,
+                    Odds = e.Odds,
+                    ProbabilityPercent = totalScore > 0 ? Math.Round((scores[i] / totalScore) * 100m, 1) : 0m
                 })
                 .ToList();
 

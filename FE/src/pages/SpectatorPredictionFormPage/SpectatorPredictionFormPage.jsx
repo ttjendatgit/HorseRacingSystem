@@ -6,6 +6,8 @@ import {
   getRace,
   getRaces,
   getTournaments,
+  getMyPredictions,
+  topupWallet,
 } from "../../services/spectatorApi";
 import { getRaceEntries } from "../../services/refereeApi";
 import { getBalance } from "../../services/walletApi";
@@ -75,6 +77,12 @@ function SpectatorPredictionFormPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [walletBalance, setWalletBalance] = useState(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     getBalance()
@@ -233,7 +241,7 @@ function SpectatorPredictionFormPage() {
           canBet: canBetOnRace(status, scheduledAt),
         };
       });
-  }, [races, selectedTournament]);
+  }, [races, selectedTournament, now]);
 
   useEffect(() => {
     if (raceOptions.length === 0) {
@@ -251,13 +259,52 @@ function SpectatorPredictionFormPage() {
 
   const horseOptions = useMemo(() => {
     const entries = raceDetail?.entries ?? [];
-    return entries.map((entry) => ({
-      id: entry.horseId ?? entry.HorseId,
-      name: entry.horseName ?? entry.HorseName ?? "Không xác định",
-      jockey: entry.jockeyName ?? entry.JockeyName ?? "Chưa xác định",
-      winRate: entry.horseWinRate ?? entry.HorseWinRate ?? 0,
-      jockeyWinRate: entry.jockeyWinRate ?? entry.JockeyWinRate ?? 0,
-      odds: entry.odds ?? entry.Odds ?? 1.0,
+    const mapped = entries.map((entry) => {
+      const p = Number(entry.probabilityPercent ?? entry.ProbabilityPercent ?? 0);
+      const o = Number(entry.odds ?? entry.Odds ?? 1.0);
+      const wr = Number(entry.horseWinRate ?? entry.HorseWinRate ?? 0);
+      return {
+        id: entry.horseId ?? entry.HorseId,
+        name: entry.horseName ?? entry.HorseName ?? "Không xác định",
+        jockey: entry.jockeyName ?? entry.JockeyName ?? "Chưa xác định",
+        winRate: wr,
+        jockeyWinRate: Number(entry.jockeyWinRate ?? entry.JockeyWinRate ?? 0),
+        probabilityPercent: p,
+        odds: o,
+        form: entry.form ?? entry.Form ?? "—",
+      };
+    });
+
+    if (mapped.length === 0) return [];
+
+    // Find favorite: highest probabilityPercent, or fallback to highest winRate
+    let maxProb = Math.max(...mapped.map((h) => h.probabilityPercent));
+    let favoriteId = null;
+    if (maxProb > 0) {
+      favoriteId = mapped.find((h) => h.probabilityPercent === maxProb)?.id;
+    } else {
+      let maxWr = Math.max(...mapped.map((h) => h.winRate));
+      favoriteId = mapped.find((h) => h.winRate === maxWr)?.id;
+    }
+
+    // Find underdog: highest odds, or fallback to lowest winRate if distinct
+    let minOdds = Math.min(...mapped.map((h) => h.odds));
+    let maxOdds = Math.max(...mapped.map((h) => h.odds));
+    let underdogId = null;
+    if (maxOdds > minOdds) {
+      underdogId = mapped.find((h) => h.odds === maxOdds && h.id !== favoriteId)?.id;
+    } else {
+      let minWr = Math.min(...mapped.map((h) => h.winRate));
+      let maxWr = Math.max(...mapped.map((h) => h.winRate));
+      if (minWr < maxWr) {
+        underdogId = mapped.find((h) => h.winRate === minWr && h.id !== favoriteId)?.id;
+      }
+    }
+
+    return mapped.map((h) => ({
+      ...h,
+      isFavorite: h.id === favoriteId,
+      isUnderdog: h.id === underdogId,
     }));
   }, [raceDetail]);
 
@@ -427,19 +474,37 @@ function SpectatorPredictionFormPage() {
                 >
                   <span className="pf-horse-card__radio" aria-hidden="true" />
                   <div className="pf-horse-card__body">
-                    <h3>{horse.name}</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <h3 style={{ margin: 0 }}>{horse.name}</h3>
+                      {horse.isFavorite && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#f59e0b", color: "#fff" }}>
+                          🌟 Ứng viên số 1
+                        </span>
+                      )}
+                      {horse.isUnderdog && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#8b5cf6", color: "#fff" }}>
+                          💥 Cửa ăn lớn
+                        </span>
+                      )}
+                    </div>
                     <p className="pf-horse-card__jockey">
-                      {horse.jockey}
+                      Kỵ sĩ: {horse.jockey}
                     </p>
                   </div>
                   <div className="pf-horse-card__stats">
                     <div className="pf-horse-stat">
-                      <span>Tỷ lệ thắng</span>
-                      <strong>{horse.winRate}</strong>
+                      <span>Tỷ lệ thắng Ngựa</span>
+                      <strong>{horse.winRate}%</strong>
                     </div>
+                    {horse.probabilityPercent > 0 && (
+                      <div className="pf-horse-stat">
+                        <span>Xác suất thắng</span>
+                        <strong style={{ color: "#d97706" }}>{horse.probabilityPercent}%</strong>
+                      </div>
+                    )}
                     <div className="pf-horse-stat">
                       <span>Tỷ lệ cược</span>
-                      <strong>{horse.odds}</strong>
+                      <strong>{horse.odds}x</strong>
                     </div>
                   </div>
                   <div className="pf-horse-card__form">
@@ -479,6 +544,34 @@ function SpectatorPredictionFormPage() {
               disabled={!selectedRaceDetails?.canBet}
             />
           </div>
+          <div className="pf-quick-bets" style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {[10, 50, 100, 500].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                style={{ padding: "4px 10px", fontSize: 12, borderRadius: 6, border: "1px solid var(--hr-border, #ccc)", background: "rgba(255,255,255,0.08)", color: "var(--hr-text)", cursor: "pointer", fontWeight: 600 }}
+                onClick={() => setBetAmount((prev) => String((parseFloat(prev) || 0) + amt))}
+                disabled={!selectedRaceDetails?.canBet}
+              >
+                +{amt}
+              </button>
+            ))}
+            {walletBalance > 0 && (
+              <button
+                type="button"
+                style={{ padding: "4px 10px", fontSize: 12, borderRadius: 6, border: "1px solid #d97706", background: "rgba(217,119,6,0.15)", color: "#d97706", cursor: "pointer", fontWeight: 700 }}
+                onClick={() => setBetAmount(String(walletBalance))}
+                disabled={!selectedRaceDetails?.canBet}
+              >
+                Tất cả ({walletBalance})
+              </button>
+            )}
+          </div>
+          {selectedHorse && (parseFloat(betAmount) || 0) > 0 && (
+            <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981", fontSize: 13, fontWeight: 600 }}>
+              💰 Thưởng dự kiến nếu thắng: <strong>{((parseFloat(betAmount) || 0) * selectedHorse.odds).toLocaleString(undefined, { maximumFractionDigits: 2 })} điểm</strong> (Odds {selectedHorse.odds}x)
+            </div>
+          )}
         </div>
         <button
           type="submit"
