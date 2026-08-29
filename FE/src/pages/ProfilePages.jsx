@@ -6,12 +6,12 @@ import { saveBankAccount, getBankAccounts, createWithdrawal, getWithdrawalHistor
 import { Field, Detail, StatusBadge, msgBox, grid2, btnPrimary, btnSecondary, fieldStyle, fieldLabel, inputBase } from "./ProfileCommon";
 import "./ProfilePages.css";
 
-// QR động của VietQR (cùng engine Sepay) — template standee: logo ngân hàng + sẵn số tiền và nội dung
+// Sử dụng API của vietqr.io để tạo mã QR
 const vietQrUrl = (tx, amount, reference) => {
   const acc = encodeURIComponent(tx?.accountNumber ?? tx?.AccountNumber ?? "");
   const bank = encodeURIComponent(tx?.bankCode ?? tx?.BankCode ?? "MB");
   const holder = encodeURIComponent(tx?.accountHolder ?? tx?.AccountHolder ?? "");
-  return `https://vietqr.app/img?acc=${acc}&bank=${bank}&holder=${holder}&template=standee&amount=${Number(amount || 0)}&des=${encodeURIComponent(reference || "")}`;
+  return `https://img.vietqr.io/image/${bank}-${acc}-compact2.png?amount=${Number(amount || 0)}&addInfo=${encodeURIComponent(reference || "")}&accountName=${holder}`;
 };
 
 /* ─── page component ─── */
@@ -86,7 +86,8 @@ export function SpectatorProfilePage() {
 
       // Bắt đầu polling sau 5 giây, tối đa 60 lần (5 phút)
       let retries = 0;
-      const MAX_RETRIES = 60;
+      const MAX_RETRIES = 100; // ~5 phút
+      const currentTxId = d?.transactionId;
 
       setTimeout(() => {
         setDepositStatus("polling");
@@ -115,7 +116,7 @@ export function SpectatorProfilePage() {
               } catch { /* ignore */ }
             }
           } catch (err) { console.error("Deposit check failed:", err); }
-        }, 5000);
+        }, 3000);
       }, 5000);
     } catch (e) {
       showMsg("error", e?.message ?? "Tạo yêu cầu nạp tiền thất bại.");
@@ -480,7 +481,6 @@ export function SpectatorProfilePage() {
                         src={vietQrUrl(depositTx, depositAmount, depositTx.reference)}
                         alt="QR chuyển khoản"
                         style={{ width: 300, height: "auto", borderRadius: 12, border: "1px solid rgba(143,100,32,0.15)" }}
-                        onError={(e) => { e.currentTarget.src = "/qr-nap-tien.png"; }}
                       />
                       <p style={{ margin: "8px 0 0", fontSize: 12, color: "#856404", background: "#fff3cd", padding: "8px 14px", borderRadius: 8 }}>
                         Số tiền và nội dung chuyển khoản đã điền sẵn trên QR. Nếu ngân hàng không tự điền, hãy nhập đúng nội dung bên phải.
@@ -518,7 +518,6 @@ export function SpectatorProfilePage() {
                         src={vietQrUrl(depositTx, depositAmount, depositTx.reference)}
                         alt="QR chuyển khoản"
                         style={{ width: 300, height: "auto", borderRadius: 12, border: "1px solid rgba(143,100,32,0.15)" }}
-                        onError={(e) => { e.currentTarget.src = "/qr-nap-tien.png"; }}
                       />
                       <p style={{ margin: "8px 0 0", fontSize: 12, color: "#856404", background: "#fff3cd", padding: "8px 14px", borderRadius: 8 }}>
                         Số tiền và nội dung chuyển khoản đã điền sẵn trên QR. Nếu ngân hàng không tự điền, hãy nhập đúng nội dung bên phải.
@@ -597,55 +596,55 @@ export function SpectatorProfilePage() {
                       <h3 style={{ margin: 0, color: "#172033", fontSize: 16 }}>Lịch sử nạp tiền</h3>
                       <span style={{ fontSize: 12, color: "#657086" }}>Mới nhất trước</span>
                     </div>
-                  {depositHistoryLoading ? (
-                    <p className="muted">Đang tải...</p>
-                  ) : depositHistory.length === 0 ? (
-                    <p className="muted" style={{ textAlign: "center", padding: "20px 0" }}>Chưa có giao dịch nạp tiền nào.</p>
-                  ) : (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr style={{ textAlign: "left", color: "#657086", fontSize: 12 }}>
-                            <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Ngày</th>
-                            <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Mã tham chiếu</th>
-                            <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Số tiền</th>
-                            <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Trạng thái</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...depositHistory]
-                            .sort((a, b) => new Date(b.createdAt ?? b.CreatedAt ?? 0) - new Date(a.createdAt ?? a.CreatedAt ?? 0))
-                            .map((item) => (
-                            <tr key={item.id ?? item.Id}>
-                              <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#34415b" }}>
-                                {item.createdAt ? new Date(item.createdAt).toLocaleString("vi-VN") : "—"}
-                              </td>
-                              <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#34415b", fontFamily: "monospace" }}>
-                                {item.reference ?? item.Reference ?? "—"}
-                              </td>
-                              <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#8f6420", fontWeight: 600 }}>
-                                {Number(item.amount ?? item.Amount ?? 0).toLocaleString()}đ
-                              </td>
-                              <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)" }}>
-                                <span style={{
-                                  display: "inline-block",
-                                  padding: "4px 8px",
-                                  borderRadius: 999,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: (item.status ?? item.Status ?? "pending").toLowerCase() === "completed" ? "#1a7d1a" : "#8f6420",
-                                  background: (item.status ?? item.Status ?? "pending").toLowerCase() === "completed" ? "rgba(26,125,26,0.1)" : "rgba(143,100,32,0.12)"
-                                }}>
-                                  {(item.status ?? item.Status ?? "pending") === "completed" ? "Hoàn tất" : "Đang chờ"}
-                                </span>
-                              </td>
+                    {depositHistoryLoading ? (
+                      <p className="muted">Đang tải...</p>
+                    ) : depositHistory.length === 0 ? (
+                      <p className="muted" style={{ textAlign: "center", padding: "20px 0" }}>Chưa có giao dịch nạp tiền nào.</p>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ textAlign: "left", color: "#657086", fontSize: 12 }}>
+                              <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Ngày</th>
+                              <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Mã tham chiếu</th>
+                              <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Số tiền</th>
+                              <th style={{ padding: "8px 10px", borderBottom: "1px solid rgba(143,100,32,0.12)" }}>Trạng thái</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                          </thead>
+                          <tbody>
+                            {[...depositHistory]
+                              .sort((a, b) => new Date(b.createdAt ?? b.CreatedAt ?? 0) - new Date(a.createdAt ?? a.CreatedAt ?? 0))
+                              .map((item) => (
+                                <tr key={item.id ?? item.Id}>
+                                  <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#34415b" }}>
+                                    {item.createdAt ? new Date(item.createdAt).toLocaleString("vi-VN") : "—"}
+                                  </td>
+                                  <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#34415b", fontFamily: "monospace" }}>
+                                    {item.reference ?? item.Reference ?? "—"}
+                                  </td>
+                                  <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)", color: "#8f6420", fontWeight: 600 }}>
+                                    {Number(item.amount ?? item.Amount ?? 0).toLocaleString()}đ
+                                  </td>
+                                  <td style={{ padding: "10px", borderBottom: "1px solid rgba(143,100,32,0.08)" }}>
+                                    <span style={{
+                                      display: "inline-block",
+                                      padding: "4px 8px",
+                                      borderRadius: 999,
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      color: (item.status ?? item.Status ?? "pending").toLowerCase() === "completed" ? "#1a7d1a" : "#8f6420",
+                                      background: (item.status ?? item.Status ?? "pending").toLowerCase() === "completed" ? "rgba(26,125,26,0.1)" : "rgba(143,100,32,0.12)"
+                                    }}>
+                                      {(item.status ?? item.Status ?? "pending") === "completed" ? "Hoàn tất" : "Đang chờ"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </section>
@@ -798,14 +797,14 @@ export function SpectatorProfilePage() {
                               {[...wdHistory]
                                 .sort((a, b) => new Date(b.createdAt ?? b.CreatedAt ?? 0) - new Date(a.createdAt ?? a.CreatedAt ?? 0))
                                 .map((w) => (
-                                <tr key={w.id ?? w.Id}>
-                                  <td>{w.createdAt ? new Date(w.createdAt).toLocaleString("vi-VN") : "-"}</td>
-                                  <td>{w.bankName ?? w.BankName ?? "-"}</td>
-                                  <td>{w.accountNumber ?? w.AccountNumber ?? "-"}</td>
-                                  <td>{(w.amount ?? w.Amount ?? 0).toLocaleString()} điểm</td>
-                                  <td><StatusBadge status={w.status ?? w.Status} /></td>
-                                </tr>
-                              ))}
+                                  <tr key={w.id ?? w.Id}>
+                                    <td>{w.createdAt ? new Date(w.createdAt).toLocaleString("vi-VN") : "-"}</td>
+                                    <td>{w.bankName ?? w.BankName ?? "-"}</td>
+                                    <td>{w.accountNumber ?? w.AccountNumber ?? "-"}</td>
+                                    <td>{(w.amount ?? w.Amount ?? 0).toLocaleString()} điểm</td>
+                                    <td><StatusBadge status={w.status ?? w.Status} /></td>
+                                  </tr>
+                                ))}
                             </tbody>
                           </table>
                         </div>

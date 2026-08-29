@@ -26,6 +26,7 @@ public interface ITransactionRepository
     /// Lấy toàn bộ lịch sử các giao dịch nạp tiền của người dùng.
     /// </summary>
     Task<List<Transaction>> GetHistoryByUserAsync(Guid userId);
+<<<<<<< HEAD
 
     /// <summary>
     /// Lấy thông tin giao dịch theo mã định danh (ID).
@@ -35,6 +36,9 @@ public interface ITransactionRepository
     /// <summary>
     /// Lấy giao dịch đang ở trạng thái chờ (Pending) theo mã nội dung chuyển khoản.
     /// </summary>
+=======
+    Task<Transaction?> GetByIdAsync(Guid id);
+>>>>>>> origin/huyhoang
     Task<Transaction?> GetPendingByRefAsync(string reference);
 
     /// <summary>
