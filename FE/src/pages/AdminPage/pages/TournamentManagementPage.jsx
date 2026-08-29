@@ -219,7 +219,7 @@ export default function TournamentManagementPage() {
     try { await deleteTournament(id); setMessage("Đã xóa giải đấu."); load(); } catch (err) { setMessage(err.message); }
   };
 
-  const viewT = (item) => setSelectedT(item);
+  const viewT = (item) => { setMessage(""); setSelectedT(item); };
 
   // TournamentStatus.Cancelled backend enum value (BE/Models/Enums.cs) — NextTransitionDto.Status
   // serializes as the raw int (no global string enum converter).
@@ -276,7 +276,7 @@ export default function TournamentManagementPage() {
     return (
       <TournamentDetail
         t={selectedT}
-        onBack={() => setSelectedT(null)}
+        onBack={() => { setMessage(""); setSelectedT(null); }}
         message={message}          // ADD
         setMessage={setMessage}
         getTournamentRaces={getTournamentRaces}
