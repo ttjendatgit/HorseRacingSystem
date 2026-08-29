@@ -196,13 +196,22 @@ public class TournamentValidationTests
     [Fact]
     public async Task Publish_PastRegistrationDeadline_Rejected()
     {
+        // A past RegistrationDeadline can no longer be created through CreateTournamentAsync —
+        // ValidateTournamentFields now rejects it at Draft-save too, not just at Publish. Seed
+        // directly via the DbContext (bypassing that Create-time validation, e.g. representing
+        // legacy data) to prove the independent Publish-time defense-in-depth still catches it.
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
         var start = DateTime.UtcNow.AddDays(10);
-        var create = await f.TournamentSvc.CreateTournamentAsync(
-            ValidCreateRequest(startDate: start, registrationDeadline: DateTime.UtcNow.AddDays(-1)));
-        Assert.True(create.Result.Success, create.Result.Message);
+        var tournament = new Tournament
+        {
+            Id = Guid.NewGuid(), Name = "Giải hợp lệ", StartDate = start, EndDate = start.AddDays(5),
+            RegistrationDeadline = DateTime.UtcNow.AddDays(-1), MinParticipants = 3, MaxParticipants = 10,
+            MaxRounds = 1, PrizePool = 0, Status = TournamentStatus.Draft, CreatedAt = DateTime.UtcNow
+        };
+        f.Db.Add(tournament);
+        await f.Db.SaveChangesAsync();
 
-        var publish = await f.TournamentSvc.ChangeStatusAsync(create.Result.Data!.Id,
+        var publish = await f.TournamentSvc.ChangeStatusAsync(tournament.Id,
             new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Published }, Guid.NewGuid());
 
         Assert.False(publish.Result.Success);

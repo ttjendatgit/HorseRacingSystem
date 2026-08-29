@@ -45,6 +45,13 @@ public class Phase5StructuralTests
     // START-TOURNAMENT-HORSE-READINESS-V1: Published -> Ongoing now requires >=1 Approved
     // TournamentHorseRegistration — seed one so this helper's Ongoing transition still succeeds;
     // unrelated to what RoundMutation_Ongoing_Rejected/RaceMutation_Ongoing_Rejected actually assert.
+    // Q1-QUALIFICATION-SHORTFALL: Start also now requires ApprovedCount to meet either the planned
+    // Final-round capacity or the configured Prize count. BuildValidPublishableTournamentAsync's
+    // Round1 AdvanceCount (4) exceeds the single Approved horse seeded here, so seed exactly one
+    // matching Prize (Position=1) to satisfy the Prize-count path instead.
+    // Start also now requires at least one Confirmed RefereeAssignment somewhere in the
+    // Tournament — seed one on an existing Race so this helper's Ongoing transition still
+    // succeeds; unrelated to what the two tests using this helper actually assert.
     private static async Task SeedApprovedRegistrationAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
     {
         var userId = Guid.NewGuid();
@@ -56,7 +63,19 @@ public class Phase5StructuralTests
             Id = Guid.NewGuid(), TournamentId = tournamentId, HorseId = horse.Id, OwnerId = owner.Id,
             Status = RegistrationStatus.Approved, CreatedAt = DateTime.UtcNow
         };
-        f.Db.AddRange(user, owner, horse, registration);
+        var prize = new Prize { Id = Guid.NewGuid(), TournamentId = tournamentId, Name = "Champion", Amount = 100, Position = 1, CreatedAt = DateTime.UtcNow };
+
+        var refereeUserId = Guid.NewGuid();
+        var refereeUser = new User { Id = refereeUserId, Email = $"phase5-referee-{Guid.NewGuid():N}@test.com", PasswordHash = "x", FullName = "Referee", Role = UserRole.Referee };
+        var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUserId, LicenseNumber = $"LIC-{Guid.NewGuid():N}", IsActive = true };
+        var raceId = await f.Db.Races.Where(r => r.TournamentId == tournamentId).Select(r => r.Id).FirstAsync();
+        var assignment = new RefereeAssignment
+        {
+            Id = Guid.NewGuid(), RaceId = raceId, RefereeId = referee.Id, Role = "Chief Referee",
+            Status = RefereeAssignmentStatus.Confirmed, AssignedAt = DateTime.UtcNow, ConfirmedAt = DateTime.UtcNow
+        };
+
+        f.Db.AddRange(user, owner, horse, registration, prize, refereeUser, referee, assignment);
         await f.Db.SaveChangesAsync();
     }
 

@@ -66,6 +66,45 @@ public class StartTournamentHorseReadinessTests
         f.TournamentSvc.ChangeStatusAsync(tournamentId,
             new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Ongoing }, actorId ?? Guid.NewGuid());
 
+    // Q1-QUALIFICATION-SHORTFALL: Start now also requires ApprovedCount to meet either the
+    // planned Final-round capacity or the configured Prize count — seed exactly 1 Prize
+    // (Position=1) so the single-Approved-horse scenarios in this file satisfy the
+    // Prize-count path. Start also now requires at least one Confirmed RefereeAssignment
+    // somewhere in the Tournament — this file's CreateTournamentAsync seeds no Round/Race at
+    // all, so seed a minimal Track/Round/Race/Referee/Confirmed-assignment for that gate too.
+    // Both are prerequisites for Start to succeed, unrelated to what each test actually
+    // asserts (pending-registration handling / registration-record immutability / etc).
+    private static async Task SeedStartReadinessAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId)
+    {
+        var tournament = await f.Db.Tournaments.AsNoTracking().FirstAsync(t => t.Id == tournamentId);
+        var prize = new Prize { Id = Guid.NewGuid(), TournamentId = tournamentId, Name = "Champion", Amount = 100, Position = 1, CreatedAt = DateTime.UtcNow };
+
+        var track = new Track { Id = Guid.NewGuid(), Name = $"Track-{Guid.NewGuid():N}", Capacity = 10, CreatedAt = DateTime.UtcNow };
+        var round = new Round
+        {
+            Id = Guid.NewGuid(), Name = "Final", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = tournament.StartDate, ScheduledEndDate = tournament.EndDate, AdvanceCount = 0
+        };
+        var race = new Race
+        {
+            Id = Guid.NewGuid(), Name = "Race", TournamentId = tournamentId, RoundId = round.Id, TrackId = track.Id,
+            ScheduledAt = tournament.StartDate, ScheduledEndAt = tournament.StartDate.AddHours(1),
+            MaxParticipants = 10, Status = RaceStatus.Scheduled, CreatedAt = DateTime.UtcNow
+        };
+
+        var refereeUserId = Guid.NewGuid();
+        var refereeUser = new User { Id = refereeUserId, Email = $"referee-{Guid.NewGuid():N}@test.com", PasswordHash = "x", FullName = "Referee", Role = UserRole.Referee };
+        var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUserId, LicenseNumber = $"LIC-{Guid.NewGuid():N}", IsActive = true };
+        var assignment = new RefereeAssignment
+        {
+            Id = Guid.NewGuid(), RaceId = race.Id, RefereeId = referee.Id, Role = "Chief Referee",
+            Status = RefereeAssignmentStatus.Confirmed, AssignedAt = DateTime.UtcNow, ConfirmedAt = DateTime.UtcNow
+        };
+
+        f.Db.AddRange(prize, track, round, race, refereeUser, referee, assignment);
+        await f.Db.SaveChangesAsync();
+    }
+
     private const string ExpectedNoApprovedHorseMessage =
         "Giải đấu phải có ít nhất một ngựa được duyệt tham gia trước khi bắt đầu.";
 
@@ -132,6 +171,7 @@ public class StartTournamentHorseReadinessTests
         var (ownerId, _, horseId) = await CreateApprovedOwnerHorseAsync(f, "a");
         var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Published, DateTime.UtcNow.AddDays(10));
         await RegisterAsync(f, tournamentId, horseId, ownerId, RegistrationStatus.Approved);
+        await SeedStartReadinessAsync(f, tournamentId);
 
         var start = await StartAsync(f, tournamentId);
 
@@ -150,6 +190,7 @@ public class StartTournamentHorseReadinessTests
         // MaxParticipants=10, only 1 Approved — must not be treated as "not full enough".
         var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Published, DateTime.UtcNow.AddDays(10), maxParticipants: 10);
         await RegisterAsync(f, tournamentId, horseId, ownerId, RegistrationStatus.Approved);
+        await SeedStartReadinessAsync(f, tournamentId);
 
         var start = await StartAsync(f, tournamentId);
 
@@ -194,6 +235,7 @@ public class StartTournamentHorseReadinessTests
         var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Published, DateTime.UtcNow.AddDays(10));
         var approvedRegId = await RegisterAsync(f, tournamentId, approvedHorse, approvedOwner, RegistrationStatus.Approved);
         var rejectedRegId = await RegisterAsync(f, tournamentId, rejectedHorse, rejectedOwner, RegistrationStatus.Rejected);
+        await SeedStartReadinessAsync(f, tournamentId);
 
         var approvedBefore = await f.Db.TournamentHorseRegistrations.AsNoTracking().FirstAsync(x => x.Id == approvedRegId);
         var rejectedBefore = await f.Db.TournamentHorseRegistrations.AsNoTracking().FirstAsync(x => x.Id == rejectedRegId);
@@ -220,6 +262,7 @@ public class StartTournamentHorseReadinessTests
         var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Published, DateTime.UtcNow.AddDays(10));
         var approvedRegId = await RegisterAsync(f, tournamentId, approvedHorse, approvedOwner, RegistrationStatus.Approved);
         var pendingRegId = await RegisterAsync(f, tournamentId, pendingHorse, pendingOwner, RegistrationStatus.Pending);
+        await SeedStartReadinessAsync(f, tournamentId);
 
         var start = await StartAsync(f, tournamentId);
 
@@ -251,6 +294,7 @@ public class StartTournamentHorseReadinessTests
         var (approvedOwner, _, approvedHorse) = await CreateApprovedOwnerHorseAsync(f, "a");
         var tournamentId = await CreateTournamentAsync(f, TournamentStatus.Published, DateTime.UtcNow.AddDays(10));
         await RegisterAsync(f, tournamentId, approvedHorse, approvedOwner, RegistrationStatus.Approved);
+        await SeedStartReadinessAsync(f, tournamentId);
 
         var start = await StartAsync(f, tournamentId);
         Assert.True(start.Result.Success, start.Result.Message);
