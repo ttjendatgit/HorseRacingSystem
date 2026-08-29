@@ -35,4 +35,7 @@ public interface IJockeyService
 
     /// <summary>Lấy thông tin hồ sơ cá nhân và số liệu thống kê thi đấu của kỵ sĩ.</summary>
     Task<ServiceResult<object>> GetMyProfileAsync(Guid userId);
+
+    /// <summary>Cập nhật hồ sơ và gửi lại yêu cầu duyệt cho kỵ sĩ.</summary>
+    Task<ServiceResult<object>> UpdateJockeyProfileAsync(Guid userId, UpdateJockeyProfileRequest request);
 }

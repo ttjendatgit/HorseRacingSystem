@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useState, useCallback } from "react";
-import { updateProfile, changePassword, getProfile } from "../../services/authApi";
+import { updateProfile, changePassword, getProfile, uploadDocument } from "../../services/authApi";
 import {
   getContracts, signContractJockey,
   getMyRaceComplaints, createRaceComplaint, uploadRaceComplaintEvidence, withdrawRaceComplaint, getEligibleRaceComplaintRaces,
 } from "../../services/managementApi";
-import { getMyJockeyProfile } from "../../services/jockeyApi";
+import { getMyJockeyProfile, updateJockeyProfile } from "../../services/jockeyApi";
 import { getJockeyApprovalDisplay } from "../../utils/jockeyApproval";
 import { getJockeyDisplayStats } from "../../utils/jockeyStats";
+import { validateJockeyRegistration } from "../../utils/jockeyRegistrationValidation";
 import {
   EVIDENCE_ACCEPT_ATTR,
   RACE_COMPLAINT_TYPE_OPTIONS,
@@ -45,7 +46,18 @@ export default function JockeyProfilePage() {
   const [activeTab, setActiveTab] = useState("info");
   const [msg, setMsg] = useState(null);
   const [editMode, setEditMode] = useState(false);
-  const [info, setInfo] = useState({ fullName: "", phoneNumber: "" });
+  const [info, setInfo] = useState({
+    fullName: "",
+    phoneNumber: "",
+    address: "",
+    dateOfBirth: "",
+    height: "",
+    weight: "",
+    idCardNumber: "",
+    licenseNumber: "",
+    licenseFile: "",
+  });
+  const [uploadingLicense, setUploadingLicense] = useState(false);
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
   const [contracts, setContracts] = useState([]);
   const [contractsLoading, setContractsLoading] = useState(false);
@@ -59,20 +71,57 @@ export default function JockeyProfilePage() {
 
   const showMsg = useCallback((type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); }, []);
 
-  useEffect(() => {
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    setUploadingLicense(true);
+    try {
+      const response = await uploadDocument(file);
+      const payload = response?.data ?? response?.Data ?? response;
+      setInfo((p) => ({ ...p, licenseFile: payload?.url ?? "" }));
+      showMsg("success", "Đã tải lên tài liệu thành công.");
+    } catch (error) {
+      showMsg("error", error.message || "Tải lên tài liệu thất bại.");
+    } finally {
+      setUploadingLicense(false);
+    }
+  };
+
+  const loadProfiles = useCallback(() => {
+    setLoading(true);
     getProfile()
-      .then((d) => { const p = d?.data ?? d; setProfile(p); setInfo({ fullName: p.fullName ?? p.FullName ?? "", phoneNumber: p.phoneNumber ?? p.PhoneNumber ?? "" }); })
+      .then((d) => {
+        const p = d?.data ?? d;
+        setProfile(p);
+        setInfo((prev) => ({
+          ...prev,
+          fullName: p.fullName ?? p.FullName ?? "",
+          phoneNumber: p.phoneNumber ?? p.PhoneNumber ?? "",
+        }));
+      })
       .catch(() => { /* empty */ })
       .finally(() => setLoading(false));
-    // /api/auth/profile does not expose Jockey.ApprovalStatus — /api/jockeys/me is the
-    // authoritative source for competitive-approval state (see jockeyApproval.js).
+
     getMyJockeyProfile()
       .then((jockeyProfileData) => {
         setJockeyProfile(jockeyProfileData);
         setApproval(getJockeyApprovalDisplay(jockeyProfileData));
+        setInfo((prev) => ({
+          ...prev,
+          address: jockeyProfileData.address ?? jockeyProfileData.Address ?? "",
+          dateOfBirth: jockeyProfileData.dateOfBirth ? jockeyProfileData.dateOfBirth.split("T")[0] : "",
+          height: jockeyProfileData.height ?? jockeyProfileData.Height ?? "",
+          weight: jockeyProfileData.weight ?? jockeyProfileData.Weight ?? "",
+          idCardNumber: jockeyProfileData.idCardNumber ?? jockeyProfileData.IdCardNumber ?? "",
+          licenseNumber: jockeyProfileData.licenseNumber ?? jockeyProfileData.LicenseNumber ?? "",
+          licenseFile: jockeyProfileData.licenseFile ?? jockeyProfileData.LicenseFile ?? "",
+        }));
       })
       .catch(() => setApproval(null));
-  }, []);
+  }, [showMsg]);
+
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
 
   useEffect(() => {
     if (activeTab !== "contracts") return;
@@ -97,13 +146,50 @@ export default function JockeyProfilePage() {
 
   const saveInfo = async () => {
     try {
-      const res = await updateProfile({ fullName: info.fullName, phoneNumber: info.phoneNumber });
-      const d = res?.data ?? res;
-      setProfile((prev) => ({ ...prev, ...d }));
-      setEditMode(false);
-      try { const stored = JSON.parse(localStorage.getItem("authUser") || "{}"); stored.fullName = info.fullName; localStorage.setItem("authUser", JSON.stringify(stored)); } catch { /* ok */ }
-      showMsg("success", "Cập nhật hồ sơ thành công!");
-    } catch (e) { showMsg("error", e?.message ?? "Cập nhật thất bại."); }
+      if (approval?.isRejected || approval?.isPending) {
+        // Validation similar to registration
+        const identityErrors = validateJockeyRegistration(
+          { phone: info.phoneNumber.trim(), idCardNumber: info.idCardNumber.trim(), dateOfBirth: info.dateOfBirth },
+          new Date()
+        );
+        const identityErrorMessages = Object.values(identityErrors);
+        if (identityErrorMessages.length > 0) {
+          showMsg("error", identityErrorMessages.join(" "));
+          return;
+        }
+
+        await updateJockeyProfile({
+          fullName: info.fullName.trim(),
+          phone: info.phoneNumber.trim(),
+          address: info.address.trim(),
+          dateOfBirth: info.dateOfBirth || null,
+          height: info.height ? parseFloat(info.height) : null,
+          weight: info.weight ? parseFloat(info.weight) : null,
+          idCardNumber: info.idCardNumber.trim(),
+          licenseNumber: info.licenseNumber.trim(),
+          licenseFile: info.licenseFile,
+        });
+
+        try {
+          const stored = JSON.parse(localStorage.getItem("authUser") || "{}");
+          stored.fullName = info.fullName.trim();
+          localStorage.setItem("authUser", JSON.stringify(stored));
+        } catch { /* ok */ }
+
+        showMsg("success", "Cập nhật hồ sơ và gửi lại yêu cầu duyệt thành công!");
+        setEditMode(false);
+        loadProfiles();
+      } else {
+        const res = await updateProfile({ fullName: info.fullName, phoneNumber: info.phoneNumber });
+        const d = res?.data ?? res;
+        setProfile((prev) => ({ ...prev, ...d }));
+        setEditMode(false);
+        try { const stored = JSON.parse(localStorage.getItem("authUser") || "{}"); stored.fullName = info.fullName; localStorage.setItem("authUser", JSON.stringify(stored)); } catch { /* ok */ }
+        showMsg("success", "Cập nhật hồ sơ thành công!");
+      }
+    } catch (e) {
+      showMsg("error", e?.message ?? "Cập nhật thất bại.");
+    }
   };
 
   const savePassword = async () => {
@@ -150,7 +236,7 @@ export default function JockeyProfilePage() {
               <button style={btnSecondary} onClick={() => setEditMode(true)}>Chỉnh sửa</button>
             ) : (
               <div style={{ display: "flex", gap: 10 }}>
-                <button style={btnSecondary} onClick={() => { setEditMode(false); setInfo({ fullName: profile.fullName ?? profile.FullName ?? "", phoneNumber: profile.phoneNumber ?? profile.PhoneNumber ?? "" }); }}>Huỷ</button>
+                <button style={btnSecondary} onClick={() => { setEditMode(false); loadProfiles(); }}>Huỷ</button>
                 <button style={btnPrimary} onClick={saveInfo}>Lưu</button>
               </div>
             )}
@@ -159,15 +245,51 @@ export default function JockeyProfilePage() {
             <Field label="Họ và tên" value={info.fullName} onChange={(e) => setInfo((p) => ({ ...p, fullName: e.target.value }))} readOnly={!editMode} placeholder="Nhập họ tên" />
             <Field label="Email" value={profile.email ?? profile.Email ?? ""} readOnly placeholder="Email" />
             <Field label="Số điện thoại" value={info.phoneNumber} onChange={(e) => setInfo((p) => ({ ...p, phoneNumber: e.target.value }))} readOnly={!editMode} placeholder="Nhập số điện thoại" />
-          </div>
-              {!editMode && (
+            {editMode && (approval?.isRejected || approval?.isPending) && (
+              <>
+                <Field label="Địa chỉ" value={info.address} onChange={(e) => setInfo((p) => ({ ...p, address: e.target.value }))} placeholder="Nhập địa chỉ" />
                 <div style={grid2}>
-                  <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
-                  <Detail label="Hạng" value={`#${jockeyStats.rank ?? "-"}`} />
-                  <Detail label="Tỉ lệ thắng" value={`${jockeyStats.winRate}%`} />
-                  <Detail label="Giấy phép" value={profile.licenseNumber ?? profile.LicenseNumber ?? "-"} />
-                  <Detail label="Quốc tịch" value={profile.nationality ?? profile.Nationality ?? "-"} />
-                  <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
+                  <Field label="Ngày sinh" type="date" value={info.dateOfBirth} onChange={(e) => setInfo((p) => ({ ...p, dateOfBirth: e.target.value }))} />
+                  <Field label="Số CCCD/CMND" value={info.idCardNumber} onChange={(e) => setInfo((p) => ({ ...p, idCardNumber: e.target.value }))} placeholder="Nhập số CCCD/CMND" />
+                </div>
+                <div style={grid2}>
+                  <Field label="Chiều cao (cm)" type="number" step="0.1" value={info.height} onChange={(e) => setInfo((p) => ({ ...p, height: e.target.value }))} placeholder="vd: 165.5" />
+                  <Field label="Cân nặng (kg)" type="number" step="0.1" value={info.weight} onChange={(e) => setInfo((p) => ({ ...p, weight: e.target.value }))} placeholder="vd: 55.0" />
+                </div>
+                <Field label="Số giấy phép thi đấu" value={info.licenseNumber} onChange={(e) => setInfo((p) => ({ ...p, licenseNumber: e.target.value }))} placeholder="Nhập số giấy phép" />
+                <div style={fieldStyle}>
+                  <label style={fieldLabel}>Tải lên giấy phép thi đấu (PDF/JPG/PNG)</label>
+                  <div className="file-upload" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file);
+                      }}
+                      style={{ ...inputBase, width: 'auto' }}
+                    />
+                    {uploadingLicense && <span className="file-upload__status">Đang tải lên...</span>}
+                    {info.licenseFile && !uploadingLicense && (
+                      <span className="file-upload__status file-upload__status--success" style={{ color: 'var(--hr-success)' }}>Đã tải lên</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          {!editMode && (
+            <div style={grid2}>
+              <Detail label="Trạng thái hồ sơ" value={approval?.label ?? "Đang tải..."} />
+              <Detail label="Hạng" value={`#${jockeyStats.rank ?? "-"}`} />
+              <Detail label="Tỉ lệ thắng" value={`${jockeyStats.winRate}%`} />
+              <Detail label="Giấy phép" value={jockeyProfile?.licenseNumber ?? "-"} />
+              <Detail label="Địa chỉ" value={jockeyProfile?.address ?? "-"} />
+              <Detail label="Ngày sinh" value={jockeyProfile?.dateOfBirth ? new Date(jockeyProfile.dateOfBirth).toLocaleDateString("vi-VN") : "-"} />
+              <Detail label="Chiều cao" value={jockeyProfile?.height ? `${jockeyProfile.height} cm` : "-"} />
+              <Detail label="Cân nặng" value={jockeyProfile?.weight ? `${jockeyProfile.weight} kg` : "-"} />
+              <Detail label="Số CCCD / CMND" value={jockeyProfile?.idCardNumber ?? "-"} />
+              <Detail label="Ngày tham gia" value={profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "-"} />
               {approval?.isRejected && approval.note && (
                 <Detail label="Lý do từ chối" value={approval.note} />
               )}

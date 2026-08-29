@@ -32,3 +32,32 @@ public class JockeyInvitationWithdrawRequest
     [StringLength(500, MinimumLength = 3)]
     public string Reason { get; set; } = string.Empty;
 }
+
+public class UpdateJockeyProfileRequest
+{
+    [Required(ErrorMessage = "Họ tên không được để trống.")]
+    public string FullName { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Số điện thoại không được để trống.")]
+    public string Phone { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Địa chỉ không được để trống.")]
+    public string Address { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Ngày sinh không được để trống.")]
+    public DateTime? DateOfBirth { get; set; }
+
+    [Required(ErrorMessage = "Chiều cao không được để trống.")]
+    public decimal? Height { get; set; }
+
+    [Required(ErrorMessage = "Cân nặng không được để trống.")]
+    public decimal? Weight { get; set; }
+
+    [Required(ErrorMessage = "Số CCCD / CMND không được để trống.")]
+    public string IdCardNumber { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Số giấy phép thi đấu không được để trống.")]
+    public string LicenseNumber { get; set; } = string.Empty;
+
+    public string LicenseFile { get; set; } = string.Empty;
+}

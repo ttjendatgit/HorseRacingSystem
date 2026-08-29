@@ -238,3 +238,9 @@ export const confirmJockeyEntry = async (entryId) =>
  */
 export const declineJockeyEntry = async (entryId) =>
   request(`/api/jockeys/entries/${entryId}/decline`, { method: "POST" });
+
+export const updateJockeyProfile = async (payload) =>
+  request("/api/jockeys/profile", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });

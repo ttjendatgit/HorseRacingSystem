@@ -542,6 +542,14 @@ public class JockeyService : IJockeyService
             fullName = jockey.User?.FullName,
             email = jockey.User?.Email,
             licenseNumber = jockey.LicenseNumber,
+            licenseFile = jockey.LicenseFile,
+            phone = jockey.Phone,
+            address = jockey.Address,
+            idCardNumber = jockey.IdCardNumber,
+            dateOfBirth = jockey.DateOfBirth,
+            height = jockey.Height,
+            weight = jockey.Weight,
+            nationality = jockey.Nationality,
             totalRaces = jockey.TotalRaces,
             totalWins = jockey.TotalWins,
             winRate = jockey.WinRate,
@@ -552,5 +560,64 @@ public class JockeyService : IJockeyService
             // RejectJockeyAsync — J-UX's jockeyApproval.js already reads this defensively.
             approvalNote = jockey.ApprovalNote
         });
+    }
+
+    public async Task<ServiceResult<object>> UpdateJockeyProfileAsync(Guid userId, UpdateJockeyProfileRequest request)
+    {
+        var user = await _users.GetByIdAsync(userId);
+        if (user == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy người dùng");
+        }
+
+        var jockey = await _jockeys.GetByUserIdAsync(userId);
+        if (jockey == null)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy hồ sơ kỵ sĩ");
+        }
+
+        // Perform validations using JockeyIdentityValidator
+        if (!JockeyIdentityValidator.IsValidPhone(request.Phone))
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Số điện thoại chỉ được chứa chữ số.");
+        }
+
+        if (!JockeyIdentityValidator.IsValidIdCardNumber(request.IdCardNumber))
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "CCCD/CMND phải gồm 9 hoặc 12 chữ số.");
+        }
+
+        if (request.DateOfBirth is not DateTime dateOfBirth || !JockeyIdentityValidator.IsOlderThan18(dateOfBirth, DateTime.UtcNow))
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Kỵ sĩ phải trên 18 tuổi.");
+        }
+
+        // Update user fields
+        user.FullName = request.FullName.Trim();
+        user.PhoneNumber = request.Phone.Trim();
+        await _users.UpdateAsync(user);
+
+        // Update jockey fields
+        jockey.Phone = request.Phone.Trim();
+        jockey.Address = request.Address.Trim();
+        jockey.DateOfBirth = request.DateOfBirth;
+        jockey.Height = request.Height;
+        jockey.Weight = request.Weight;
+        jockey.IdCardNumber = request.IdCardNumber.Trim();
+        jockey.LicenseNumber = request.LicenseNumber.Trim();
+        jockey.LicenseFile = request.LicenseFile.Trim();
+        jockey.UpdatedAt = DateTime.UtcNow;
+
+        // Reset status to Pending if it was Rejected or Pending
+        if (jockey.ApprovalStatus == ApprovalStatus.Rejected || jockey.ApprovalStatus == ApprovalStatus.Pending)
+        {
+            jockey.ApprovalStatus = ApprovalStatus.Pending;
+            jockey.ApprovalNote = null; // Clear old reject note
+        }
+
+        await _jockeys.UpdateAsync(jockey);
+        await _unitOfWork.SaveChangesAsync();
+
+        return ServiceResult<object>.Ok(new { message = "Hồ sơ đã được gửi lại để duyệt thành công." });
     }
 }
