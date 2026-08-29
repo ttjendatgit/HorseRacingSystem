@@ -56,7 +56,7 @@ function OddsEditor({ raceId, horseId, odds, setMessage }) {
   );
 }
 
-export default function TournamentDetail({ t, onBack, setMessage, getTournamentRaces, getTournamentRounds }) {
+export default function TournamentDetail({ t, onBack, message, setMessage, getTournamentRaces, getTournamentRounds }) {
   const tId = t.id??t.Id;
   const status = t.statusName??t.StatusName;
   const isDraft = canEditTournamentStructure(status);
@@ -118,7 +118,9 @@ export default function TournamentDetail({ t, onBack, setMessage, getTournamentR
   const isCapacityFull = typeof maxParticipants === "number" && maxParticipants > 0 && regSummary.approvedCount >= maxParticipants;
 
   return (
-    <><div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại danh sách giải đấu</button></div>
+    
+    <>{message && <p className="admin-notice">{message}</p>}   {/* ADD */}
+    <div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại danh sách giải đấu</button></div>
     <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div><h2 style={{margin:"0 0 4px",fontSize:24,color:"var(--hr-paper)",fontFamily:"var(--font-display)"}}>{t.name??t.Name}</h2>

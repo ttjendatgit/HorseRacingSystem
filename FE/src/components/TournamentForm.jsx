@@ -82,8 +82,8 @@ function TournamentForm({ onClose, onSuccess }) {
           <Textarea label="Mô tả" value={form.description} onChange={(e) => updateForm("description", e.target.value)} placeholder="Mô tả ngắn về giải đấu..." rows={3} />
           <Input label="Địa điểm" value={form.venue} onChange={(e) => updateForm("venue", e.target.value)} placeholder="Hà Nội" />
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            <Input label="Thời gian bắt đầu *" type="datetime-local" value={form.startDate} onChange={(e) => updateForm("startDate", e.target.value)} required style={{colorScheme:"dark"}} />
-            <Input label="Thời gian kết thúc *" type="datetime-local" value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
+            <Input label="Thời gian bắt đầu *" type="datetime-local" min={vnNowInput()} value={form.startDate} onChange={(e) => updateForm("startDate", e.target.value)} required style={{colorScheme:"dark"}} />
+            <Input label="Thời gian kết thúc *" type="datetime-local" min={vnNowInput()} value={form.endDate} onChange={(e) => updateForm("endDate", e.target.value)} required style={{colorScheme:"dark"}} />
           </div>
           <p style={{margin:"-12px 0 16px",fontSize:12,color:"var(--hr-muted)"}}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>
           <Input label="Hạn đăng ký ngựa *" type="datetime-local" min={vnNowInput()} value={form.registrationDeadline} onChange={(e) => updateForm("registrationDeadline", e.target.value)} required style={{colorScheme:"dark"}} hint="Thời điểm cuối cùng Chủ ngựa được gửi đăng ký tham gia giải." />
