@@ -176,6 +176,8 @@ public class CurrentPositionData
     public string? JockeyName { get; set; }
     public string Status { get; set; } = string.Empty; // Finished, Running, Disqualified
     public double? TimeTaken { get; set; }
+    public decimal Odds { get; set; } = 1.0m;
+    public decimal ProbabilityPercent { get; set; } = 0m;
 }
 
 public class RaceRankingResponse
@@ -197,4 +199,6 @@ public class RankingEntry
     public string? JockeyName { get; set; }
     public double? TimeTaken { get; set; }
     public bool Won { get; set; }
+    public decimal Odds { get; set; } = 1.0m;
+    public decimal ProbabilityPercent { get; set; } = 0m;
 }

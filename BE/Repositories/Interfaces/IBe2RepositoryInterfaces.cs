@@ -35,6 +35,7 @@ public interface IRefereeAssignmentRepository
     Task<IEnumerable<RefereeAssignment>> GetAllAsync();
     Task<IEnumerable<RefereeAssignment>> GetPendingAsync();
     Task<IEnumerable<RefereeAssignment>> GetByStatusAsync(string status);
+    Task<List<Guid>> GetRefereeIdsConfirmedInOngoingTournamentsAsync();
     Task AddAsync(RefereeAssignment assignment);
     Task UpdateAsync(RefereeAssignment assignment);
     Task DeleteAsync(Guid id);

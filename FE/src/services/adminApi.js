@@ -137,6 +137,10 @@ export const endRace = (raceId) =>
 export const cancelRace = (raceId) =>
   request(`/api/races/management/${raceId}/cancel`, { method: "POST" });
 
+/** [ROLE: Admin] Tính lại tỷ lệ cược cho trận đua */
+export const recalculateRaceOdds = (raceId) =>
+  request(`/api/races/management/${raceId}/recalculate-odds`, { method: "POST" });
+
 /** [ROLE: Admin] Lấy danh sách đơn đăng ký tài khoản đang chờ phê duyệt */
 export const getPendingRegistrations = async () =>
   unwrap(await request("/api/admin/registrations/pending"));

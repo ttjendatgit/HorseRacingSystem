@@ -46,6 +46,7 @@ public interface IRaceManagementService
     Task<ServiceResult<bool>> RemoveHorseFromRaceAsync(Guid raceId, Guid horseId);
     Task<ServiceResult<List<Guid>>> GetBusyHorseIdsAsync();
     Task<ServiceResult<bool>> UpdateOddsAsync(Guid raceId, Guid horseId, decimal odds);
+    Task<ServiceResult<bool>> RecalculateOddsForRaceAsync(Guid raceId);
 
     // Race Status
     Task<ServiceResult<bool>> OpenRegistrationAsync(Guid raceId);

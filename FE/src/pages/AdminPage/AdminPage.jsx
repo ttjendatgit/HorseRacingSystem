@@ -78,37 +78,49 @@ function AdminHorseImage({ imageUrl, name, className = "" }) {
 
 const navGroups = [
   { label: "Dashboard", items: [{ to: "/admin", label: "Tổng quan", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" }] },
-  { label: "Users", items: [
-    { to: "/admin/users", label: "Người dùng", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" },
-    { to: "/admin/registrations", label: "Đăng ký", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-    { to: "/admin/roles", label: "Vai trò", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
-  ] },
-  { label: "Tournaments", items: [
-    { to: "/admin/tournaments", label: "Giải đấu", icon: "M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" },
-    { to: "/admin/rounds", label: "Vòng đấu", icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" },
-    { to: "/admin/races", label: "Cuộc đua", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-    { to: "/admin/race-results", label: "Kết quả", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { to: "/admin/referee-assign", label: "Phân công trọng tài", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
-  ] },
-  { label: "Management", items: [
-    { to: "/admin/horses", label: "Ngựa", icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { to: "/admin/referees", label: "Trọng tài", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
-  ] },
-  { label: "Operations", items: [
-    { to: "/admin/prizes", label: "Tiền thưởng", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { to: "/admin/race-complaints", label: "Khiếu nại cuộc đua", icon: "M3 21l4-4V5a2 2 0 012-2h6a2 2 0 012 2v12l4 4" },
-    { to: "/admin/transfers", label: "Chuyển nhượng", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
-    { to: "/admin/contracts", label: "Hợp đồng", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-    { to: "/admin/injuries", label: "Chấn thương", icon: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
-  ] },
-  { label: "System", items: [
-    { to: "/admin/audit", label: "Nhật ký", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
-    { to: "/admin/notifications", label: "Thông báo", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
-  ] },
-  { label: "Finance", items: [
-    { to: "/admin/predictions", label: "Dự đoán", icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { to: "/admin/withdrawals", label: "Rút tiền", icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" },
-  ] },
+  {
+    label: "Users", items: [
+      { to: "/admin/users", label: "Người dùng", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" },
+      { to: "/admin/registrations", label: "Đăng ký", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+      { to: "/admin/roles", label: "Vai trò", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
+    ]
+  },
+  {
+    label: "Tournaments", items: [
+      { to: "/admin/tournaments", label: "Giải đấu", icon: "M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" },
+      { to: "/admin/rounds", label: "Vòng đấu", icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" },
+      { to: "/admin/races", label: "Cuộc đua", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+      { to: "/admin/race-results", label: "Kết quả", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { to: "/admin/referee-assign", label: "Phân công trọng tài", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
+    ]
+  },
+  {
+    label: "Management", items: [
+      { to: "/admin/horses", label: "Ngựa", icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { to: "/admin/referees", label: "Trọng tài", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+    ]
+  },
+  {
+    label: "Operations", items: [
+      { to: "/admin/prizes", label: "Tiền thưởng", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { to: "/admin/race-complaints", label: "Khiếu nại cuộc đua", icon: "M3 21l4-4V5a2 2 0 012-2h6a2 2 0 012 2v12l4 4" },
+      { to: "/admin/transfers", label: "Chuyển nhượng", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
+      { to: "/admin/contracts", label: "Hợp đồng", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+      { to: "/admin/injuries", label: "Chấn thương", icon: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
+    ]
+  },
+  {
+    label: "System", items: [
+      { to: "/admin/audit", label: "Nhật ký", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+      { to: "/admin/notifications", label: "Thông báo", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
+    ]
+  },
+  {
+    label: "Finance", items: [
+      { to: "/admin/predictions", label: "Dự đoán", icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { to: "/admin/withdrawals", label: "Rút tiền", icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" },
+    ]
+  },
 ];
 
 const formatDate = (value) => (value ? apiToVNDate(value) : "-");
@@ -381,11 +393,11 @@ function Dashboard() {
           </div>
           <div className="ad-quick-actions">
             <button className="ad-qa-btn" onClick={() => navigate("/admin/tournaments")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
               Tạo giải đấu
             </button>
             <button className="ad-qa-btn" onClick={() => navigate("/admin/registrations")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>
               Duyệt đăng ký
             </button>
           </div>
@@ -409,8 +421,8 @@ function Dashboard() {
             </div>
             {/* Mini sparkline */}
             <div className="ad-kpi__spark">
-              {[3,4,2,5,3,4,5].map((h, i) => (
-                <span key={i} className="ad-spark-bar" style={{ height: `${h*5+4}px`, opacity: 0.4 + h*0.1 }} />
+              {[3, 4, 2, 5, 3, 4, 5].map((h, i) => (
+                <span key={i} className="ad-spark-bar" style={{ height: `${h * 5 + 4}px`, opacity: 0.4 + h * 0.1 }} />
               ))}
             </div>
           </div>
@@ -444,9 +456,9 @@ function Dashboard() {
               <div className="ad-donut-hole"><strong>{data?.activeTournaments ?? data?.ActiveTournaments ?? 0}</strong><span>Hoạt động</span></div>
             </div>
             <div className="ad-donut-legend">
-              <div><span style={{background:"#f2d28b"}} /><label>Đang mở</label><strong>{data?.activeTournaments ?? data?.ActiveTournaments ?? 0}</strong></div>
-              <div><span style={{background:"#94a3b8"}} /><label>Đã đóng</label><strong>{data?.upcomingRaces ?? data?.UpcomingRaces ?? 0}</strong></div>
-              <div><span style={{background:"#10b981"}} /><label>Sắp diễn ra</label><strong>8</strong></div>
+              <div><span style={{ background: "#f2d28b" }} /><label>Đang mở</label><strong>{data?.activeTournaments ?? data?.ActiveTournaments ?? 0}</strong></div>
+              <div><span style={{ background: "#94a3b8" }} /><label>Đã đóng</label><strong>{data?.upcomingRaces ?? data?.UpcomingRaces ?? 0}</strong></div>
+              <div><span style={{ background: "#10b981" }} /><label>Sắp diễn ra</label><strong>8</strong></div>
             </div>
           </div>
         </div>
@@ -500,7 +512,7 @@ function Dashboard() {
                     </div>
                     <div className="ad-action-card__count" style={{ color: p.color }}>{item.count}</div>
                   </div>
-                  <div className="ad-action-card__bar"><div style={{ width: `${Math.min((item.count||0)*20, 100)}%`, background: p.bar }} /></div>
+                  <div className="ad-action-card__bar"><div style={{ width: `${Math.min((item.count || 0) * 20, 100)}%`, background: p.bar }} /></div>
                   <div className="ad-action-card__actions">
                     <button className="ad-btn-approve" onClick={() => navigate(item.path)}>Xem chi tiết</button>
                   </div>
@@ -642,16 +654,37 @@ function UserDetail() {
     } catch (err) { setMessage(err.message); }
   };
 
+  const [rejectingHorse, setRejectingHorse] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
+
   const changeHorseStatus = async (horse, status) => {
-    let note = null;
     if (status === "Rejected") {
       note = await promptText("Nhập lý do từ chối:");
       if (!note?.trim()) return;
     }
 
     try {
-      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status, note });
+      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status, note: null });
       setMessage(`${horse.name ?? horse.Name} đã đổi thành ${status}.`);
+      const horseData = await getOwnerHorses(id);
+      setHorses(Array.isArray(horseData) ? horseData : []);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
+
+  const confirmRejectHorseInDetail = async () => {
+    if (!rejectingHorse) return;
+    const horse = rejectingHorse;
+    const note = rejectNote.trim();
+    if (!note) {
+      alert("Vui lòng nhập lý do từ chối!");
+      return;
+    }
+    try {
+      await updateOwnerHorseStatus(id, horse.id ?? horse.Id, { status: "Rejected", note });
+      setMessage(`${horse.name ?? horse.Name} đã bị từ chối.`);
+      setRejectingHorse(null);
       const horseData = await getOwnerHorses(id);
       setHorses(Array.isArray(horseData) ? horseData : []);
     } catch (err) {
@@ -786,6 +819,40 @@ function HorseDetail() {
         </section>
         {(value("approvalNote", "ApprovalNote", "")) && <article className="admin-horse-detail__note"><span>Ghi chú phê duyệt</span><p>{value("approvalNote", "ApprovalNote")}</p></article>}
       </section>}
+
+      {rejectingHorse && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Phê Duyệt Ngựa</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập lý do từ chối chiến mã <strong>{rejectingHorse.name || rejectingHorse.Name}</strong>:
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do từ chối..."
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setRejectingHorse(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmRejectHorseInDetail}
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1208,7 +1275,7 @@ function ScheduleManagement({ type }) {
 
   const handleRaceAction = async (raceId, action) => {
     const labels = { start: "bắt đầu", end: "kết thúc", cancel: "hủy", approve: "duyệt kết quả", reject: "từ chối kết quả" };
-    
+
     if (action === "approve") {
       if (!(await confirm("Duyệt kết quả này thành chính thức. Dự đoán sẽ được thanh toán ngay sau khi duyệt."))) return;
 
@@ -1220,7 +1287,7 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
-    
+
     if (action === "reject") {
       const reason = await promptText("Lý do từ chối kết quả:");
       if (!reason || !reason.trim()) return;
@@ -1232,7 +1299,7 @@ function ScheduleManagement({ type }) {
       } catch (err) { setMessage(err.message); }
       return;
     }
-    
+
     if (action === "end") {
       if (!(await confirm("Kết thúc cuộc đua?"))) return;
     } else if (
@@ -1344,7 +1411,7 @@ function ScheduleManagement({ type }) {
           const selectedRoundNumber = selectedRace ? (selectedRace.roundNumber ?? selectedRace.RoundNumber) : null;
           if (assignment.raceId && selectedRoundNumber != null && selectedRoundNumber > 1) {
             return (
-              <p style={{margin:"8px 0",padding:"10px 14px",borderRadius:10,background:"rgba(112,139,104,0.1)",border:"1px solid rgba(112,139,104,0.25)",color:"var(--hr-success)",fontSize:13}}>
+              <p style={{ margin: "8px 0", padding: "10px 14px", borderRadius: 10, background: "rgba(112,139,104,0.1)", border: "1px solid rgba(112,139,104,0.25)", color: "var(--hr-success)", fontSize: 13 }}>
                 Ngựa ở vòng này được xác định tự động từ kết quả chính thức của vòng trước.<br />
                 Không thể phân công ngựa thủ công.
               </p>
@@ -1360,7 +1427,7 @@ function ScheduleManagement({ type }) {
                   const isBusyElsewhere = busyHorseIdsAll.has(horseId) && !isInThisRace;
                   const isDisabled = isInThisRace || isBusyElsewhere;
                   const label = isInThisRace ? " [Đã thêm]" : isBusyElsewhere ? " [Đã đăng ký cuộc đua khác]" : "";
-                  return <option key={horseId} value={horseId} disabled={isDisabled} style={{color: isDisabled ? "var(--hr-muted)" : "inherit"}}>
+                  return <option key={horseId} value={horseId} disabled={isDisabled} style={{ color: isDisabled ? "var(--hr-muted)" : "inherit" }}>
                     {horse.name ?? horse.Name}{label}
                   </option>;
                 })}
@@ -1418,7 +1485,7 @@ function ScheduleManagement({ type }) {
           );
         }
 
-        return <article key={itemId} className="admin-simple-card" style={{cursor:"pointer"}} onClick={async () => {
+        return <article key={itemId} className="admin-simple-card" style={{ cursor: "pointer" }} onClick={async () => {
           if (type !== "race") return;
           if (expandedRaceId === itemId) { setExpandedRaceId(null); return; }
           setExpandedRaceId(itemId);
@@ -1450,7 +1517,7 @@ function ScheduleManagement({ type }) {
               : (raceStatusLabel[itemStatus] ?? item.status ?? item.Status)}
           </span>
           {itemResultStatus && (
-            <span className="badge" style={{marginLeft:4,background:itemResultStatus==="official"?"rgba(112,139,104,0.16)":"rgba(185,138,69,0.16)",color:itemResultStatus==="official"?"var(--hr-success)":"var(--hr-warning)"}}>
+            <span className="badge" style={{ marginLeft: 4, background: itemResultStatus === "official" ? "rgba(112,139,104,0.16)" : "rgba(185,138,69,0.16)", color: itemResultStatus === "official" ? "var(--hr-success)" : "var(--hr-warning)" }}>
               {resultStatusLabel[itemResultStatus] ?? itemResultStatus}
             </span>
           )}
@@ -1502,12 +1569,12 @@ function ScheduleManagement({ type }) {
             );
           })()}
           {type === "race" && expandedRaceId === itemId && (
-            <div style={{marginTop:12,padding:12,borderTop:"1px solid var(--hr-border-soft)"}} onClick={e => e.stopPropagation()}>
-              <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Ngựa tham gia</h4>
+            <div style={{ marginTop: 12, padding: 12, borderTop: "1px solid var(--hr-border-soft)" }} onClick={e => e.stopPropagation()}>
+              <h4 style={{ fontSize: 14, margin: "0 0 8px", color: "var(--hr-paper)" }}>Ngựa tham gia</h4>
               {raceEntries.length === 0 ? (
-                <p style={{color:"var(--hr-muted)",fontSize:13}}>Chưa có ngựa nào được phân công.</p>
+                <p style={{ color: "var(--hr-muted)", fontSize: 13 }}>Chưa có ngựa nào được phân công.</p>
               ) : (
-                <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
+                <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                   <thead><tr>
                     <th style={th}>Ngựa</th><th style={th}>Kỵ sĩ</th><th style={th}>Tỉ lệ cược</th>
                   </tr></thead>
@@ -1521,18 +1588,18 @@ function ScheduleManagement({ type }) {
                 </table>
               )}
               {raceReferees.length > 0 && (
-                <div style={{marginTop:12}}>
-                  <h4 style={{fontSize:14,margin:"0 0 8px",color:"var(--hr-paper)"}}>Trọng tài</h4>
+                <div style={{ marginTop: 12 }}>
+                  <h4 style={{ fontSize: 14, margin: "0 0 8px", color: "var(--hr-paper)" }}>Trọng tài</h4>
                   {raceReferees.map(r => {
                     const st = r.status ?? r.Status;
                     return (
                       <span key={r.id ?? r.Id} style={{
-                        display:"inline-block",margin:"0 8px 4px 0",padding:"4px 12px",
-                        borderRadius:8,fontSize:12,fontWeight:600,
-                        background:st==="Confirmed"?"rgba(112,139,104,.16)":st==="Assigned"?"rgba(185,138,69,.16)":"rgba(238,229,212,.06)",
-                        color:st==="Confirmed"?"var(--hr-success)":st==="Assigned"?"var(--hr-warning)":"var(--hr-muted)"
+                        display: "inline-block", margin: "0 8px 4px 0", padding: "4px 12px",
+                        borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        background: st === "Confirmed" ? "rgba(112,139,104,.16)" : st === "Assigned" ? "rgba(185,138,69,.16)" : "rgba(238,229,212,.06)",
+                        color: st === "Confirmed" ? "var(--hr-success)" : st === "Assigned" ? "var(--hr-warning)" : "var(--hr-muted)"
                       }}>
-                        {r.refereeName ?? r.RefereeName} — {r.role==="Chief Referee"?"Trọng tài trưởng":"Trợ lý"}
+                        {r.refereeName ?? r.RefereeName} — {r.role === "Chief Referee" ? "Trọng tài trưởng" : "Trợ lý"}
                       </span>
                     );
                   })}
@@ -1628,13 +1695,13 @@ function ScheduleManagement({ type }) {
                 );
               })()}
               {raceReport && (
-                <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.25)"}}>
-                  <h4 style={{fontSize:14,margin:"0 0 6px",color:"#c4b5fd"}}>📋 Báo cáo trọng tài</h4>
-                  <p style={{margin:0,fontSize:13,color:"var(--hr-text)"}}>{raceReport.details ?? raceReport.Details ?? "—"}</p>
+                <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)" }}>
+                  <h4 style={{ fontSize: 14, margin: "0 0 6px", color: "#c4b5fd" }}>📋 Báo cáo trọng tài</h4>
+                  <p style={{ margin: 0, fontSize: 13, color: "var(--hr-text)" }}>{raceReport.details ?? raceReport.Details ?? "—"}</p>
                   {(raceReport.incidents ?? raceReport.Incidents) && (
-                    <p style={{margin:"6px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--hr-muted)" }}>Sự cố: {raceReport.incidents ?? raceReport.Incidents}</p>
                   )}
-                  <span style={{display:"block",marginTop:6,fontSize:11,color:"var(--hr-muted)"}}>
+                  <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--hr-muted)" }}>
                     {raceReport.refereeName ?? raceReport.RefereeName ?? "Trọng tài"}
                     {raceReport.completedAt ?? raceReport.CompletedAt ? ` · ${new Date(raceReport.completedAt ?? raceReport.CompletedAt).toLocaleString("vi-VN")}` : ""}
                   </span>
@@ -1667,7 +1734,7 @@ function RegistrationManagement() {
       const search = `${item.horseName ?? item.HorseName ?? ""} ${item.ownerName ?? item.OwnerName ?? ""} ${item.jockeyName ?? item.JockeyName ?? ""} ${item.tournamentName ?? item.TournamentName ?? ""} ${item.raceName ?? item.RaceName ?? ""}`.toLowerCase();
       return search.includes(query.toLowerCase());
     }),
-  [query, entryItems]);
+    [query, entryItems]);
 
   const approveEntry = async (entry) => {
     const id = entry.entryId ?? entry.EntryId;
@@ -1677,6 +1744,9 @@ function RegistrationManagement() {
       load();
     } catch (err) { setMessage(err.message); }
   };
+
+  const [rejectingEntryId, setRejectingEntryId] = useState(null);
+  const [rejectEntryReason, setRejectEntryReason] = useState("");
 
   const rejectEntry = async (entry) => {
     const id = entry.entryId ?? entry.EntryId;
@@ -1699,33 +1769,33 @@ function RegistrationManagement() {
       <Notice message={message} />
 
       <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead><tr><th>Ngựa</th><th>Chủ ngựa</th><th>Kỵ sĩ</th><th>Giải đấu</th><th>Cuộc đua</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-            <tbody>
-              {filteredEntries.map((item) => {
-                const id = item.entryId ?? item.EntryId;
-                return (
-                  <tr key={id}>
-                    <td><strong>{item.horseName ?? item.HorseName ?? "N/A"}</strong></td>
-                    <td>{item.ownerName ?? item.OwnerName ?? "-"}</td>
-                    <td>{item.jockeyName ?? item.JockeyName ?? "Chưa có"}</td>
-                    <td>{item.tournamentName ?? item.TournamentName ?? "-"}</td>
-                    <td>{item.raceName ?? item.RaceName ?? "-"}</td>
-                    <td><span className="status status--pending">Chờ duyệt</span></td>
-                    <td>
-                      <div className="admin-actions">
-                        <button onClick={() => approveEntry(item)}>Phê duyệt</button>
-                        <button className="admin-danger" onClick={() => rejectEntry(item)}>Từ chối</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredEntries.length === 0 && (
-                <tr><td colSpan={7}>Không có đăng ký ngựa nào đang chờ duyệt.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <table className="admin-table">
+          <thead><tr><th>Ngựa</th><th>Chủ ngựa</th><th>Kỵ sĩ</th><th>Giải đấu</th><th>Cuộc đua</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {filteredEntries.map((item) => {
+              const id = item.entryId ?? item.EntryId;
+              return (
+                <tr key={id}>
+                  <td><strong>{item.horseName ?? item.HorseName ?? "N/A"}</strong></td>
+                  <td>{item.ownerName ?? item.OwnerName ?? "-"}</td>
+                  <td>{item.jockeyName ?? item.JockeyName ?? "Chưa có"}</td>
+                  <td>{item.tournamentName ?? item.TournamentName ?? "-"}</td>
+                  <td>{item.raceName ?? item.RaceName ?? "-"}</td>
+                  <td><span className="status status--pending">Chờ duyệt</span></td>
+                  <td>
+                    <div className="admin-actions">
+                      <button onClick={() => approveEntry(item)}>Phê duyệt</button>
+                      <button className="admin-danger" onClick={() => rejectEntry(item)}>Từ chối</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {filteredEntries.length === 0 && (
+              <tr><td colSpan={7}>Không có đăng ký ngựa nào đang chờ duyệt.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
       {modal}
     </>

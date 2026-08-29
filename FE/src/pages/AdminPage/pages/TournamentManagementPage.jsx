@@ -128,7 +128,7 @@ export default function TournamentManagementPage() {
   const [showPrizeCta, setShowPrizeCta] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
+  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), registrationDeadline: inputDate(6), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
   const isDraft = canEditTournamentStructure(editingStatus);
 
   const load = () => {
@@ -176,6 +176,7 @@ export default function TournamentManagementPage() {
       if (!isPublished) {
         payload.startDate = vnInputToApiUtc(form.startDate);
         payload.endDate = vnInputToApiUtc(form.endDate);
+        payload.registrationDeadline = vnInputToApiUtc(form.registrationDeadline);   // ADD
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
       }
@@ -206,6 +207,7 @@ export default function TournamentManagementPage() {
       description: item.description ?? item.Description ?? "",
       startDate: apiToVNInput(item.startDate ?? item.StartDate),
       endDate: apiToVNInput(item.endDate ?? item.EndDate),
+      registrationDeadline: apiToVNInput(item.registrationDeadline ?? item.RegistrationDeadline), // ADD
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
       minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
       maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
@@ -219,22 +221,24 @@ export default function TournamentManagementPage() {
     try { await deleteTournament(id); setMessage("Đã xóa giải đấu."); load(); } catch (err) { setMessage(err.message); }
   };
 
-  const viewT = (item) => setSelectedT(item);
+  const viewT = (item) => { setMessage(""); setSelectedT(item); };
 
   // TournamentStatus.Cancelled backend enum value (BE/Models/Enums.cs) — NextTransitionDto.Status
   // serializes as the raw int (no global string enum converter).
   const CANCELLED_STATUS = 4;
 
+  const [cancellingTournamentId, setCancellingTournamentId] = useState(null);
+  const [cancelReasonText, setCancelReasonText] = useState("");
+
   const changeStatus = async (id, newStatus) => {
     setShowPrizeCta(false);
+    if (newStatus === CANCELLED_STATUS) {
+      setCancellingTournamentId(id);
+      setCancelReasonText("");
+      return;
+    }
     try {
       const body = { newStatus };
-      if (newStatus === CANCELLED_STATUS) {
-        const reason = window.prompt("Nhập lý do hủy giải đấu:");
-        if (reason === null) return; // dismissed — do not call the API
-        if (!reason.trim()) { setMessage("Lý do hủy giải đấu không được để trống."); return; }
-        body.reason = reason.trim();
-      }
       await request(`/api/tournaments/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -244,10 +248,29 @@ export default function TournamentManagementPage() {
       load();
     } catch (err) {
       setMessage(err.message);
-      // Backend authoritative validation is the only source of truth here — this is purely a
-      // text-match on its own Vietnamese error strings ("giải thưởng" appears in every Prize
-      // readiness message), not a redecided business rule.
       setShowPrizeCta(typeof err.message === "string" && err.message.includes("giải thưởng"));
+    }
+  };
+
+  const confirmCancelTournament = async () => {
+    if (!cancellingTournamentId) return;
+    const reasonStr = cancelReasonText.trim();
+    if (!reasonStr) {
+      alert("Lý do hủy giải đấu không được để trống.");
+      return;
+    }
+    const id = cancellingTournamentId;
+    try {
+      await request(`/api/tournaments/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newStatus: CANCELLED_STATUS, reason: reasonStr }),
+      });
+      setMessage("Đã hủy giải đấu.");
+      setCancellingTournamentId(null);
+      load();
+    } catch (err) {
+      setMessage(err.message);
     }
   };
 
@@ -255,7 +278,8 @@ export default function TournamentManagementPage() {
     return (
       <TournamentDetail
         t={selectedT}
-        onBack={() => setSelectedT(null)}
+        onBack={() => { setMessage(""); setSelectedT(null); }}
+        message={message}          // ADD
         setMessage={setMessage}
         getTournamentRaces={getTournamentRaces}
         getTournamentRounds={getTournamentRounds}
@@ -303,6 +327,10 @@ export default function TournamentManagementPage() {
         <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
           Thời gian kết thúc *
           <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        </label>
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Hạn đăng ký ngựa *
+          <input type="datetime-local" required value={form.registrationDeadline} onChange={(e) => setForm({ ...form, registrationDeadline: e.target.value })} min={inputDate(0)} max={form.startDate} disabled={editingStatus === 1} />
         </label>
         {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
         <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
@@ -356,6 +384,40 @@ export default function TournamentManagementPage() {
           </div>
         )}
       </section>
+
+      {cancellingTournamentId && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Hủy Giải Đấu</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Vui lòng nhập rõ lý do hủy giải đấu này:
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập lý do hủy giải đấu..."
+              value={cancelReasonText}
+              onChange={(e) => setCancelReasonText(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setCancellingTournamentId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmCancelTournament}
+              >
+                Xác nhận hủy giải
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

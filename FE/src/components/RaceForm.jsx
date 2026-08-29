@@ -85,8 +85,10 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
 
   const loadReferees = async () => {
     try {
-      const list = await request("/api/referees");
-      setReferees(Array.isArray(list) ? list : list?.data ?? []);
+      // /active already drops referees with a Confirmed assignment in any Ongoing tournament.
+      const list = await request("/api/referees/active");
+      const available = Array.isArray(list) ? list : list?.data ?? [];
+      setReferees(available);
     } catch { /* empty */ }
   };
 
@@ -406,7 +408,9 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:6,color:"var(--hr-text)"}}>Trọng tài ({selectedRefereeIds.length})</label>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",gap:8,maxHeight:180,overflowY:"auto",padding:8,border:"1px solid var(--hr-border-soft)",borderRadius:8}}>
-              {referees.map((r) => {
+              {referees.length === 0 ? (
+                <p style={{margin:0,fontSize:12,color:"var(--hr-muted)"}}>Không có trọng tài khả dụng.</p>
+              ) : referees.map((r) => {
                 const id = r.id || r.Id;
                 const checked = selectedRefereeIds.includes(id);
                 return (
@@ -417,7 +421,7 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
                 );
               })}
             </div>
-            <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Chọn trọng tài phụ trách cuộc đua.</p>
+            <p style={{margin:"4px 0 0",fontSize:12,color:"var(--hr-muted)"}}>Chọn trọng tài phụ trách cuộc đua. Trọng tài đã xác nhận phân công trong giải đang diễn ra sẽ không hiển thị.</p>
           </div>
 
           <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:24,paddingTop:16,borderTop:"1px solid var(--hr-border-soft)"}}>

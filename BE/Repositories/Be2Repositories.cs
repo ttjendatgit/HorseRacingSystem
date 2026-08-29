@@ -275,6 +275,20 @@ public class RefereeAssignmentRepository : IRefereeAssignmentRepository
             .ToListAsync();
     }
 
+    // A Confirmed assignment in any Ongoing tournament locks the referee out of new admin
+    // assignment pickers until that tournament leaves Ongoing (Finished/Cancelled).
+    public async Task<List<Guid>> GetRefereeIdsConfirmedInOngoingTournamentsAsync()
+    {
+        return await _context.Set<RefereeAssignment>()
+            .Where(a => a.Status == RefereeAssignmentStatus.Confirmed
+                     && a.Race != null
+                     && a.Race.Tournament != null
+                     && a.Race.Tournament.Status == TournamentStatus.Ongoing)
+            .Select(a => a.RefereeId)
+            .Distinct()
+            .ToListAsync();
+    }
+
     public async Task AddAsync(RefereeAssignment assignment)
     {
         await _context.Set<RefereeAssignment>().AddAsync(assignment);

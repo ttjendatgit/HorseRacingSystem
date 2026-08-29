@@ -109,8 +109,10 @@ public class RefereeService : IRefereeService
         try
         {
             var referees = await _refereeRepo.GetActiveAsync();
+            var lockedIds = (await _assignmentRepo.GetRefereeIdsConfirmedInOngoingTournamentsAsync())
+                .ToHashSet();
             return ServiceResult<IEnumerable<RefereeResponse>>.Ok(
-                referees.Select(MapToResponse));
+                referees.Where(r => !lockedIds.Contains(r.Id)).Select(MapToResponse));
         }
         catch (Exception ex)
         {
@@ -179,6 +181,13 @@ public class RefereeService : IRefereeService
             if (referee == null)
             {
                 return ServiceResult<RefereeAssignmentResponse>.Fail(404, "Không tìm thấy trọng tài");
+            }
+
+            var lockedIds = await _assignmentRepo.GetRefereeIdsConfirmedInOngoingTournamentsAsync();
+            if (lockedIds.Contains(request.RefereeId))
+            {
+                return ServiceResult<RefereeAssignmentResponse>.Fail(409,
+                    "Trọng tài này đang có phân công đã xác nhận trong một giải đấu đang diễn ra.");
             }
 
             var assignment = new RefereeAssignment

@@ -84,21 +84,27 @@ export default function HorseManagementPage() {
     }
   };
 
-  const handleReject = async (h) => {
+  const [rejectingHorse, setRejectingHorse] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
+
+  const handleReject = (h) => {
+    setRejectingHorse(h);
+    setRejectNote("");
+  };
+
+  const confirmRejectHorse = async () => {
+    if (!rejectingHorse) return;
+    const h = rejectingHorse;
     const id = h.id || h.Id;
     const ownerUserId = h.owner?.userId ?? h.Owner?.UserId;
     if (!ownerUserId) { setMessage("Không tìm thấy chủ sở hữu của ngựa này."); return; }
-    // Task C1 UI correction §4: reusing the same window.prompt pattern as the existing Owner
-    // Detail approval flow, but the note itself is optional here — Cancel aborts, an empty
-    // confirmed prompt still proceeds with no note.
-    const promptResult = window.prompt("Nhập lý do từ chối (không bắt buộc):", "");
-    if (promptResult === null) return;
-    const note = promptResult.trim() || null;
+    const note = rejectNote.trim() || null;
     setActingId(id);
     setMessage("");
     try {
       await updateOwnerHorseStatus(ownerUserId, id, { status: "Rejected", note });
       setMessage(`${h.name || h.Name} đã bị từ chối.`);
+      setRejectingHorse(null);
       await loadHorses();
     } catch (err) {
       setMessage(err.message || "Không thể từ chối ngựa.");
@@ -217,6 +223,41 @@ export default function HorseManagementPage() {
             })}
           </tbody>
         </table>
+        </div>
+      )}
+
+      {rejectingHorse && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--hr-surface, #1e293b)", border: "1px solid var(--hr-border, #334155)", borderRadius: 12, padding: 20, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--hr-paper, #f8fafc)", fontSize: 16 }}>❌ Từ Chối Phê Duyệt Ngựa Đua</h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--hr-muted, #94a3b8)" }}>
+              Nhập lý do từ chối chiến mã <strong>{rejectingHorse.name || rejectingHorse.Name}</strong> (không bắt buộc):
+            </p>
+            <textarea
+              style={{ width: "100%", height: 90, padding: 10, borderRadius: 8, border: "1px solid var(--hr-border, #475569)", background: "var(--hr-bg-deep, #0f172a)", color: "#f8fafc", fontSize: 13, resize: "none" }}
+              placeholder="Nhập ghi chú từ chối tại đây..."
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ padding: "6px 14px", fontSize: 12 }}
+                onClick={() => setRejectingHorse(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                onClick={confirmRejectHorse}
+                disabled={actingId !== ""}
+              >
+                {actingId ? "..." : "Xác nhận từ chối"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
