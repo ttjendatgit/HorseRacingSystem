@@ -57,15 +57,15 @@ public class WalletService : IWalletService
         return ServiceResult<object>.Ok(new { balance = wallet!.Balance, addedVnd = amountVnd, addedPoints = points, pointsPerVnd = _pointsPerVnd });
     }
 
-    /// <summary>Cộng điểm trực tiếp (thắng cược, hoàn tiền)</summary>
+    /// <summary>Cộng điểm trực tiếp (thắng cược, hoàn tiền, trao thưởng)</summary>
     public async Task<ServiceResult<object>> AddPointsAsync(Guid userId, decimal points, string reference)
     {
         if (points <= 0)
             return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Số điểm không hợp lệ.");
 
-        var wallet = await _walletRepo.GetByUserIdAsync(userId);
+        var wallet = await GetOrCreateWalletAsync(userId);
         if (wallet == null)
-            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Chỉ khán giả mới có ví để giao dịch.");
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Chỉ Khán giả hoặc Chủ ngựa mới có ví để giao dịch.");
 
         var updated = await _walletRepo.AddBalanceAsync(userId, points);
         if (!updated)
@@ -117,7 +117,7 @@ public class WalletService : IWalletService
     public decimal GetPointsPerVnd() => _pointsPerVnd;
 
     /// <summary>
-    /// Lấy ví hiện tại của người dùng hoặc tự động tạo mới ví nếu là tài khoản Khán giả.
+    /// Lấy ví hiện tại của người dùng hoặc tự động tạo mới ví nếu là tài khoản Khán giả hoặc Chủ ngựa.
     /// </summary>
     /// <param name="userId">Mã định danh người dùng.</param>
     /// <returns>Đối tượng ví giao dịch của người dùng.</returns>
@@ -127,7 +127,7 @@ public class WalletService : IWalletService
         if (wallet != null) return wallet;
 
         var user = await _userRepo.GetByIdAsync(userId);
-        if (user == null || user.Role != UserRole.Spectator)
+        if (user == null || user.Role is not (UserRole.Spectator or UserRole.HorseOwner))
             return null;
 
         wallet = new Wallet

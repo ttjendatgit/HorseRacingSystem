@@ -1448,6 +1448,45 @@ public class Q1QualificationTests
     }
 
     [Fact]
+    public async Task DistributeAsync_OwnerHasNoWalletYet_AutoCreatesWalletAndCreditsCorrectly()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 100, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 5, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        await FinishRaceOfficialAsync(f, raceId, refereeId, new List<Guid> { h1 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var ownerUserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        // Deliberately NOT calling AddWalletAsync here — the whole point of this test is that the
+        // Owner has never had a Wallet row before. WalletService.GetOrCreateWalletAsync must now
+        // auto-create one for UserRole.HorseOwner (previously Spectator-only), reached through
+        // AddPointsAsync (also previously a hard read-and-fail-if-null).
+        Assert.False(await f.Db.Wallets.AsNoTracking().AnyAsync(w => w.UserId == ownerUserId));
+
+        var distribute = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(distribute.Result.Success, distribute.Result.Message);
+        var dto = distribute.Result.Data!;
+
+        Assert.Single(dto.Distributed);
+        Assert.Empty(dto.Skipped);
+        Assert.Empty(dto.Errors);
+        Assert.Equal(1_000_000m, dto.Distributed[0].Amount);
+
+        var wallet = await f.Db.Wallets.AsNoTracking().SingleAsync(w => w.UserId == ownerUserId);
+        Assert.Equal(1_000_000m, wallet.Balance);
+    }
+
+    [Fact]
     public async Task DistributeAsync_CalledTwice_SecondCallDoesNotCreditWalletAgain()
     {
         await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
