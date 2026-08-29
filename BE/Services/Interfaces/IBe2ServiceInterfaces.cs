@@ -104,6 +104,7 @@ public interface IViolationRecordService
     Task<ServiceResult<ViolationResponse>> GetViolationAsync(Guid id);
     Task<ServiceResult<IEnumerable<ViolationResponse>>> GetRaceViolationsAsync(Guid raceId);
     Task<ServiceResult<IEnumerable<ViolationResponse>>> GetHorseViolationsAsync(Guid horseId);
+    Task<ServiceResult<bool>> DeleteViolationAsync(Guid id, Guid refereeUserId);
 }
 
 public interface IRaceReportService

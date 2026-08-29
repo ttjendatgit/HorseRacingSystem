@@ -261,6 +261,7 @@ public class ViolationRecordService : IViolationRecordService
     private readonly INotificationService _notificationService;
     private readonly IUserRepository _userRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IRefereeAssignmentRepository _assignmentRepo;
 
     public ViolationRecordService(
         IViolationRecordRepository violationRepo,
@@ -269,7 +270,8 @@ public class ViolationRecordService : IViolationRecordService
         IRefereeRepository refereeRepo,
         INotificationService notificationService,
         IUserRepository userRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IRefereeAssignmentRepository assignmentRepo)
     {
         _violationRepo = violationRepo;
         _raceRepo = raceRepo;
@@ -278,12 +280,18 @@ public class ViolationRecordService : IViolationRecordService
         _notificationService = notificationService;
         _userRepo = userRepo;
         _unitOfWork = unitOfWork;
+        _assignmentRepo = assignmentRepo;
     }
 
     public async Task<ServiceResult<ViolationResponse>> RecordViolationAsync(CreateViolationRequest request, Guid refereeUserId)
     {
         try
         {
+            if (!Enum.IsDefined(typeof(ViolationType), request.ViolationType))
+            {
+                return ServiceResult<ViolationResponse>.Error("Loại vi phạm không hợp lệ.", 400);
+            }
+
             // Resolve RaceEntryId from HorseId + RaceId
             var entry = await _entryRepo.GetByRaceAndHorseAsync(request.RaceId, request.HorseId);
             if (entry == null)
@@ -296,6 +304,13 @@ public class ViolationRecordService : IViolationRecordService
             if (referee == null)
             {
                 return ServiceResult<ViolationResponse>.Error("Không tìm thấy hồ sơ trọng tài", 404);
+            }
+
+            var assignments = await _assignmentRepo.GetByRefereeAsync(referee.Id);
+            var isAssigned = assignments.Any(a => a.RaceId == request.RaceId && a.Status == RefereeAssignmentStatus.Confirmed);
+            if (!isAssigned)
+            {
+                return ServiceResult<ViolationResponse>.Error("Từ chối truy cập: Bạn không được phân công giám sát cuộc đua này.", 403);
             }
 
             // R0.1: Violation is an in-race observation — authoritative
@@ -332,7 +347,8 @@ public class ViolationRecordService : IViolationRecordService
                 RecordedAt = DateTime.UtcNow,
                 Evidence = request.Evidence,
                 PenaltyType = request.PenaltyType,
-                PenaltyTimeSeconds = request.PenaltyType == "TimePenalty" ? request.PenaltyTimeSeconds : null
+                PenaltyTimeSeconds = request.PenaltyType == "TimePenalty" ? request.PenaltyTimeSeconds : null,
+                Severity = request.Severity
             };
 
             await _violationRepo.AddAsync(violation);
@@ -452,6 +468,33 @@ public class ViolationRecordService : IViolationRecordService
         }
     }
 
+    public async Task<ServiceResult<bool>> DeleteViolationAsync(Guid id, Guid refereeUserId)
+    {
+        try
+        {
+            var violation = await _violationRepo.GetByIdAsync(id);
+            if (violation == null)
+            {
+                return ServiceResult<bool>.Error("Không tìm thấy biên bản vi phạm", 404);
+            }
+
+            var race = await _raceRepo.GetByIdAsync(violation.RaceId);
+            if (race != null && race.Status == RaceStatus.Finished && race.Result != null && race.Result.Status == RaceResultStatus.Official)
+            {
+                return ServiceResult<bool>.Error("Không thể xóa biên bản khi kết quả cuộc đua đã chính thức.", 400);
+            }
+
+            await _violationRepo.DeleteAsync(id);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ServiceResult<bool>.Success(true);
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<bool>.Error($"Lỗi xóa biên bản vi phạm: {ex.Message}", 500);
+        }
+    }
+
     private ViolationResponse MapToResponse(ViolationRecord v, Race? race, RaceEntry? entry, Referee? referee)
     {
         return new ViolationResponse
@@ -469,7 +512,8 @@ public class ViolationRecordService : IViolationRecordService
             RecordedAt = v.RecordedAt,
             Evidence = v.Evidence,
             PenaltyType = v.PenaltyType,
-            PenaltyTimeSeconds = v.PenaltyTimeSeconds
+            PenaltyTimeSeconds = v.PenaltyTimeSeconds,
+            Severity = v.Severity
         };
     }
 }

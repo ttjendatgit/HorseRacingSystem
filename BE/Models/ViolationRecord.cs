@@ -41,4 +41,5 @@ public class ViolationRecord
     public string? PenaltyType { get; set; }
 
     public int? PenaltyTimeSeconds { get; set; }
+    public string? Severity { get; set; }
 }

@@ -223,3 +223,15 @@ export function submitRaceResult(raceId, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+/**
+ * [ROLE: Trọng Tài / Referee]
+ * Xóa một biên bản vi phạm thi đấu (khi kết quả chưa chính thức).
+ * Endpoint: DELETE /api/referees/violations/{id}
+ * @param {string} id - Mã GUID biên bản vi phạm
+ */
+export function deleteViolation(id) {
+  return request(`/api/referees/violations/${id}`, {
+    method: "DELETE",
+  });
+}

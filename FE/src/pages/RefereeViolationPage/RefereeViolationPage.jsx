@@ -3,6 +3,7 @@ import {
   getRaceEntries,
   getRaceViolations,
   recordViolation,
+  deleteViolation,
 } from "../../services/refereeApi";
 import { getMyAssignments } from "../../services/refereeAssignmentApi";
 import { isViolationResolved } from "../../utils/violationResolution";
@@ -31,11 +32,6 @@ const PENALTY_TYPES = [
   { value: "TimePenalty", label: "Phạt thời gian (+ giây)" },
   { value: "DSQ", label: "Loại khỏi cuộc đua" },
 ];
-
-const STATUS_MAP = {
-  Pending: "Chờ xử lý",
-  Resolved: "Đã xử lý",
-};
 
 function getBadgeKey(typeValue) {
   const found = VIOLATION_TYPES.find((t) => t.value === typeValue);
@@ -227,6 +223,20 @@ function RefereeViolationPage() {
       setError(e?.message || "Không thể ghi nhận vi phạm.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /* ---------- DELETE VIOLATION ---------- */
+  const handleDeleteViolation = async (violationId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa biên bản vi phạm này để làm lại?")) return;
+    setError("");
+    setSuccess("");
+    try {
+      await deleteViolation(violationId);
+      setSuccess("Đã xóa vi phạm thành công.");
+      loadViolations(selectedRaceId);
+    } catch (e) {
+      setError(e?.message || "Không thể xóa vi phạm. Kết quả có thể đã chính thức.");
     }
   };
 
@@ -557,15 +567,23 @@ function RefereeViolationPage() {
                             ? new Date(v.createdAt).toLocaleString("vi-VN")
                             : ""}
                         </span>
-                        {isViolationResolved(v) ? (
-                          <span className="rv-badge rv-badge--status-resolved">
-                            {STATUS_MAP.Resolved}
-                          </span>
-                        ) : (
-                          <span className="rv-badge rv-badge--status-pending">
-                            {STATUS_MAP.Pending}
-                          </span>
-                        )}
+                        
+                        <button 
+                          type="button"
+                          onClick={() => handleDeleteViolation(v.id || v.Id)}
+                          style={{
+                            padding: "4px 10px", 
+                            fontSize: "12px", 
+                            borderRadius: "4px", 
+                            border: "1px solid rgba(201,105,90,.4)", 
+                            background: "rgba(201,105,90,.1)", 
+                            color: "var(--hr-danger, #e57373)", 
+                            cursor: "pointer",
+                            fontWeight: "600"
+                          }}
+                        >
+                          Xóa vi phạm
+                        </button>
                       </div>
                     </div>
                   ))}

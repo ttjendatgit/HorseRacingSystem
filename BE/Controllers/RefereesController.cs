@@ -147,13 +147,28 @@ public class RefereesController : ControllerBase
     /// <summary>
     /// Trọng tài xác nhận tiếp nhận phân công nhiệm vụ trận đua.
     /// </summary>
-    /// <param name="assignmentId">Mã GUID bản ghi phân công.</param>
-    /// <param name="r">Yêu cầu xác nhận phân công.</param>
-    /// <returns>Kết quả xác nhận phân công.</returns>
     [HttpPost("assignments/{assignmentId:guid}/confirm")]
     [Authorize(Roles = "Referee")]
     public async Task<ActionResult> Confirm(Guid assignmentId, [FromBody] ConfirmRefereeAssignmentRequest r)
     {
+        var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (uid is null || !Guid.TryParse(uid, out var userId))
+            return Unauthorized(new { message = "Token không hợp lệ" });
+
+        var referee = await _refereeRepo.GetByUserIdAsync(userId);
+        if (referee is null)
+            return NotFound(new { message = "Không tìm thấy hồ sơ trọng tài" });
+
+        var assignment = await _assignmentRepo.GetByIdAsync(assignmentId);
+        if (assignment is null)
+            return NotFound(new { message = "Không tìm thấy phân công trọng tài." });
+
+        if (assignment.RefereeId != referee.Id)
+            return StatusCode(403, new { message = "Từ chối truy cập: Không thể xác nhận phân công của trọng tài khác." });
+
+        if (assignment.Status != RefereeAssignmentStatus.Assigned)
+            return BadRequest(new { message = "Phân công này đã được xử lý trước đó hoặc không hợp lệ." });
+
         r.AssignmentId = assignmentId;
         return OkR(await _refereeService.ConfirmAssignmentAsync(r));
     }
