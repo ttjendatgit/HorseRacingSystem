@@ -17,6 +17,8 @@ public interface ITournamentRepository
     /// </summary>
     Task<List<Tournament>> GetAllWithRacesAsync();
 
+    Task<Tournament?> GetWithFullRoundsAndResultsAsync(Guid id);
+
     /// <summary>
     /// Lấy danh sách tất cả các giải đấu trong cơ sở dữ liệu.
     /// </summary>

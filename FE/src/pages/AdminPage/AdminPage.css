@@ -1491,6 +1491,61 @@
   overflow-wrap: break-word;
 }
 
+/* PRIZE-V2 (Phase 4): manual "Trao thưởng" trigger bar (Finished Tournament only) + the
+   confirm/result RaceModalShell popups reused from TournamentDetailPage's convention. */
+.pm-distribute-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--hr-border);
+  background: rgba(184,134,59,0.06);
+}
+.pm-distribute-bar p {
+  margin: 0;
+  max-width: 560px;
+}
+
+.pm-distribute-result {
+  display: grid;
+  gap: 18px;
+}
+.pm-distribute-result h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--hr-paper);
+}
+.pm-distribute-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.pm-distribute-list li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(112,139,104,0.12);
+  border: 1px solid rgba(112,139,104,0.24);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pm-distribute-list--skipped li {
+  background: rgba(185,138,69,0.12);
+  border-color: rgba(185,138,69,0.28);
+}
+.pm-distribute-list--error li {
+  background: rgba(201,105,90,0.12);
+  border-color: rgba(201,105,90,0.28);
+  color: var(--hr-danger);
+}
+
 /* Race Results: compact operational view */
 .rr-page {
   width: 100%;

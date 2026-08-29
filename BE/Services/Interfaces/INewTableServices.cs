@@ -15,6 +15,10 @@ public interface IPrizeService
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetByRaceAsync(Guid raceId);
     Task<ServiceResult<IEnumerable<PrizeResponse>>> GetAllAsync();
     Task<ServiceResult<bool>> DeleteAsync(Guid id);
+
+    // Manual, Admin-triggered payout of already-computed Prize.Amount rows to the Owner standing
+    // at each Position in the Tournament's final standings (RaceService.GetFinalStandingsAsync).
+    Task<ServiceResult<PrizeDistributionResultDto>> DistributeAsync(Guid tournamentId);
 }
 
 public interface IProtestService

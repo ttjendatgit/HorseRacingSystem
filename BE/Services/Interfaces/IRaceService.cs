@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using HorseRacing.Dtos;
 
 namespace HorseRacing.Services.Interfaces;
 
@@ -12,4 +13,8 @@ public interface IRaceService
 
     // Race Registration Management
     Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId);
+
+    // Q2 (Phase 2, read-only): Tournament-level final standings, derived from whichever Round
+    // actually decided the Tournament (Final, or an earlier walkover/void Round).
+    Task<ServiceResult<FinalStandingsDto>> GetFinalStandingsAsync(Guid tournamentId);
 }

@@ -131,6 +131,42 @@ public class NextTransitionDto
     public bool IsPrimary { get; set; }
 }
 
+/// <summary>
+/// Read-only "kết quả chung cuộc" of a Tournament — Position→Horse for the Round that actually
+/// decided the Tournament (the Final, or an earlier Round if walkover/void ended it early).
+/// Never derived while the Tournament is still Draft/Published/Ongoing.
+/// </summary>
+public class FinalStandingsDto
+{
+    public Guid TournamentId { get; set; }
+    public bool IsFinal { get; set; }
+    public bool IsVoid { get; set; }
+    public string? VoidReason { get; set; }
+    public bool IsWalkover { get; set; }
+    public int? DecidingRoundNumber { get; set; }
+    /// <summary>True when the deciding Round has more than 1 Race Finished+Official — no
+    /// business rule exists yet for merging multiple parallel Races into one ranking, so
+    /// Standings is deliberately left null instead of guessing (see Message for detail).</summary>
+    public bool RequiresManualReview { get; set; }
+    /// <summary>Human-readable explanation for the "chưa kết thúc" / RequiresManualReview cases.</summary>
+    public string? Message { get; set; }
+    public List<StandingEntryDto>? Standings { get; set; }
+}
+
+public class StandingEntryDto
+{
+    public int Position { get; set; }
+    public Guid HorseId { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public Guid? JockeyId { get; set; }
+    public string? JockeyName { get; set; }
+    public Guid? OwnerId { get; set; }
+    public string? OwnerName { get; set; }
+    /// <summary>Owner's User.Id (wallet identity) — distinct from OwnerId (Owner.Id, the Owners
+    /// table PK). Needed by prize distribution (IWalletService.AddPointsAsync takes User.Id).</summary>
+    public Guid? OwnerUserId { get; set; }
+}
+
 // Round DTOs
 public class CreateRoundRequest
 {

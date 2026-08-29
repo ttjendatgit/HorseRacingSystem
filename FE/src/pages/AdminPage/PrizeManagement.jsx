@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { getPrizesByTournament, createPrize, updatePrize, deletePrize } from "../../services/managementApi";
+import { getPrizesByTournament, createPrize, updatePrize, deletePrize, distributePrizes } from "../../services/managementApi";
 import { getAdminTournaments } from "../../services/adminApi";
 import { getRoundsByTournament } from "../../services/spectatorApi";
+import { RaceButton, RaceModalShell } from "../../components/ui/RaceUi";
 import {
   isTournamentDraftEditable,
+  isTournamentFinished,
   sortPrizesByPosition,
   computeAllocatedTotal,
   computeRemainingBudget,
@@ -125,6 +127,9 @@ export function PrizeManagement() {
   const [msg, setMsg] = useState("");
   const [msgIsError, setMsgIsError] = useState(false);
   const [modal, setModal] = useState(null); // { mode: "create" | "edit", prize? }
+  const [confirmDistribute, setConfirmDistribute] = useState(false);
+  const [distributing, setDistributing] = useState(false);
+  const [distributeResult, setDistributeResult] = useState(null); // { distributed, skipped, errors } | { error }
 
   useEffect(() => {
     getAdminTournaments()
@@ -138,6 +143,7 @@ export function PrizeManagement() {
   );
   const prizePool = tournament?.prizePool ?? tournament?.PrizePool ?? 0;
   const draftEditable = isTournamentDraftEditable(tournament);
+  const finished = isTournamentFinished(tournament);
   // PRIZE-V1.1 PART 1/5: PlannedFinalParticipants — the max valid Prize.Position for this
   // Tournament, needed for both the "Có thể trao thưởng đến" card and the form's Position bound.
   const plannedFinalParticipants = useMemo(
@@ -204,6 +210,25 @@ export function PrizeManagement() {
     }
   };
 
+  // PRIZE-V2 (Phase 4): moves real money into Owner wallets — always behind the confirm popup
+  // below, never triggered by anything else (no auto-run on Tournament->Finished).
+  const runDistribute = async () => {
+    setDistributing(true);
+    try {
+      const result = await distributePrizes(tournamentId);
+      setDistributeResult({
+        distributed: result?.distributed ?? result?.Distributed ?? [],
+        skipped: result?.skipped ?? result?.Skipped ?? [],
+        errors: result?.errors ?? result?.Errors ?? [],
+      });
+    } catch (e) {
+      setDistributeResult({ error: e.message });
+    } finally {
+      setDistributing(false);
+      setConfirmDistribute(false);
+    }
+  };
+
   return (
     <div>
       <h2>Quản lý giải thưởng</h2>
@@ -262,10 +287,22 @@ export function PrizeManagement() {
             Bạn có thể chọn trao thưởng Top 1, Top 3, Top 5... miễn không vượt quá số người dự kiến vào Vòng chung kết.
           </p>
 
-          {!draftEditable && (
+          {!draftEditable && !finished && (
             <p className="admin-notice" style={{ marginBottom: 16 }}>
               Cơ cấu giải thưởng đã được khóa sau khi giải đấu được công bố.
             </p>
+          )}
+
+          {finished && (
+            <div className="pm-distribute-bar">
+              <p className="admin-notice" style={{ marginBottom: 0 }}>
+                Giải đấu đã kết thúc — cơ cấu giải thưởng đã khóa. Trao thưởng sẽ cộng tiền vào ví
+                Chủ ngựa đứng đúng thứ hạng chung cuộc theo số tiền đã tính sẵn cho mỗi Hạng.
+              </p>
+              <RaceButton onClick={() => setConfirmDistribute(true)} disabled={sorted.length === 0}>
+                Trao thưởng
+              </RaceButton>
+            </div>
           )}
 
           {draftEditable && (
@@ -360,6 +397,102 @@ export function PrizeManagement() {
           onCancel={() => setModal(null)}
           onSubmit={(values) => submitEdit(modal.prize.id ?? modal.prize.Id, values)}
         />
+      )}
+
+      {confirmDistribute && (
+        <RaceModalShell
+          title="Xác nhận trao thưởng"
+          description="Hành động này sẽ cộng tiền thật vào ví các Chủ ngựa đoạt giải."
+          onClose={() => (distributing ? null : setConfirmDistribute(false))}
+          footer={
+            <>
+              <RaceButton variant="ghost" onClick={() => setConfirmDistribute(false)} disabled={distributing}>
+                Hủy
+              </RaceButton>
+              <RaceButton onClick={runDistribute} loading={distributing}>
+                Xác nhận trao thưởng
+              </RaceButton>
+            </>
+          }
+        >
+          <p>
+            Đây là hành động <strong>không thể hoàn tác qua giao diện</strong>. Số tiền của từng Hạng thưởng
+            (đã tính sẵn theo cơ cấu đã cấu hình) sẽ được cộng thẳng vào ví của Chủ ngựa đang đứng đúng thứ
+            hạng chung cuộc tương ứng. Vui lòng kiểm tra kỹ cơ cấu giải thưởng trước khi xác nhận.
+          </p>
+        </RaceModalShell>
+      )}
+
+      {distributeResult && (
+        <RaceModalShell
+          title={distributeResult.error ? "Trao thưởng thất bại" : "Kết quả trao thưởng"}
+          description={distributeResult.error ? undefined : "Chi tiết từng Hạng thưởng sau khi xử lý."}
+          onClose={() => setDistributeResult(null)}
+          className={distributeResult.error ? "pm-distribute-modal pm-distribute-modal--danger" : "pm-distribute-modal"}
+          footer={<RaceButton onClick={() => setDistributeResult(null)}>Đã hiểu</RaceButton>}
+        >
+          {distributeResult.error ? (
+            <p>{distributeResult.error}</p>
+          ) : (
+            <div className="pm-distribute-result">
+              <section>
+                <h4>Đã trao ({distributeResult.distributed.length})</h4>
+                {distributeResult.distributed.length === 0 ? (
+                  <p className="muted">Không có Hạng thưởng nào được trao trong lần này.</p>
+                ) : (
+                  <ul className="pm-distribute-list">
+                    {distributeResult.distributed.map((d, i) => {
+                      const position = d.position ?? d.Position;
+                      const horseName = d.horseName ?? d.HorseName;
+                      const ownerName = d.ownerName ?? d.OwnerName;
+                      const amount = d.amount ?? d.Amount;
+                      return (
+                        <li key={`d-${position}-${i}`}>
+                          <strong>Hạng {position}</strong> — {ownerName || "Chưa rõ Chủ ngựa"} (ngựa {horseName}
+                          ): {formatVndCurrency(amount)}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              {distributeResult.skipped.length > 0 && (
+                <section>
+                  <h4>Bỏ qua ({distributeResult.skipped.length})</h4>
+                  <ul className="pm-distribute-list pm-distribute-list--skipped">
+                    {distributeResult.skipped.map((s, i) => {
+                      const position = s.position ?? s.Position;
+                      const reason = s.reason ?? s.Reason;
+                      return (
+                        <li key={`s-${position}-${i}`}>
+                          <strong>Hạng {position}</strong> — {reason}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {distributeResult.errors.length > 0 && (
+                <section>
+                  <h4>Lỗi ({distributeResult.errors.length})</h4>
+                  <ul className="pm-distribute-list pm-distribute-list--error">
+                    {distributeResult.errors.map((er, i) => {
+                      const position = er.position ?? er.Position;
+                      const reason = er.reason ?? er.Reason;
+                      return (
+                        <li key={`e-${position}-${i}`}>
+                          <strong>Hạng {position}</strong> — {reason}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+            </div>
+          )}
+        </RaceModalShell>
       )}
     </div>
   );

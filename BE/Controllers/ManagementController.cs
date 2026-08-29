@@ -22,10 +22,11 @@ public class ManagementController : ControllerBase
     private readonly IContractService _contract;
     private readonly IInjuryRecordService _injury;
     private readonly ITournamentService _tournament;
+    private readonly IRaceService _race;
 
-    public ManagementController(IPrizeService prize, IProtestService protest, IRaceComplaintService raceComplaint, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury, ITournamentService tournament)
+    public ManagementController(IPrizeService prize, IProtestService protest, IRaceComplaintService raceComplaint, IHorseTransferService transfer, IContractService contract, IInjuryRecordService injury, ITournamentService tournament, IRaceService race)
     {
-        _prize = prize; _protest = protest; _raceComplaint = raceComplaint; _transfer = transfer; _contract = contract; _injury = injury; _tournament = tournament;
+        _prize = prize; _protest = protest; _raceComplaint = raceComplaint; _transfer = transfer; _contract = contract; _injury = injury; _tournament = tournament; _race = race;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -50,6 +51,12 @@ public class ManagementController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> UpdatePrize(Guid id, UpdatePrizeRequest r)
         => OkR(await _prize.UpdateAsync(id, r));
+
+    // PRIZE-V2 (Phase 4): moves real money into Owner wallets — Admin-only, never AllowAnonymous.
+    [HttpPost("prizes/tournament/{tournamentId:guid}/distribute")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> DistributePrizes(Guid tournamentId)
+        => OkR(await _prize.DistributeAsync(tournamentId));
 
     // Cross-tournament listing has no legitimate anonymous use case (it would otherwise leak Draft
     // Prize rows for every Tournament at once) and nothing in the current frontend calls it —
@@ -76,6 +83,22 @@ public class ManagementController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> GetPrizesByRace(Guid rid)
         => OkR(await _prize.GetByRaceAsync(rid));
+
+    // ── Final Standings (read-only; same [AllowAnonymous] + Draft-hidden convention as
+    // GetPrizesByTournament above, since it is likewise Tournament-scoped) ──
+
+    [HttpGet("standings/tournament/{tid:guid}")]
+    [AllowAnonymous]
+    public async Task<ActionResult> GetFinalStandingsByTournament(Guid tid)
+    {
+        if (!IsAdminCaller())
+        {
+            var tournament = await _tournament.GetTournamentAsync(tid);
+            if (tournament.Result.Success && IsDraftTournament(tournament.Result.Data))
+                return NotFound(ApiResult<object>.Fail("Không tìm thấy giải đấu"));
+        }
+        return OkR(await _race.GetFinalStandingsAsync(tid));
+    }
 
     [HttpDelete("prizes/{id:guid}")]
     [Authorize(Roles = "Admin")]

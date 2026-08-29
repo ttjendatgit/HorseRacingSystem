@@ -29,7 +29,7 @@ namespace Tests;
 public class PrizeV1_1Tests
 {
     private static PrizeService MakePrizeService(RaceLifecycleTests.LifecycleFixture f)
-        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db);
+        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db, f.RaceSvc, f.FaultWallet);
 
     private static async Task PublishStatusOnlyAsync(RaceLifecycleTests.LifecycleFixture f, Guid tournamentId, TournamentStatus status)
     {
@@ -303,7 +303,7 @@ public class PrizeV1_1Tests
     {
         var controller = new ManagementController(
             MakePrizeService(f), new ThrowingProtestService(), new ThrowingRaceComplaintService(), new ThrowingTransferService(),
-            new ThrowingContractService(), new ThrowingInjuryService(), f.TournamentSvc);
+            new ThrowingContractService(), new ThrowingInjuryService(), f.TournamentSvc, f.RaceSvc);
 
         var httpContext = new DefaultHttpContext();
         if (role != null)

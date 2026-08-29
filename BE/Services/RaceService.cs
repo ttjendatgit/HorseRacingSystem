@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
+using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -12,13 +13,15 @@ namespace HorseRacing.Services;
 public class RaceService : IRaceService
 {
     private readonly IRaceRepository _races;
+    private readonly IRaceEntryRepository _entries;
     private readonly IRaceResultRepository _results;
     private readonly ITournamentRepository _tournaments;
     private readonly IRaceManagementService _raceManagement;
 
-    public RaceService(IRaceRepository races, IRaceResultRepository results, ITournamentRepository tournaments, IRaceManagementService raceManagement)
+    public RaceService(IRaceRepository races, IRaceEntryRepository entries, IRaceResultRepository results, ITournamentRepository tournaments, IRaceManagementService raceManagement)
     {
         _races = races;
+        _entries = entries;
         _results = results;
         _tournaments = tournaments;
         _raceManagement = raceManagement;
@@ -183,5 +186,137 @@ public class RaceService : IRaceService
     public async Task<ServiceResult<bool>> ReleaseHorseAsync(Guid raceId, Guid horseId)
     {
         return await _raceManagement.ReleaseHorseAsync(raceId, horseId);
+    }
+
+    /// <summary>
+    /// Q2 (Phase 2, read-only): "Kết quả chung cuộc" của Tournament — Position→Horse của Round
+    /// thực sự quyết định giải (Final, hoặc 1 Round giữa chừng nếu walkover/void kết thúc giải
+    /// sớm). Chỉ đọc — không SaveChangesAsync, không đụng Prize/IsDistributed.
+    /// </summary>
+    public async Task<ServiceResult<FinalStandingsDto>> GetFinalStandingsAsync(Guid tournamentId)
+    {
+        var tournament = await _tournaments.GetWithFullRoundsAndResultsAsync(tournamentId);
+
+        if (tournament == null)
+        {
+            return ServiceResult<FinalStandingsDto>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy giải đấu");
+        }
+
+        switch (tournament.Status)
+        {
+            case TournamentStatus.Draft:
+            case TournamentStatus.Published:
+            case TournamentStatus.Ongoing:
+                return ServiceResult<FinalStandingsDto>.Ok(new FinalStandingsDto
+                {
+                    TournamentId = tournament.Id,
+                    IsFinal = false,
+                    Message = "Giải đấu chưa kết thúc."
+                });
+
+            case TournamentStatus.Cancelled:
+                // Void = giải coi như chưa từng diễn ra — kể cả khi có Round đã lỡ có RaceResult
+                // Official trước khi bị huỷ, vẫn không trả Standings nào. Quyết định thiết kế đã
+                // chốt, không phải bug.
+                return ServiceResult<FinalStandingsDto>.Ok(new FinalStandingsDto
+                {
+                    TournamentId = tournament.Id,
+                    IsFinal = true,
+                    IsVoid = true,
+                    VoidReason = tournament.CancellationReason
+                });
+
+            case TournamentStatus.Finished:
+                return await BuildFinishedStandingsAsync(tournament);
+
+            default:
+                return ServiceResult<FinalStandingsDto>.Fail(StatusCodes.Status500InternalServerError,
+                    $"Trạng thái giải đấu không xác định: {tournament.Status}.");
+        }
+    }
+
+    private async Task<ServiceResult<FinalStandingsDto>> BuildFinishedStandingsAsync(Tournament tournament)
+    {
+        // Vòng quyết định = Round có RoundNumber lớn nhất có ít nhất 1 Race Finished+Official.
+        // Duyệt giảm dần RoundNumber vì walkover/void có thể kết thúc giải sớm ở 1 Round giữa
+        // chừng — các Round sau đó (kể cả Final) không có Race nào Finished+Official (bị Cancelled).
+        var decidingRound = tournament.Rounds
+            .OrderByDescending(r => r.RoundNumber)
+            .FirstOrDefault(r => r.Races.Any(race =>
+                race.Status == RaceStatus.Finished && race.Result?.Status == RaceResultStatus.Official));
+
+        if (decidingRound == null)
+        {
+            return ServiceResult<FinalStandingsDto>.Fail(StatusCodes.Status409Conflict,
+                "Giải đấu đã kết thúc nhưng không tìm thấy Vòng đấu nào có kết quả chính thức — dữ liệu bất thường, cần kiểm tra lại.");
+        }
+
+        var decidingRaces = decidingRound.Races
+            .Where(race => race.Status == RaceStatus.Finished && race.Result?.Status == RaceResultStatus.Official)
+            .ToList();
+        var isWalkover = decidingRound.RoundNumber != tournament.MaxRounds;
+
+        if (decidingRaces.Count > 1)
+        {
+            // Đã xác nhận đây là tình huống THẬT có thể xảy ra ở 1 Round giữa chừng (không phải
+            // Final — Final luôn đúng 1 Race qua Publish thật). Không có quy tắc nghiệp vụ nào định
+            // nghĩa cách gộp nhiều Race song song thành 1 bảng xếp hạng — không tự bịa công thức
+            // (theo Position hay TimeTaken đều là suy đoán) — trả về yêu cầu review thủ công.
+            return ServiceResult<FinalStandingsDto>.Ok(new FinalStandingsDto
+            {
+                TournamentId = tournament.Id,
+                IsFinal = true,
+                IsVoid = false,
+                IsWalkover = isWalkover,
+                DecidingRoundNumber = decidingRound.RoundNumber,
+                RequiresManualReview = true,
+                Message = $"Vòng quyết định (Round {decidingRound.RoundNumber}) có {decidingRaces.Count} Race song song — hệ thống hiện chưa có quy tắc gộp bảng xếp hạng nhiều Race thành 1 kết quả chung cuộc, cần bổ sung thiết kế riêng trước khi hiển thị/trả thưởng cho trường hợp này."
+            });
+        }
+
+        var decidingRace = decidingRaces[0];
+
+        // Tái dùng chính xác logic parse RankingsJson + join Horse/Jockey của GetRaceResultAsync —
+        // không viết lại logic parse JSON ở đây.
+        var rankingResult = await GetRaceResultAsync(decidingRace.Id);
+        if (rankingResult.Result.Data is not RaceResultResponse raceResultResponse || raceResultResponse.Rankings == null)
+        {
+            return ServiceResult<FinalStandingsDto>.Fail(StatusCodes.Status409Conflict,
+                $"Không đọc được bảng xếp hạng của Cuộc đua quyết định (RaceId={decidingRace.Id}).");
+        }
+
+        // GetRaceResultAsync không trả OwnerId/OwnerName/JockeyId — bổ sung riêng bằng RaceEntry
+        // của đúng Race quyết định, không đụng/không viết lại phần parse RankingsJson ở trên.
+        var entries = await _entries.GetByRaceAsync(decidingRace.Id);
+        var entryByHorse = entries
+            .Where(e => e.Horse != null)
+            .ToDictionary(e => e.HorseId, e => e);
+
+        var standings = raceResultResponse.Rankings.Select(r =>
+        {
+            entryByHorse.TryGetValue(r.HorseId, out var entry);
+            return new StandingEntryDto
+            {
+                Position = r.Position,
+                HorseId = r.HorseId,
+                HorseName = r.HorseName ?? entry?.Horse?.Name ?? string.Empty,
+                JockeyId = entry?.JockeyId,
+                JockeyName = r.JockeyName,
+                OwnerId = entry?.Horse?.OwnerId,
+                OwnerName = entry?.Horse?.Owner?.User?.FullName,
+                OwnerUserId = entry?.Horse?.Owner?.User?.Id
+            };
+        }).ToList();
+
+        return ServiceResult<FinalStandingsDto>.Ok(new FinalStandingsDto
+        {
+            TournamentId = tournament.Id,
+            IsFinal = true,
+            IsVoid = false,
+            IsWalkover = isWalkover,
+            DecidingRoundNumber = decidingRound.RoundNumber,
+            RequiresManualReview = false,
+            Standings = standings
+        });
     }
 }

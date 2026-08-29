@@ -2,8 +2,10 @@
 // Prize.PercentageOfPool — Amount is entirely backend-derived (Tournament.PrizePool *
 // PercentageOfPool / 100) and never submitted by the client. Percentage is now the
 // source-of-truth allocation-completeness figure (SUM == 100% at Publish), not the Amount sum.
-// These helpers never touch IsDistributed/DistributedAt/RaceId, which stay hidden — no
-// payout/distribution workflow exists in this product.
+// PRIZE-V2 (Phase 4): isTournamentFinished below gates the manual "Trao thưởng" action
+// (managementApi.distributePrizes) — IsDistributed/DistributedAt/RaceId still stay hidden from
+// this allocation UI itself; distribution result (who got paid) is rendered from the API
+// response, never read back from these Prize rows.
 
 const STATUS_BY_NUMBER = { 0: "Draft", 1: "Published", 2: "Ongoing", 3: "Finished", 4: "Cancelled" };
 
@@ -39,6 +41,19 @@ export function normalizeTournamentStatus(rawStatus) {
 export function isTournamentDraftEditable(tournament) {
   const raw = tournament?.status ?? tournament?.Status ?? tournament?.statusName ?? tournament?.StatusName ?? null;
   return normalizeTournamentStatus(raw) === "Draft";
+}
+
+// PRIZE-V2 (Phase 4): "Trao thưởng" is only ever valid once the Tournament has actually
+// concluded — mirrors the BE gate in PrizeService.DistributeAsync (via
+// RaceService.GetFinalStandingsAsync), not a separate rule invented client-side.
+/**
+ * Kiểm tra giải đấu có ở trạng thái Đã kết thúc (Finished) để cho phép trao thưởng hay không.
+ * @param {Object} tournament - Thông tin đối tượng giải đấu.
+ * @returns {boolean} True nếu giải đấu ở trạng thái Đã kết thúc.
+ */
+export function isTournamentFinished(tournament) {
+  const raw = tournament?.status ?? tournament?.Status ?? tournament?.statusName ?? tournament?.StatusName ?? null;
+  return normalizeTournamentStatus(raw) === "Finished";
 }
 
 const toAmount = (prize) => Number(prize?.amount ?? prize?.Amount ?? 0) || 0;

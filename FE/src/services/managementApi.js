@@ -10,6 +10,10 @@ export const getPrizes = async () => unwrap(await request("/api/management/prize
 /** [ROLE: Admin / Spectator] Lấy danh sách giải thưởng theo ID giải đấu */
 export const getPrizesByTournament = async (id) => unwrap(await request(`/api/management/prizes/tournament/${id}`));
 
+/** [ROLE: Admin / Spectator] Lấy bảng xếp hạng chung cuộc theo ID giải đấu */
+export const getFinalStandingsByTournament = async (id) =>
+  unwrap(await request(`/api/management/standings/tournament/${id}`));
+
 /** [ROLE: Admin] Tạo mới giải thưởng cho giải đấu */
 export const createPrize = (p) => request("/api/management/prizes", { method: "POST", body: JSON.stringify(p) });
 
@@ -18,6 +22,10 @@ export const updatePrize = (id, p) => request(`/api/management/prizes/${id}`, { 
 
 /** [ROLE: Admin] Xóa giải thưởng giải đấu */
 export const deletePrize = (id) => request(`/api/management/prizes/${id}`, { method: "DELETE" });
+
+/** [ROLE: Admin] Trao thưởng thủ công — cộng tiền thật vào ví các Chủ ngựa đoạt giải theo thứ hạng chung cuộc */
+export const distributePrizes = async (tournamentId) =>
+  unwrap(await request(`/api/management/prizes/tournament/${tournamentId}/distribute`, { method: "POST" }));
 
 // ── Protests (Kháng Nghị Thi Đấu) ──
 

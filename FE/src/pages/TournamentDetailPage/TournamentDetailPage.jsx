@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getTournament, getRoundsByTournament, getRaceEntries } from "../../services/spectatorApi";
 import { getTournamentRaces } from "../../services/adminApi";
-import { getPrizesByTournament } from "../../services/managementApi";
+import { getFinalStandingsByTournament, getPrizesByTournament } from "../../services/managementApi";
 import PrizeBreakdown from "../../components/PrizeBreakdown";
+import { RaceButton, RaceModalShell, RaceStatusBadge } from "../../components/ui/RaceUi";
 import "../../components/PrizeBreakdown.css";
 import "./TournamentDetailPage.css";
 
@@ -13,6 +14,9 @@ function TournamentDetailPage() {
   const [rounds, setRounds] = useState([]);
   const [races, setRaces] = useState([]);
   const [prizes, setPrizes] = useState([]);
+  const [finalStandings, setFinalStandings] = useState(null);
+  const [standingsError, setStandingsError] = useState("");
+  const [resultModal, setResultModal] = useState(null);
   const [entriesMap, setEntriesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedRace, setExpandedRace] = useState(null);
@@ -42,6 +46,26 @@ function TournamentDetailPage() {
           const prizesList = await getPrizesByTournament(id);
           if (!cancelled) setPrizes(Array.isArray(prizesList) ? prizesList : []);
         } catch { /* empty */ }
+
+        try {
+          const standings = normalizeFinalStandings(await getFinalStandingsByTournament(id));
+          if (cancelled) return;
+          setFinalStandings(standings);
+          setStandingsError("");
+          const announcement = buildFinalStandingsAnnouncement(standings);
+          if (announcement) setResultModal(announcement);
+        } catch (error) {
+          if (cancelled) return;
+          const message = error?.message || "Không thể tải kết quả chung cuộc.";
+          setStandingsError(message);
+          setResultModal({
+            tone: "danger",
+            title: "Không thể tải kết quả chung cuộc",
+            description: "Dữ liệu giải đấu vẫn hiển thị bình thường.",
+            message,
+            mark: "!",
+          });
+        }
       } catch { /* empty */ }
       finally { if (!cancelled) setLoading(false); }
     };
@@ -68,6 +92,12 @@ function TournamentDetailPage() {
   const status = tournament.status ?? tournament.Status;
   const stats = tournament.stats ?? tournament.Stats;
   const nextTransitions = tournament.nextTransitions ?? tournament.NextTransitions ?? [];
+  const cancellationReason =
+    finalStandings?.voidReason ??
+    tournament.cancellationReason ??
+    tournament.CancellationReason ??
+    tournament.voidReason ??
+    tournament.VoidReason;
 
   return (
     <div className="tournament-detail-page" style={{ maxWidth: 960, margin: "0 auto", padding: "24px 0" }}>
@@ -97,7 +127,7 @@ function TournamentDetailPage() {
       </div>
 
       {/* State Stepper */}
-      <StateStepper currentStatus={status} />
+      <StateStepper currentStatus={status} cancellationReason={cancellationReason} />
 
       {/* Next Transitions (Admin only) */}
       {nextTransitions.length > 0 && (
@@ -200,6 +230,8 @@ function TournamentDetailPage() {
               <PrizeBreakdown prizes={prizes} />
             </div>
           )}
+
+          <FinalStandingsSection data={finalStandings} error={standingsError} />
 
           {/* Description */}
           {(tournament.description ?? tournament.Description) && (
@@ -339,11 +371,28 @@ function TournamentDetailPage() {
           )}
         </>
       )}
+
+      {resultModal && (
+        <RaceModalShell
+          title={resultModal.title}
+          description={resultModal.description}
+          onClose={() => setResultModal(null)}
+          className={`tdp-result-modal tdp-result-modal--${resultModal.tone}`}
+          footer={<RaceButton onClick={() => setResultModal(null)}>Đã hiểu</RaceButton>}
+        >
+          <div className="tdp-result-modal__content">
+            <div className="tdp-result-modal__mark" aria-hidden="true">{resultModal.mark}</div>
+            <p>{resultModal.message}</p>
+            {resultModal.detail && <span>{resultModal.detail}</span>}
+          </div>
+        </RaceModalShell>
+      )}
     </div>
   );
 }
 
-function StateStepper({ currentStatus }) {
+function StateStepper({ currentStatus, cancellationReason }) {
+  const currentStatusValue = normalizeTournamentStatusValue(currentStatus);
   const states = [
     { value: 0, label: "Bản nháp", date: null },
     { value: 1, label: "Đã công bố", date: null },
@@ -355,8 +404,8 @@ function StateStepper({ currentStatus }) {
     <div style={{ marginBottom: 24, padding: "20px 0" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {states.map((state, idx) => {
-          const isPast = state.value < currentStatus;
-          const isCurrent = state.value === currentStatus;
+          const isPast = currentStatusValue != null && state.value < currentStatusValue;
+          const isCurrent = state.value === currentStatusValue;
 
           return (
             <div key={state.value} style={{ flex: 1, display: "flex", alignItems: "center" }}>
@@ -394,12 +443,116 @@ function StateStepper({ currentStatus }) {
           );
         })}
       </div>
-      {currentStatus === 4 && (
-        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.1)" }}>
-          <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>❌ Đã hủy</span>
+      {isCancelledStatus(currentStatus) && (
+        <div className="tdp-cancelled-banner" role="status">
+          <strong>Đã hủy</strong>
+          <span>
+            {cancellationReason
+              ? `Lý do: ${cancellationReason}`
+              : "Giải đấu đã bị hủy."}
+          </span>
         </div>
       )}
     </div>
+  );
+}
+
+function FinalStandingsSection({ data, error }) {
+  if (error) {
+    return (
+      <section className="tdp-final-standings tdp-final-standings--error" role="alert">
+        <div className="tdp-final-standings__head">
+          <div>
+            <span className="tdp-section-eyebrow">Kết quả chung cuộc</span>
+            <h2>Kết quả chung cuộc</h2>
+          </div>
+          <RaceStatusBadge variant="danger">Không tải được</RaceStatusBadge>
+        </div>
+        <p className="tdp-final-standings__message">{error}</p>
+      </section>
+    );
+  }
+
+  if (!data?.isFinal) return null;
+
+  if (data.requiresManualReview) {
+    return (
+      <section className="tdp-final-standings tdp-final-standings--review">
+        <div className="tdp-final-standings__head">
+          <div>
+            <span className="tdp-section-eyebrow">Kết quả chung cuộc</span>
+            <h2>Kết quả chung cuộc</h2>
+          </div>
+          <RaceStatusBadge variant="info">Cần xem xét</RaceStatusBadge>
+        </div>
+        <p className="tdp-final-standings__message">
+          {data.message || "Kết quả chung cuộc của giải này cần Admin xem xét thủ công."}
+        </p>
+      </section>
+    );
+  }
+
+  if (data.isVoid) {
+    return (
+      <section className="tdp-final-standings tdp-final-standings--void">
+        <div className="tdp-final-standings__head">
+          <div>
+            <span className="tdp-section-eyebrow">Kết quả chung cuộc</span>
+            <h2>Giải đấu đã bị hủy</h2>
+          </div>
+          <RaceStatusBadge variant="danger">Đã hủy</RaceStatusBadge>
+        </div>
+        <p className="tdp-final-standings__message">
+          {data.voidReason || "Giải đấu đã bị hủy."} Các dự đoán liên quan đã được hoàn tiền.
+        </p>
+      </section>
+    );
+  }
+
+  const winner = data.standings?.find((entry) => entry.position === 1) ?? data.standings?.[0];
+
+  return (
+    <section className="tdp-final-standings tdp-final-standings--success">
+      <div className="tdp-final-standings__head">
+        <div>
+          <span className="tdp-section-eyebrow">Kết quả chung cuộc</span>
+          <h2>Kết quả chung cuộc</h2>
+        </div>
+        {data.isWalkover && <RaceStatusBadge variant="warning">Kết thúc sớm do walkover</RaceStatusBadge>}
+      </div>
+
+      {winner && (
+        <div className="tdp-winner-banner">
+          <span>Nhà vô địch</span>
+          <strong>{winner.horseName}</strong>
+        </div>
+      )}
+
+      {data.standings?.length > 0 && (
+        <div className="tdp-final-table-wrap">
+          <table className="tdp-final-table">
+            <thead>
+              <tr>
+                <th>Hạng</th>
+                <th>Ngựa</th>
+                <th>Kỵ sĩ</th>
+                <th>Chủ sở hữu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.standings.map((entry) => (
+                <tr key={`${entry.position}-${entry.horseId || entry.horseName}`}>
+                  <td>{entry.position || "-"}</td>
+                  <td>{entry.horseName}</td>
+                  <td>{entry.jockeyName || "-"}</td>
+                  <td>{entry.ownerName || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -423,6 +576,113 @@ function StatBox({ icon, label, value }) {
       <div style={{ fontSize: 11, color: "#657086", textTransform: "uppercase", letterSpacing: 0.8 }}>{label}</div>
     </div>
   );
+}
+
+function readValue(source, ...keys) {
+  for (const key of keys) {
+    if (source?.[key] !== undefined && source?.[key] !== null) return source[key];
+  }
+  return null;
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  return false;
+}
+
+function normalizeStandingEntry(entry) {
+  const position = Number(readValue(entry, "position", "Position"));
+  return {
+    position: Number.isFinite(position) ? position : null,
+    horseId: readValue(entry, "horseId", "HorseId"),
+    horseName: readValue(entry, "horseName", "HorseName") || "-",
+    jockeyId: readValue(entry, "jockeyId", "JockeyId"),
+    jockeyName: readValue(entry, "jockeyName", "JockeyName"),
+    ownerId: readValue(entry, "ownerId", "OwnerId"),
+    ownerName: readValue(entry, "ownerName", "OwnerName"),
+  };
+}
+
+function normalizeFinalStandings(payload) {
+  if (!payload) return null;
+
+  const standingsRaw = readValue(payload, "standings", "Standings");
+  const standings = Array.isArray(standingsRaw)
+    ? standingsRaw
+        .map(normalizeStandingEntry)
+        .sort((a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER))
+    : null;
+
+  return {
+    tournamentId: readValue(payload, "tournamentId", "TournamentId"),
+    isFinal: toBoolean(readValue(payload, "isFinal", "IsFinal")),
+    isVoid: toBoolean(readValue(payload, "isVoid", "IsVoid")),
+    voidReason: readValue(payload, "voidReason", "VoidReason"),
+    isWalkover: toBoolean(readValue(payload, "isWalkover", "IsWalkover")),
+    decidingRoundNumber: readValue(payload, "decidingRoundNumber", "DecidingRoundNumber"),
+    requiresManualReview: toBoolean(readValue(payload, "requiresManualReview", "RequiresManualReview")),
+    message: readValue(payload, "message", "Message"),
+    standings,
+  };
+}
+
+function trimTrailingPunctuation(value) {
+  return (value || "").toString().trim().replace(/[.!?]+$/, "");
+}
+
+function buildFinalStandingsAnnouncement(data) {
+  if (!data?.isFinal) return null;
+
+  if (data.isVoid) {
+    const reason = trimTrailingPunctuation(data.voidReason || "Không có lý do cụ thể");
+    return {
+      tone: "danger",
+      title: "Giải đấu đã bị hủy",
+      description: "Kết quả chung cuộc đã được cập nhật.",
+      message: `Giải đấu đã bị hủy: ${reason}. Các dự đoán liên quan đã được hoàn tiền.`,
+      mark: "!",
+    };
+  }
+
+  if (data.isWalkover && !data.requiresManualReview) {
+    const winner = data.standings?.find((entry) => entry.position === 1) ?? data.standings?.[0];
+    if (!winner) return null;
+    return {
+      tone: "success",
+      title: `🏆 ${winner.horseName} đã vô địch giải đấu!`,
+      description: "Kết quả chung cuộc đã được công bố.",
+      message: `${winner.horseName} giữ hạng 1 trong bảng xếp hạng chung cuộc.`,
+      detail: data.decidingRoundNumber ? `Vòng quyết định: ${data.decidingRoundNumber}.` : "Giải đấu kết thúc sớm do walkover.",
+      mark: "🏆",
+    };
+  }
+
+  return null;
+}
+
+function normalizeTournamentStatusValue(status) {
+  if (status === null || status === undefined || status === "") return null;
+  if (typeof status === "number") return status;
+
+  const key = status.toString().toLowerCase();
+  const byName = {
+    draft: 0,
+    published: 1,
+    ongoing: 2,
+    finished: 3,
+    cancelled: 4,
+    canceled: 4,
+  };
+  if (byName[key] !== undefined) return byName[key];
+
+  const numeric = Number(status);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function isCancelledStatus(status) {
+  return normalizeTournamentStatusValue(status) === 4;
 }
 
 const thStyle = { padding: "10px 14px", textAlign: "left", borderBottom: "2px solid rgba(143,100,32,0.12)", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8, color: "#657086" };

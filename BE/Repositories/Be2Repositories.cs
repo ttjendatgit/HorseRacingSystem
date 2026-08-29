@@ -42,6 +42,15 @@ public class TournamentRepository : ITournamentRepository
             .ToListAsync();
     }
 
+    public async Task<Tournament?> GetWithFullRoundsAndResultsAsync(Guid id)
+    {
+        return await _context.Set<Tournament>()
+            .Include(t => t.Rounds)
+                .ThenInclude(r => r.Races)
+                    .ThenInclude(r => r.Result)
+            .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
     public async Task<IEnumerable<Tournament>> GetActiveAsync()
     {
         return await _context.Set<Tournament>()

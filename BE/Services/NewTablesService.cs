@@ -11,27 +11,38 @@ using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
 using HorseRacing.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacing.Services;
 
 // PRIZE-V1: Tournament.PrizePool is the total prize budget; Prize rows allocate that budget by
 // FINAL Tournament ranking Position (Part 20 — Position means rank in the Tournament's Official
-// Final ranking; this service never reads RaceResult/RankingsJson, it only records the allocation
-// an Admin configures). Config/display only: no wallet credit, no recipient, no distribution
-// workflow — IsDistributed/DistributedAt/RaceId/PercentageOfPool are legacy entity fields this
-// service never sets to anything but their inert defaults (false/null/null/0).
+// Final ranking; CreateAsync/UpdateAsync never read RaceResult/RankingsJson, they only record the
+// allocation an Admin configures; Amount is frozen by PrizeAmountCalculator at that point, never
+// recomputed later). Create/Update/Get/Delete remain config/display only — RaceId stays always
+// null (Prize is Tournament-scoped, never Race-specific).
+// PRIZE-V2 (Phase 4): DistributeAsync below is the one exception — Admin-triggered, manual
+// (never automatic on Tournament->Finished), reads the frozen Prize.Amount rows and pays each to
+// the Owner standing at that Position per RaceService.GetFinalStandingsAsync, using the same
+// atomic-claim-then-credit pattern as PredictionRefundHelper/PredictionService (claim
+// Prize.IsDistributed via a conditional ExecuteUpdateAsync BEFORE crediting the wallet, roll the
+// claim back if the wallet credit fails) — no new idempotency mechanism invented.
 public class PrizeService : IPrizeService
 {
     private readonly IPrizeRepository _repo;
     private readonly ITournamentRepository _tournamentRepo;
     private readonly IUnitOfWork _uow;
     private readonly ApplicationDbContext _db;
-    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow, ApplicationDbContext db)
+    private readonly IRaceService _raceService;
+    private readonly IWalletService _walletService;
+    public PrizeService(IPrizeRepository repo, ITournamentRepository tournamentRepo, IUnitOfWork uow, ApplicationDbContext db, IRaceService raceService, IWalletService walletService)
     {
         _repo = repo;
         _tournamentRepo = tournamentRepo;
         _uow = uow;
         _db = db;
+        _raceService = raceService;
+        _walletService = walletService;
     }
 
     /// <summary>
@@ -230,6 +241,106 @@ public class PrizeService : IPrizeService
 
         await _uow.SaveChangesAsync();
         return ServiceResult<bool>.Ok(true);
+    }
+
+    /// <summary>
+    /// PRIZE-V2 (Phase 4): manual, Admin-triggered payout — never automatic on Tournament-&gt;Finished.
+    /// Reads the already-frozen Prize.Amount rows (computed once by PrizeAmountCalculator while
+    /// Draft, never recomputed here) and pays each un-distributed Prize to the Owner standing at
+    /// that Position in RaceService.GetFinalStandingsAsync's Standings — 100% of Prize.Amount to
+    /// the Owner, no split with Jockey (out of scope). One Prize's failure never blocks the others.
+    /// </summary>
+    public async Task<ServiceResult<PrizeDistributionResultDto>> DistributeAsync(Guid tournamentId)
+    {
+        var standingsResult = await _raceService.GetFinalStandingsAsync(tournamentId);
+        if (!standingsResult.Result.Success || standingsResult.Result.Data == null)
+            return ServiceResult<PrizeDistributionResultDto>.Fail(standingsResult.StatusCode, standingsResult.Result.Message ?? "Không thể đọc kết quả chung cuộc.");
+
+        var standings = standingsResult.Result.Data;
+        if (!standings.IsFinal)
+            return ServiceResult<PrizeDistributionResultDto>.Fail(400, "Giải đấu chưa kết thúc, chưa thể trao thưởng.");
+        if (standings.IsVoid)
+            return ServiceResult<PrizeDistributionResultDto>.Fail(400, "Giải đấu đã bị huỷ, không có kết quả để trao thưởng.");
+        if (standings.RequiresManualReview)
+            return ServiceResult<PrizeDistributionResultDto>.Fail(400, "Vòng quyết định có nhiều cuộc đua song song, cần xử lý thủ công trước khi trao thưởng.");
+
+        var standingByPosition = (standings.Standings ?? new List<StandingEntryDto>())
+            .ToDictionary(s => s.Position, s => s);
+
+        // AsNoTracking + direct DbContext query (not _repo.GetByTournamentAsync, which is tracked):
+        // the atomic claim below is a bulk ExecuteUpdateAsync, which bypasses the change tracker —
+        // a tracked read here would keep returning a stale IsDistributed=false for a Prize this
+        // same DbContext already tracked earlier (e.g. a prior DistributeAsync call in the same
+        // scope), same reasoning as WalletRepository.AddBalanceAsync/GetWalletBalanceAsync elsewhere.
+        var pending = await _db.Prizes
+            .AsNoTracking()
+            .Where(p => p.TournamentId == tournamentId && !p.IsDistributed)
+            .OrderBy(p => p.Position)
+            .ToListAsync();
+
+        var result = new PrizeDistributionResultDto { TournamentId = tournamentId };
+
+        // Rỗng (chưa cấu hình Prize nào, hoặc đã trao hết từ trước) — thành công, không phải lỗi.
+        foreach (var prize in pending)
+        {
+            if (!standingByPosition.TryGetValue(prize.Position, out var entry) || entry.OwnerUserId == null)
+            {
+                result.Skipped.Add(new PrizeDistributionSkippedDto
+                {
+                    Position = prize.Position,
+                    Amount = prize.Amount,
+                    Reason = !standingByPosition.ContainsKey(prize.Position)
+                        ? $"Không có ngựa nào về đích ở Hạng {prize.Position}."
+                        : $"Ngựa ở Hạng {prize.Position} chưa xác định được Chủ sở hữu (Owner) để trao thưởng."
+                });
+                continue;
+            }
+
+            // Atomic claim TRƯỚC khi cộng ví — đúng pattern duy nhất đang dùng trong codebase
+            // (PredictionRefundHelper.ClaimAsync / PredictionService.ExecuteUpdateWinnersAsync):
+            // affected-row-count == 0 nghĩa là 1 lần gọi khác (đồng thời hoặc trước đó) đã trao rồi.
+            var claimed = await _db.Prizes
+                .Where(p => p.Id == prize.Id && !p.IsDistributed)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.IsDistributed, true)
+                    .SetProperty(p => p.DistributedAt, DateTime.UtcNow));
+
+            if (claimed == 0)
+            {
+                result.Skipped.Add(new PrizeDistributionSkippedDto { Position = prize.Position, Amount = prize.Amount, Reason = "Đã trao trước đó." });
+                continue;
+            }
+
+            try
+            {
+                var walletResult = await _walletService.AddPointsAsync(entry.OwnerUserId.Value, prize.Amount, $"prize_{prize.Id}");
+                if (!walletResult.Result.Success)
+                    throw new InvalidOperationException(walletResult.Result.Message ?? "Không thể cộng tiền vào ví.");
+
+                result.Distributed.Add(new PrizeDistributionEntryDto
+                {
+                    Position = prize.Position,
+                    HorseName = entry.HorseName,
+                    OwnerName = entry.OwnerName,
+                    Amount = prize.Amount,
+                    Currency = prize.Currency,
+                });
+            }
+            catch (Exception ex)
+            {
+                // Rollback claim — guarded by IsDistributed == true nên chỉ hoàn tác đúng dòng
+                // lệnh gọi này vừa claim, không đụng dòng nào khác đã trao thật từ trước.
+                await _db.Prizes
+                    .Where(p => p.Id == prize.Id && p.IsDistributed)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(p => p.IsDistributed, false)
+                        .SetProperty(p => p.DistributedAt, (DateTime?)null));
+
+                result.Errors.Add(new PrizeDistributionErrorDto { Position = prize.Position, Amount = prize.Amount, Reason = ex.Message });
+            }
+        }
+
+        return ServiceResult<PrizeDistributionResultDto>.Ok(result);
     }
 
     private static PrizeResponse Map(Prize p) => new()

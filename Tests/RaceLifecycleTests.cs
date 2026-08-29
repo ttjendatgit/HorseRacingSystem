@@ -809,7 +809,7 @@ public class RaceLifecycleTests
             TournamentRepo = _tournamentRepo;
             RoundRepoPublic = _roundRepo;
             RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
-            RaceSvc = new RaceService(RaceRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
+            RaceSvc = new RaceService(RaceRepo, EntryRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
         }
 
         public static async Task<LifecycleFixture> CreateAsync()

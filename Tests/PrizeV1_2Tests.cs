@@ -25,7 +25,7 @@ namespace Tests;
 public class PrizeV1_2Tests
 {
     private static PrizeService MakePrizeService(RaceLifecycleTests.LifecycleFixture f)
-        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db);
+        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db, f.RaceSvc, f.FaultWallet);
 
     private static async Task<Guid> CreateDraftTournamentAsync(RaceLifecycleTests.LifecycleFixture f, decimal prizePool)
     {

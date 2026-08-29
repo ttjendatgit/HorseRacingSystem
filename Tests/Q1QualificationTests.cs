@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
+using HorseRacing.Repositories;
+using HorseRacing.Services;
 using HorseRacing.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -966,5 +968,703 @@ public class Q1QualificationTests
         Assert.False(manualBulk.Result.Success);
 
         Assert.Equal(0, await f.Db.RaceEntries.CountAsync(e => e.RaceId == raceFinal));
+    }
+
+    // ── P: GetFinalStandingsAsync (Q2 Phase 2, read-only "kết quả chung cuộc") ────────────────
+
+    private sealed record ThreeRoundSetup(Guid TournamentId, Guid Round1Id, Guid Round2Id, Guid Round3Id, Guid RefereeId, DateTime Start);
+
+    /// <summary>Tournament(MaxRounds=3, Draft) + Round1(non-final) + Round2(non-final) + Round3(Final) + one Referee. No Races yet.</summary>
+    private static async Task<ThreeRoundSetup> BuildThreeRoundTournamentAsync(
+        RaceLifecycleTests.LifecycleFixture f, int round1AdvanceCount, int round2AdvanceCount, int tournamentMaxParticipants = 20)
+    {
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
+        {
+            Name = $"Q2-3R-{Guid.NewGuid():N}", StartDate = start, EndDate = start.AddDays(30),
+            RegistrationDeadline = start.AddDays(-1), MinParticipants = 3, MaxParticipants = tournamentMaxParticipants, MaxRounds = 3
+        });
+        Assert.True(create.Result.Success, create.Result.Message);
+        var tournamentId = create.Result.Data!.Id;
+
+        var r1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 1", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(5), AdvanceCount = round1AdvanceCount
+        });
+        Assert.True(r1.Result.Success, r1.Result.Message);
+        var r2 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Round 2", TournamentId = tournamentId, RoundNumber = 2,
+            ScheduledStartDate = start.AddDays(5), ScheduledEndDate = start.AddDays(10), AdvanceCount = round2AdvanceCount
+        });
+        Assert.True(r2.Result.Success, r2.Result.Message);
+        var r3 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Final", TournamentId = tournamentId, RoundNumber = 3,
+            ScheduledStartDate = start.AddDays(10), ScheduledEndDate = start.AddDays(15), AdvanceCount = 0
+        });
+        Assert.True(r3.Result.Success, r3.Result.Message);
+
+        var refereeUserId = Guid.NewGuid();
+        f.Db.Add(new User { Id = refereeUserId, Email = $"ref-{Guid.NewGuid():N}@test.com", PasswordHash = "x", FullName = "Referee", Role = UserRole.Referee });
+        var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUserId, LicenseNumber = $"LIC-{Guid.NewGuid():N}", IsActive = true };
+        f.Db.Add(referee);
+        await f.Db.SaveChangesAsync();
+
+        return new ThreeRoundSetup(tournamentId, r1.Result.Data!.Id, r2.Result.Data!.Id, r3.Result.Data!.Id, referee.Id, start);
+    }
+
+    /// <summary>Sets GateNumber + a Passed HorseHealthCheck for entries that were carried over by
+    /// GenerateNextRoundEntriesAsync (GateNumber=null, no HealthCheck) — needed before StartRaceAsync
+    /// will accept the Race they now belong to.</summary>
+    private static async Task PrepareCarriedOverEntriesForStartAsync(
+        RaceLifecycleTests.LifecycleFixture f, Guid raceId, Guid refereeId, List<Guid> horseIds)
+    {
+        var gate = 1;
+        foreach (var horseId in horseIds)
+        {
+            var entry = await f.Db.RaceEntries.SingleAsync(e => e.RaceId == raceId && e.HorseId == horseId);
+            entry.GateNumber = gate++;
+            f.Db.Add(new HorseHealthCheck
+            {
+                Id = Guid.NewGuid(), HorseId = horseId, RaceId = raceId, RefereeId = refereeId,
+                Status = HealthCheckStatus.Passed, ApprovedToRace = true, CheckedAt = DateTime.UtcNow
+            });
+        }
+        await f.Db.SaveChangesAsync();
+    }
+
+    /// <summary>Drives a Race with its already-seeded entries from Scheduled through Official, with
+    /// an explicit per-entry (Position, Status) — unlike FinishRaceOfficialAsync's Ranking() helper,
+    /// this allows a mix of Completed/DNF/DSQ instead of "everyone Completed in the given order".</summary>
+    private static async Task FinishRaceWithMixedResultsAsync(
+        RaceLifecycleTests.LifecycleFixture f, Guid raceId, Guid refereeId, List<(Guid HorseId, int Position, string Status)> results)
+    {
+        await SetTournamentOngoingAsync(f, raceId);
+        var open = await f.RaceManagement.OpenRegistrationAsync(raceId);
+        Assert.True(open.Result.Success, open.Result.Message);
+        var close = await f.RaceManagement.CloseRegistrationAsync(raceId);
+        Assert.True(close.Result.Success, close.Result.Message);
+        var start = await f.RaceManagement.StartRaceAsync(raceId);
+        Assert.True(start.Result.Success, start.Result.Message);
+        var end = await f.RaceManagement.EndRaceAsync(raceId);
+        Assert.True(end.Result.Success, end.Result.Message);
+
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceId, new SubmitRaceResultRequest
+        {
+            Rankings = results.Select(r => new SubmitRankingEntry { HorseId = r.HorseId, Position = r.Position, Status = r.Status }).ToList()
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+
+        f.Db.Add(new RaceReport
+        {
+            Id = Guid.NewGuid(), RaceId = raceId, RefereeId = refereeId,
+            CompletedAt = DateTime.UtcNow, Details = "Test fixture race report.", CreatedAt = DateTime.UtcNow
+        });
+        await f.Db.SaveChangesAsync();
+
+        var approve = await f.Admin.ApproveRaceResultAsync(raceId);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_NormalFinish_ReturnsFinalRoundRankingInOrder()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, j2) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+        await FinishRaceOfficialAsync(f, raceA, setup.RefereeId, new List<Guid> { h1, h2 });
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate.Result.Success, generate.Result.Message);
+
+        await AssignRefereeAsync(f, raceFinal, setup.RefereeId);
+        await PrepareCarriedOverEntriesForStartAsync(f, raceFinal, setup.RefereeId, new List<Guid> { h1, h2 });
+        // h2 wins the Final, h1 second — proves Standings reflects the Final's OWN order, not Round 1's.
+        await FinishRaceOfficialAsync(f, raceFinal, setup.RefereeId, new List<Guid> { h2, h1 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(setup.TournamentId,
+            new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
+
+        var standings = await f.RaceSvc.GetFinalStandingsAsync(setup.TournamentId);
+        Assert.True(standings.Result.Success, standings.Result.Message);
+        var dto = standings.Result.Data!;
+        Assert.True(dto.IsFinal);
+        Assert.False(dto.IsVoid);
+        Assert.False(dto.IsWalkover);
+        Assert.False(dto.RequiresManualReview);
+        Assert.Equal(2, dto.DecidingRoundNumber);
+        Assert.NotNull(dto.Standings);
+        Assert.Equal(2, dto.Standings!.Count);
+        Assert.Equal(1, dto.Standings[0].Position);
+        Assert.Equal(h2, dto.Standings[0].HorseId);
+        Assert.Equal(2, dto.Standings[1].Position);
+        Assert.Equal(h1, dto.Standings[1].HorseId);
+
+        // Owner/JockeyId/OwnerName are NOT provided by the reused GetRaceResultAsync (it only has
+        // HorseId/HorseName/JockeyName) — this is the newly-written join (RaceEntry -> Horse ->
+        // Owner -> User) inside BuildFinishedStandingsAsync, so assert its actual values, not just
+        // that Position/HorseId came through.
+        var horse2 = await f.Db.Horses.AsNoTracking()
+            .Include(h => h.Owner!).ThenInclude(o => o.User)
+            .SingleAsync(h => h.Id == h2);
+        Assert.Equal(j2, dto.Standings[0].JockeyId);
+        Assert.Equal(horse2.OwnerId, dto.Standings[0].OwnerId);
+        Assert.Equal(horse2.Owner!.User!.FullName, dto.Standings[0].OwnerName);
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
+        Assert.Empty(prizesAfter);
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_Walkover_DecidingRoundIsThePreFinalRound()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        var raceFinal = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+
+        // Same walkover scenario as GenerateNextRound_EligibleEqualsOne_Walkover_FinishesTournamentWithoutTouchingPrizes:
+        // h1 Completed, h2 DNF -> exactly 1 eligible horse -> Q1 auto-finishes the Tournament at Round 1.
+        await SetTournamentOngoingAsync(f, raceA);
+        await f.RaceManagement.OpenRegistrationAsync(raceA);
+        await f.RaceManagement.CloseRegistrationAsync(raceA);
+        await f.RaceManagement.StartRaceAsync(raceA);
+        await f.RaceManagement.EndRaceAsync(raceA);
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = h1, Position = 1, Status = "Completed" },
+                new() { HorseId = h2, Position = 99, Status = "DNF" },
+            }
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "One DNF.", CreatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate.Result.Success, generate.Result.Message);
+        Assert.True(generate.Result.Data!.IsWalkover);
+
+        var standings = await f.RaceSvc.GetFinalStandingsAsync(setup.TournamentId);
+        Assert.True(standings.Result.Success, standings.Result.Message);
+        var dto = standings.Result.Data!;
+        Assert.True(dto.IsFinal);
+        Assert.False(dto.IsVoid);
+        Assert.True(dto.IsWalkover);
+        Assert.False(dto.RequiresManualReview);
+        Assert.Equal(1, dto.DecidingRoundNumber); // walkover Round, NOT MaxRounds (2)
+        Assert.NotNull(dto.Standings);
+        var h1Entry = dto.Standings!.Single(s => s.HorseId == h1);
+        Assert.Equal(1, h1Entry.Position);
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
+        Assert.Empty(prizesAfter);
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_Void_ReturnsCancellationReasonAsVoidReason_NoStandings()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+
+        // Same void scenario as GenerateNextRound_EligibleEqualsZero_AutoVoidsTournament: both
+        // horses DNF/DSQ -> 0 eligible -> Q1 auto-cancels the Tournament.
+        await SetTournamentOngoingAsync(f, raceA);
+        await f.RaceManagement.OpenRegistrationAsync(raceA);
+        await f.RaceManagement.CloseRegistrationAsync(raceA);
+        await f.RaceManagement.StartRaceAsync(raceA);
+        await f.RaceManagement.EndRaceAsync(raceA);
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = h1, Position = 99, Status = "DNF" },
+                new() { HorseId = h2, Position = 99, Status = "DSQ" },
+            }
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "All DNF/DSQ.", CreatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate.Result.Success, generate.Result.Message);
+        Assert.True(generate.Result.Data!.IsVoided);
+
+        var tournamentAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == setup.TournamentId);
+        Assert.Equal(TournamentStatus.Cancelled, tournamentAfter.Status);
+        Assert.False(string.IsNullOrWhiteSpace(tournamentAfter.CancellationReason));
+
+        var standings = await f.RaceSvc.GetFinalStandingsAsync(setup.TournamentId);
+        Assert.True(standings.Result.Success, standings.Result.Message);
+        var dto = standings.Result.Data!;
+        Assert.True(dto.IsFinal);
+        Assert.True(dto.IsVoid);
+        Assert.Equal(tournamentAfter.CancellationReason, dto.VoidReason);
+        Assert.Null(dto.Standings);
+        Assert.False(dto.RequiresManualReview);
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
+        Assert.Empty(prizesAfter);
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_TournamentStillOngoing_NotFinal_NoStandings()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+
+        // Tournament is left Draft (never Published/Ongoing) — one of the 3 "chưa kết thúc" statuses.
+        var standings = await f.RaceSvc.GetFinalStandingsAsync(setup.TournamentId);
+        Assert.True(standings.Result.Success, standings.Result.Message);
+        var dto = standings.Result.Data!;
+        Assert.False(dto.IsFinal);
+        Assert.Null(dto.Standings);
+        Assert.False(string.IsNullOrWhiteSpace(dto.Message));
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_DecidingRoundHasMultipleRaces_RequiresManualReview_NoStandings()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        // MaxRounds=3: Round1(non-final) feeds Round2(non-final, 2 parallel Races) feeds Round3(Final).
+        // Round2's combined eligible resolves to 1 (walkover) BEFORE Round3 ever runs — so the Round
+        // that actually decided the Tournament (Round2) has 2 Races Finished+Official, not 1. This is
+        // the real "multi-Race deciding Round" scenario confirmed possible in GenerateNextRoundEntriesAsync
+        // (eligible is summed across ALL Races of a Round) — unlike Q1Test-E in SEED_Q1_SCENARIOS, this
+        // never touches the Final Round's Race count, so it never conflicts with the Publish-time rule
+        // that the Final must have exactly 1 Race.
+        var setup = await BuildThreeRoundTournamentAsync(f, round1AdvanceCount: 4, round2AdvanceCount: 2);
+
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 5, qualificationSlots: 4, name: "Round1 Race");
+        var raceB1 = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 4, qualificationSlots: 1, name: "Round2 Race B1");
+        var raceB2 = await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5).AddHours(3), maxParticipants: 4, qualificationSlots: 1, name: "Round2 Race B2");
+        await CreateRaceAsync(f, setup.TournamentId, setup.Round3Id, setup.Start.AddDays(10), maxParticipants: 4, qualificationSlots: 0, name: "Final");
+
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+        var (h3, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h3");
+        var (h4, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h4");
+        await FinishRaceOfficialAsync(f, raceA, setup.RefereeId, new List<Guid> { h1, h2, h3, h4 });
+
+        var generate1 = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate1.Result.Success, generate1.Result.Message);
+        Assert.Equal(4, generate1.Result.Data!.GeneratedEntries);
+
+        // Deterministic round-robin: sourceRaces=[raceA] flattened h1,h2,h3,h4 against
+        // targetRaces=[raceB1,raceB2] (ordered by ScheduledAt) -> raceB1={h1,h3}, raceB2={h2,h4}.
+        await AssignRefereeAsync(f, raceB1, setup.RefereeId);
+        await AssignRefereeAsync(f, raceB2, setup.RefereeId);
+        await PrepareCarriedOverEntriesForStartAsync(f, raceB1, setup.RefereeId, new List<Guid> { h1, h3 });
+        await PrepareCarriedOverEntriesForStartAsync(f, raceB2, setup.RefereeId, new List<Guid> { h2, h4 });
+
+        // Only h1 finishes Completed across BOTH Round 2 Races combined -> eligible == 1 (walkover),
+        // computed by summing qualifiers over every Race of Round 2 — exactly the aggregation
+        // GenerateNextRoundEntriesAsync itself performs.
+        await FinishRaceWithMixedResultsAsync(f, raceB1, setup.RefereeId, new List<(Guid, int, string)>
+        {
+            (h1, 1, "Completed"),
+            (h3, 99, "DNF"),
+        });
+        await FinishRaceWithMixedResultsAsync(f, raceB2, setup.RefereeId, new List<(Guid, int, string)>
+        {
+            (h2, 99, "DSQ"),
+            (h4, 99, "DSQ"),
+        });
+
+        var prizesBefore = await f.Db.Prizes.AsNoTracking().ToListAsync();
+
+        var generate2 = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round2Id);
+        Assert.True(generate2.Result.Success, generate2.Result.Message);
+        Assert.True(generate2.Result.Data!.IsWalkover);
+        Assert.Equal(h1, generate2.Result.Data.WalkoverWinnerHorseId);
+
+        var tournamentAfter = await f.Db.Tournaments.AsNoTracking().SingleAsync(t => t.Id == setup.TournamentId);
+        Assert.Equal(TournamentStatus.Finished, tournamentAfter.Status);
+
+        var standings = await f.RaceSvc.GetFinalStandingsAsync(setup.TournamentId);
+        Assert.True(standings.Result.Success, standings.Result.Message);
+        var dto = standings.Result.Data!;
+        Assert.True(dto.IsFinal);
+        Assert.False(dto.IsVoid);
+        Assert.True(dto.IsWalkover); // Round 2 != MaxRounds (3)
+        Assert.Equal(2, dto.DecidingRoundNumber);
+        Assert.True(dto.RequiresManualReview);
+        Assert.Null(dto.Standings);
+        Assert.False(string.IsNullOrWhiteSpace(dto.Message));
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().ToListAsync();
+        Assert.Equal(prizesBefore.Count, prizesAfter.Count);
+        Assert.Empty(prizesAfter);
+    }
+
+    [Fact]
+    public async Task GetFinalStandings_TournamentNotFound_Returns404()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var result = await f.RaceSvc.GetFinalStandingsAsync(Guid.NewGuid());
+        Assert.False(result.Result.Success);
+        Assert.Equal(404, result.StatusCode);
+    }
+
+    // ── Q: PrizeService.DistributeAsync (Phase 4, manual Admin-triggered prize payout) ──────────
+
+    private static PrizeService MakeDistributionPrizeService(RaceLifecycleTests.LifecycleFixture f)
+        => new PrizeService(new PrizeRepository(f.Db), f.TournamentRepo, f.UnitOfWork, f.Db, f.RaceSvc, f.FaultWallet);
+
+    /// <summary>Single-round Tournament (Round1 IS Final) with a real PrizePool — BuildSingleRoundTournamentAsync
+    /// above always leaves PrizePool at its 0 default, which is unusable for a distribution test.</summary>
+    private static async Task<(Guid tournamentId, Guid round1Id)> BuildSingleRoundTournamentWithPrizePoolAsync(
+        RaceLifecycleTests.LifecycleFixture f, decimal prizePool)
+    {
+        var start = DateTime.UtcNow.AddDays(10);
+        var create = await f.TournamentSvc.CreateTournamentAsync(new CreateTournamentRequest
+        {
+            Name = $"PrizeDist-{Guid.NewGuid():N}", StartDate = start, EndDate = start.AddDays(10),
+            RegistrationDeadline = start.AddDays(-1), MinParticipants = 3, MaxParticipants = 10, MaxRounds = 1,
+            PrizePool = prizePool
+        });
+        Assert.True(create.Result.Success, create.Result.Message);
+        var tournamentId = create.Result.Data!.Id;
+
+        var r1 = await f.RoundSvc.CreateRoundAsync(new CreateRoundRequest
+        {
+            Name = "Final", TournamentId = tournamentId, RoundNumber = 1,
+            ScheduledStartDate = start, ScheduledEndDate = start.AddDays(5), AdvanceCount = 0
+        });
+        Assert.True(r1.Result.Success, r1.Result.Message);
+        return (tournamentId, r1.Result.Data!.Id);
+    }
+
+    private static async Task<Guid> CreateStandaloneRefereeAsync(RaceLifecycleTests.LifecycleFixture f)
+    {
+        var refereeUserId = Guid.NewGuid();
+        f.Db.Add(new User { Id = refereeUserId, Email = $"ref-{Guid.NewGuid():N}@test.com", PasswordHash = "x", FullName = "Referee", Role = UserRole.Referee });
+        var referee = new Referee { Id = Guid.NewGuid(), UserId = refereeUserId, LicenseNumber = $"LIC-{Guid.NewGuid():N}", IsActive = true };
+        f.Db.Add(referee);
+        await f.Db.SaveChangesAsync();
+        return referee.Id;
+    }
+
+    private static async Task<Guid> GetOwnerUserIdForHorseAsync(RaceLifecycleTests.LifecycleFixture f, Guid horseId)
+    {
+        var horse = await f.Db.Horses.AsNoTracking().Include(h => h.Owner).SingleAsync(h => h.Id == horseId);
+        return horse.Owner!.UserId;
+    }
+
+    /// <summary>Owner-role Users have no Wallet auto-created anywhere in production
+    /// (WalletService.GetOrCreateWalletAsync is restricted to UserRole.Spectator, and
+    /// AddPointsAsync never auto-creates one at all) — seeded by hand here, same as this file
+    /// already hand-seeds Referee/HealthCheck rows for other prerequisites.</summary>
+    private static async Task AddWalletAsync(RaceLifecycleTests.LifecycleFixture f, Guid userId, decimal balance = 0m)
+    {
+        f.Db.Add(new Wallet { Id = Guid.NewGuid(), UserId = userId, Balance = balance, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task DistributeAsync_NormalFinish_CreditsEachOwnerWalletByPrizeAmount()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 50, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+        var p2 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 2, PercentageOfPool = 30, Name = "Á quân" });
+        Assert.True(p2.Result.Success, p2.Result.Message);
+        var p3 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 3, PercentageOfPool = 20, Name = "Quý quân" });
+        Assert.True(p3.Result.Success, p3.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 5, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h2");
+        var (h3, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h3");
+        await FinishRaceOfficialAsync(f, raceId, refereeId, new List<Guid> { h1, h2, h3 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var owner1UserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        var owner2UserId = await GetOwnerUserIdForHorseAsync(f, h2);
+        var owner3UserId = await GetOwnerUserIdForHorseAsync(f, h3);
+        await AddWalletAsync(f, owner1UserId);
+        await AddWalletAsync(f, owner2UserId);
+        await AddWalletAsync(f, owner3UserId);
+
+        var distribute = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(distribute.Result.Success, distribute.Result.Message);
+        var dto = distribute.Result.Data!;
+
+        Assert.Equal(3, dto.Distributed.Count);
+        Assert.Empty(dto.Skipped);
+        Assert.Empty(dto.Errors);
+
+        Assert.Equal(500_000m, dto.Distributed.Single(d => d.Position == 1).Amount);
+        Assert.Equal(300_000m, dto.Distributed.Single(d => d.Position == 2).Amount);
+        Assert.Equal(200_000m, dto.Distributed.Single(d => d.Position == 3).Amount);
+
+        Assert.Equal(500_000m, await f.GetWalletBalanceAsync(owner1UserId));
+        Assert.Equal(300_000m, await f.GetWalletBalanceAsync(owner2UserId));
+        Assert.Equal(200_000m, await f.GetWalletBalanceAsync(owner3UserId));
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().Where(p => p.TournamentId == tournamentId).ToListAsync();
+        Assert.All(prizesAfter, p => Assert.True(p.IsDistributed));
+        Assert.All(prizesAfter, p => Assert.NotNull(p.DistributedAt));
+    }
+
+    [Fact]
+    public async Task DistributeAsync_CalledTwice_SecondCallDoesNotCreditWalletAgain()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 100, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 5, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        await FinishRaceOfficialAsync(f, raceId, refereeId, new List<Guid> { h1 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var ownerUserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        await AddWalletAsync(f, ownerUserId);
+
+        var first = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(first.Result.Success, first.Result.Message);
+        Assert.Single(first.Result.Data!.Distributed);
+        var balanceAfterFirst = await f.GetWalletBalanceAsync(ownerUserId);
+        Assert.Equal(1_000_000m, balanceAfterFirst);
+
+        var second = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(second.Result.Success, second.Result.Message);
+        // Prize.IsDistributed already true after the first call -> filtered out of `pending`
+        // before the loop even runs, so nothing new to distribute or skip.
+        Assert.Empty(second.Result.Data!.Distributed);
+        Assert.Empty(second.Result.Data!.Skipped);
+
+        Assert.Equal(balanceAfterFirst, await f.GetWalletBalanceAsync(ownerUserId));
+    }
+
+    [Fact]
+    public async Task DistributeAsync_VoidTournament_FailsWithoutTouchingWalletOrPrize()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var setup = await BuildTwoRoundTournamentAsync(f, round1AdvanceCount: 2);
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = setup.TournamentId, Position = 1, PercentageOfPool = 100, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+
+        var raceA = await CreateRaceAsync(f, setup.TournamentId, setup.Round1Id, setup.Start, maxParticipants: 4, qualificationSlots: 2, name: "Race A");
+        await CreateRaceAsync(f, setup.TournamentId, setup.Round2Id, setup.Start.AddDays(5), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceA, setup.RefereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceA, setup.RefereeId, "h2");
+
+        // Same void scenario as GetFinalStandings_Void_...: both horses DNF/DSQ -> eligible == 0.
+        await SetTournamentOngoingAsync(f, raceA);
+        await f.RaceManagement.OpenRegistrationAsync(raceA);
+        await f.RaceManagement.CloseRegistrationAsync(raceA);
+        await f.RaceManagement.StartRaceAsync(raceA);
+        await f.RaceManagement.EndRaceAsync(raceA);
+        var submit = await f.LiveResult.UpdateRaceResultAsync(raceA, new SubmitRaceResultRequest
+        {
+            Rankings = new List<SubmitRankingEntry>
+            {
+                new() { HorseId = h1, Position = 99, Status = "DNF" },
+                new() { HorseId = h2, Position = 99, Status = "DSQ" },
+            }
+        });
+        Assert.True(submit.Result.Success, submit.Result.Message);
+        f.Db.Add(new RaceReport { Id = Guid.NewGuid(), RaceId = raceA, RefereeId = setup.RefereeId, CompletedAt = DateTime.UtcNow, Details = "All DNF/DSQ.", CreatedAt = DateTime.UtcNow });
+        await f.Db.SaveChangesAsync();
+        var approve = await f.Admin.ApproveRaceResultAsync(raceA);
+        Assert.True(approve.Result.Success, approve.Result.Message);
+
+        var generate = await f.RaceManagement.GenerateNextRoundEntriesAsync(setup.Round1Id);
+        Assert.True(generate.Result.Success, generate.Result.Message);
+        Assert.True(generate.Result.Data!.IsVoided);
+
+        var owner1UserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        await AddWalletAsync(f, owner1UserId, 100m);
+        var before = await f.GetWalletBalanceAsync(owner1UserId);
+
+        var distribute = await prizeSvc.DistributeAsync(setup.TournamentId);
+        Assert.False(distribute.Result.Success);
+        Assert.Equal(400, distribute.StatusCode);
+
+        Assert.Equal(before, await f.GetWalletBalanceAsync(owner1UserId));
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().Where(p => p.TournamentId == setup.TournamentId).ToListAsync();
+        Assert.All(prizesAfter, p => Assert.False(p.IsDistributed));
+    }
+
+    [Fact]
+    public async Task DistributeAsync_TournamentStillOngoing_FailsWithoutTouchingWalletOrPrize()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 100, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 5, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        // Tournament driven to Ongoing but the Race is never finished/approved -> not Finished.
+        await SetTournamentOngoingAsync(f, raceId);
+
+        var ownerUserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        await AddWalletAsync(f, ownerUserId);
+
+        var distribute = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.False(distribute.Result.Success);
+        Assert.Equal(400, distribute.StatusCode);
+
+        Assert.Equal(0m, await f.GetWalletBalanceAsync(ownerUserId));
+        var prizeAfter = await f.Db.Prizes.AsNoTracking().SingleAsync(p => p.TournamentId == tournamentId);
+        Assert.False(prizeAfter.IsDistributed);
+    }
+
+    [Fact]
+    public async Task DistributeAsync_PositionWithNoFinisher_SkipsThatPrizeButDistributesOthers()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 50, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+        // Position 5 configured, but only 3 horses will ever run -> nobody finishes at Position 5.
+        var p5 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 5, PercentageOfPool = 10, Name = "Hạng 5" });
+        Assert.True(p5.Result.Success, p5.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 10, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        var (h2, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h2");
+        var (h3, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h3");
+        await FinishRaceOfficialAsync(f, raceId, refereeId, new List<Guid> { h1, h2, h3 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var owner1UserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        await AddWalletAsync(f, owner1UserId);
+
+        var distribute = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(distribute.Result.Success, distribute.Result.Message);
+        var dto = distribute.Result.Data!;
+
+        Assert.Single(dto.Distributed);
+        Assert.Equal(1, dto.Distributed[0].Position);
+        Assert.Single(dto.Skipped);
+        Assert.Equal(5, dto.Skipped[0].Position);
+        Assert.Contains("Hạng 5", dto.Skipped[0].Reason);
+
+        Assert.Equal(dto.Distributed[0].Amount, await f.GetWalletBalanceAsync(owner1UserId));
+
+        var prizesAfter = await f.Db.Prizes.AsNoTracking().Where(p => p.TournamentId == tournamentId).ToListAsync();
+        Assert.True(prizesAfter.Single(p => p.Position == 1).IsDistributed);
+        Assert.False(prizesAfter.Single(p => p.Position == 5).IsDistributed);
+    }
+
+    [Fact]
+    public async Task DistributeAsync_WalletCreditFails_RollsBackClaimAndSucceedsOnRetry()
+    {
+        await using var f = await RaceLifecycleTests.LifecycleFixture.CreateAsync();
+        var prizeSvc = MakeDistributionPrizeService(f);
+        var (tournamentId, round1Id) = await BuildSingleRoundTournamentWithPrizePoolAsync(f, prizePool: 1_000_000m);
+
+        var p1 = await prizeSvc.CreateAsync(new CreatePrizeRequest { TournamentId = tournamentId, Position = 1, PercentageOfPool = 100, Name = "Vô địch" });
+        Assert.True(p1.Result.Success, p1.Result.Message);
+
+        var refereeId = await CreateStandaloneRefereeAsync(f);
+        var raceId = await CreateRaceAsync(f, tournamentId, round1Id, DateTime.UtcNow.AddDays(10), maxParticipants: 5, qualificationSlots: 0, name: "Final");
+        await AssignRefereeAsync(f, raceId, refereeId);
+        var (h1, _) = await AddQualifiableEntryAsync(f, raceId, refereeId, "h1");
+        await FinishRaceOfficialAsync(f, raceId, refereeId, new List<Guid> { h1 });
+
+        var finish = await f.TournamentSvc.ChangeStatusAsync(tournamentId, new ChangeTournamentStatusRequest { NewStatus = TournamentStatus.Finished }, Guid.NewGuid());
+        Assert.True(finish.Result.Success, finish.Result.Message);
+
+        var ownerUserId = await GetOwnerUserIdForHorseAsync(f, h1);
+        await AddWalletAsync(f, ownerUserId);
+
+        // Real, thrown wallet-credit failure — f.FaultWallet wraps the production WalletService
+        // used by MakeDistributionPrizeService above, so this exercises DistributeAsync's actual
+        // catch/rollback branch, not a simulated one.
+        f.FaultWallet.FailForUserIds.Add(ownerUserId);
+
+        var first = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(first.Result.Success, first.Result.Message); // one Prize erroring never fails the whole call
+        var dto1 = first.Result.Data!;
+        Assert.Empty(dto1.Distributed);
+        Assert.Single(dto1.Errors);
+        Assert.Equal(1, dto1.Errors[0].Position);
+        Assert.Contains("Injected payout failure", dto1.Errors[0].Reason);
+
+        // Wallet must be untouched — the credit never actually happened.
+        Assert.Equal(0m, await f.GetWalletBalanceAsync(ownerUserId));
+
+        // Claim must have been rolled back to false, not left stuck true with no money moved.
+        var prizeAfterFirst = await f.Db.Prizes.AsNoTracking().SingleAsync(p => p.TournamentId == tournamentId);
+        Assert.False(prizeAfterFirst.IsDistributed);
+        Assert.Null(prizeAfterFirst.DistributedAt);
+
+        // Remove the fault and retry — the rolled-back claim must allow a clean, successful retry.
+        f.FaultWallet.FailForUserIds.Remove(ownerUserId);
+
+        var second = await prizeSvc.DistributeAsync(tournamentId);
+        Assert.True(second.Result.Success, second.Result.Message);
+        var dto2 = second.Result.Data!;
+        Assert.Single(dto2.Distributed);
+        Assert.Empty(dto2.Errors);
+        Assert.Equal(1_000_000m, dto2.Distributed[0].Amount);
+
+        Assert.Equal(1_000_000m, await f.GetWalletBalanceAsync(ownerUserId));
+        var prizeAfterSecond = await f.Db.Prizes.AsNoTracking().SingleAsync(p => p.TournamentId == tournamentId);
+        Assert.True(prizeAfterSecond.IsDistributed);
+        Assert.NotNull(prizeAfterSecond.DistributedAt);
     }
 }

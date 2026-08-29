@@ -54,6 +54,38 @@ public class PrizeResponse
     public DateTime CreatedAt { get; set; }
 }
 
+// ── Prize distribution (manual, Admin-triggered, Finished Tournament only) ─────────────────
+public class PrizeDistributionResultDto
+{
+    public Guid TournamentId { get; set; }
+    public List<PrizeDistributionEntryDto> Distributed { get; set; } = new();
+    public List<PrizeDistributionSkippedDto> Skipped { get; set; } = new();
+    public List<PrizeDistributionErrorDto> Errors { get; set; } = new();
+}
+
+public class PrizeDistributionEntryDto
+{
+    public int Position { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public string? OwnerName { get; set; }
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "VND";
+}
+
+public class PrizeDistributionSkippedDto
+{
+    public int Position { get; set; }
+    public decimal Amount { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class PrizeDistributionErrorDto
+{
+    public int Position { get; set; }
+    public decimal Amount { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
 // ── Protest ──
 public class CreateProtestRequest
 {
