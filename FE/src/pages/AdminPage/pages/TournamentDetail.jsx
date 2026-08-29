@@ -29,6 +29,32 @@ const resultStatusLabel = (s) => ({provisional:"Tạm thời (chờ duyệt)",of
 const fmtDate2 = (v) => apiToVNDate(v);
 const fmtDateTime2 = (v) => apiToVNDisplay(v);
 
+// Reuses AdminPage.jsx's ConfirmModal CSS classes (hr-modal-overlay/hr-modal/hr-modal__message/
+// hr-modal__actions/hr-btn) for visual consistency, but is its own component here since
+// ConfirmModal itself is not exported from AdminPage.jsx. Multi-line backend messages (e.g.
+// RaceEntryService's "Entry chưa đủ điều kiện xuất phát:\n<ngựa 1> [lý do]\n...") render as a
+// list instead of one dense run-on line.
+function ErrorDetailModal({ message, onClose }) {
+  if (!message) return null;
+  const lines = message.split("\n").map((s) => s.trim()).filter(Boolean);
+  return (
+    <div className="hr-modal-overlay" role="presentation" onClick={onClose}>
+      <div className="hr-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        {lines.length > 1 ? (
+          <ul className="hr-modal__message" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+            {lines.map((line, i) => <li key={i}>{line}</li>)}
+          </ul>
+        ) : (
+          <p className="hr-modal__message">{lines[0] ?? message}</p>
+        )}
+        <div className="hr-modal__actions">
+          <button type="button" className="hr-btn hr-btn--primary" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OddsEditor({ raceId, horseId, odds, setMessage }) {
   const [val, setVal] = useState(String(odds));
   const [saving, setSaving] = useState(false);
@@ -71,6 +97,28 @@ export default function TournamentDetail({ t, onBack, message, setMessage, getTo
   const [pendingRegs, setPendingRegs] = useState([]);
   const [rejectModalData, setRejectModalData] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // Backend already gates both deletes (Tournament must be Draft; DeleteRaceAsync additionally
+  // requires the Race itself to be Scheduled/Cancelled) and returns a clear message otherwise —
+  // the button is shown unconditionally rather than replicating that condition here, so a rule
+  // change on the backend can't silently desync from a hidden/shown button on this page.
+  const handleDeleteRound = async (roundId) => {
+    if (!window.confirm("Xóa vòng đấu sẽ xóa luôn toàn bộ cuộc đua bên trong, không thể hoàn tác.")) return;
+    try {
+      await request(`/api/tournaments/rounds/${roundId}`, { method: "DELETE" });
+      setMessage("Đã xóa vòng đấu.");
+      viewTournament();
+    } catch (err) { setMessage(err.message); }
+  };
+
+  const handleDeleteRace = async (raceId) => {
+    if (!window.confirm("Xóa cuộc đua này? Không thể hoàn tác.")) return;
+    try {
+      await request(`/api/races/${raceId}`, { method: "DELETE" });
+      setMessage("Đã xóa cuộc đua.");
+      viewTournament();
+    } catch (err) { setMessage(err.message); }
+  };
 
   const viewTournament = async () => {
     try{const d=await getTournamentRaces(tId);setRaces(Array.isArray(d)?d:[]);}catch{setRaces([]);}
@@ -119,7 +167,7 @@ export default function TournamentDetail({ t, onBack, message, setMessage, getTo
 
   return (
     
-    <>{message && <p className="admin-notice">{message}</p>}   {/* ADD */}
+    <><ErrorDetailModal message={message} onClose={() => setMessage("")} />
     <div style={{marginBottom:12}}><button className="ghost-button" onClick={onBack} style={{fontSize:13}}>← Quay lại danh sách giải đấu</button></div>
     <div style={{padding:"20px 24px",borderRadius:16,border:"1px solid var(--hr-border)",background:"var(--hr-surface)",marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
@@ -205,6 +253,15 @@ export default function TournamentDetail({ t, onBack, message, setMessage, getTo
                     {advanceCount != null ? ` · Số ngựa vào vòng sau: ${advanceCount}` : ""}
                   </p>
                 </div>
+                <button
+                  className="hr-btn hr-btn--danger"
+                  style={{ padding: "4px 10px", fontSize: 11 }}
+                  disabled={!isDraft}
+                  title={!isDraft ? "Chỉ xóa được khi giải đấu ở trạng thái Bản nháp" : undefined}
+                  onClick={() => handleDeleteRound(rid)}
+                >
+                  Xóa
+                </button>
               </div>
             );
           })}
@@ -263,6 +320,10 @@ export default function TournamentDetail({ t, onBack, message, setMessage, getTo
                 with result correction, and the explicit "cuộc đua" wording removes the remaining
                 ambiguity when it IS legitimately shown. */}
             {isDraft && <button className="ghost-button" style={{padding:"4px 10px",fontSize:11}} onClick={async(e)=>{e.stopPropagation();try{const[d,entries,refs]=await Promise.all([request(`/api/races/${id}`),request(`/api/referees/race/${id}/entries`),request(`/api/referees/race/${id}/assignments`)]);const r=d?.data??d;r._selectedHorseIds=(Array.isArray(entries?.data??entries)?(entries?.data??entries):[]).map(e=>e.horseId||e.HorseId);r._selectedRefereeIds=(Array.isArray(refs?.data??refs)?(refs?.data??refs):[]).map(r=>r.refereeId||r.RefereeId);setEditRaceData(r);}catch(err){setMessage(err.message)}}}>Sửa cuộc đua</button>}
+            {/* DeleteRaceAsync requires Tournament.Status == Draft (same gate as edit above) and
+                Race.Status is Scheduled/Cancelled — backend enforces/reports the latter, so the
+                button here is only gated on the Tournament-level condition this page already knows. */}
+            {isDraft && <button className="hr-btn hr-btn--danger" style={{padding:"4px 10px",fontSize:11}} onClick={(e)=>{e.stopPropagation();handleDeleteRace(id);}}>Xóa cuộc đua</button>}
             <span style={{fontSize:11,color:"var(--hr-muted)"}}>{exp?"▲":"▼"}</span>
           </div>
         </div>

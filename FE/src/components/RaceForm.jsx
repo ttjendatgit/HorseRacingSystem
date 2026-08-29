@@ -259,7 +259,33 @@ function RaceForm({ tournamentId, tournamentName, tournamentStartDate, tournamen
         const raceRes = await request("/api/races/management", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(racePayload) });
         const newRaceId = raceRes?.data?.id ?? raceRes?.id;
         if (!newRaceId) throw new Error("Không lấy được ID cuộc đua");
-        if (selectedRefereeIds.length > 0) { await Promise.all(selectedRefereeIds.map((refId) => request(`/api/races/${newRaceId}/referees`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refereeId: refId }) }))); }
+        // Sequential (not Promise.all) + rollback-on-failure: Race creation and referee
+        // assignment are two separate, non-atomic API calls. If an assignment fails partway
+        // through, the Race would otherwise be left orphaned (created, but unusable and
+        // undeletable from this form) while the user sees a generic error and retries,
+        // multiplying duplicate Races. Deleting the just-created Race on failure keeps a
+        // retry safe instead of accumulating junk rows.
+        for (const refId of selectedRefereeIds) {
+          try {
+            await request(`/api/races/${newRaceId}/referees`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refereeId: refId }) });
+          } catch (assignErr) {
+            const refereeInfo = referees.find((r) => (r.id || r.Id) === refId);
+            const refereeLabel = refereeInfo
+              ? (refereeInfo.userFullName || refereeInfo.UserFullName || refereeInfo.fullName || refereeInfo.FullName)
+              : "đã chọn";
+            let rollbackSucceeded = false;
+            try {
+              await request(`/api/races/${newRaceId}`, { method: "DELETE" });
+              rollbackSucceeded = true;
+            } catch {
+              rollbackSucceeded = false;
+            }
+            if (rollbackSucceeded) {
+              throw new Error(`Không thể tạo cuộc đua: trọng tài ${refereeLabel} đang bận (${assignErr.message}). Cuộc đua đã được hoàn tác, vui lòng thử lại.`);
+            }
+            throw new Error("Cuộc đua đã được tạo nhưng gán trọng tài thất bại — vào Sửa cuộc đua để gán lại, hoặc xóa cuộc đua này.");
+          }
+        }
       }
       onSuccess();
     } catch (err) {

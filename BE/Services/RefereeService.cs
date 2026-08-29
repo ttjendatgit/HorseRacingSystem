@@ -189,13 +189,22 @@ public class RefereeService : IRefereeService
             foreach (var a in activeAssignments)
             {
                 var existingRace = await _raceRepo.GetByIdAsync(a.RaceId);
-                if (existingRace != null)
+                if (existingRace == null)
+                    continue;
+                // A Race/Tournament that has already concluded or was cancelled no longer
+                // represents a live/future schedule obligation for the referee — mirrors the
+                // same Finished/Cancelled exclusion already applied for jockeys (HasJockeyScheduleConflictAsync)
+                // and Track reservations (TrackScheduleHelper.HasOverlapAsync).
+                if (existingRace.Status == RaceStatus.Finished || existingRace.Status == RaceStatus.Cancelled)
+                    continue;
+                if (existingRace.Tournament != null &&
+                    (existingRace.Tournament.Status == TournamentStatus.Finished || existingRace.Tournament.Status == TournamentStatus.Cancelled))
+                    continue;
+
+                bool isOverlapping = race.ScheduledAt < existingRace.ScheduledEndAt && race.ScheduledEndAt > existingRace.ScheduledAt;
+                if (isOverlapping)
                 {
-                    bool isOverlapping = race.ScheduledAt < existingRace.ScheduledEndAt && race.ScheduledEndAt > existingRace.ScheduledAt;
-                    if (isOverlapping)
-                    {
-                        return ServiceResult<RefereeAssignmentResponse>.Fail(409, $"Trọng tài bị trùng lịch với cuộc đua: {existingRace.Name}");
-                    }
+                    return ServiceResult<RefereeAssignmentResponse>.Fail(409, $"Trọng tài bị trùng lịch với cuộc đua: {existingRace.Name}");
                 }
             }
 
