@@ -5,7 +5,7 @@ import { getLatestHealthCheck } from "../../utils/healthCheckDisplay";
 import { request } from "../../services/apiClient"; 
 import "./RefereeRaceReportPage.css";
 
-/* ── SVG: empty state (no race selected) ── */
+//SVG for empty state
 function ReportEmptySVG() {
   return (
     <svg className="rr-empty-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -24,10 +24,8 @@ const REPORT_TYPES = [
   { id: "health", label: "Báo cáo sức khỏe", sub: "Tổng hợp tình trạng ngựa", icon: "🏥" },
   { id: "violation", label: "Báo cáo vi phạm", sub: "Các vi phạm trong cuộc đua", icon: "⚠️" },
 ];
-
 const MONTH_LABELS = ["T1", "T2", "T3", "T4", "T5", "T6"];
 const MONTH_FULL = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6"];
-
 const RACE_STATUS_LABEL = {
   Scheduled: "Đã lên lịch",
   RegistrationOpen: "Chuẩn bị",
@@ -47,15 +45,14 @@ export default function RefereeRaceReportPage() {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
   const [reportType, setReportType] = useState("post-race");
-
   const [recentReports, setRecentReports] = useState([]);
   const [resultEntries, setResultEntries] = useState([]);
   const [healthChecks, setHealthChecks] = useState([]);
-  
   const [timeData, setTimeData] = useState({});
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
 
+  //Load assignments
   const loadAssignments = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -71,7 +68,6 @@ export default function RefereeRaceReportPage() {
         setSelectedRaceId(confirmedAssignments[0].raceId || confirmedAssignments[0].RaceId || "");
       }
     } catch {
-      // keep existing list on refresh failure
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -82,6 +78,7 @@ export default function RefereeRaceReportPage() {
     loadAssignments();
   }, []);
 
+  //Load existing report for selected race
   useEffect(() => {
     if (!selectedRaceId) {
       setExistingReport(null);
@@ -102,7 +99,7 @@ export default function RefereeRaceReportPage() {
       .catch(() => { setExistingReport(null); setForm({ content: "", notes: "" }); });
   }, [selectedRaceId]);
 
-  // Load race entries + health checks + violations + EXISTING RESULTS cho Auto-sync
+  //Load race entries, health checks, violations, and previous results for selected race
   useEffect(() => {
     setTimeData({});
     if (!selectedRaceId) {
@@ -114,7 +111,7 @@ export default function RefereeRaceReportPage() {
       getRaceEntries(selectedRaceId).catch(() => []),
       getRaceHealthChecks(selectedRaceId).catch(() => []),
       getRaceViolations(selectedRaceId).catch(() => []),
-      request(`/api/races/${selectedRaceId}/result`).catch(() => null), // Kéo KQ cũ về
+      request(`/api/races/${selectedRaceId}/result`).catch(() => null),
     ]).then(([entriesData, hcData, violsData, resData]) => {
       const entriesList = Array.isArray(entriesData?.data) ? entriesData.data : Array.isArray(entriesData) ? entriesData : [];
       setResultEntries(entriesList);
@@ -136,22 +133,18 @@ export default function RefereeRaceReportPage() {
         }
       });
 
-      // Parse JSON Kết quả cũ
       const fetchedResult = resData?.data || resData;
       const previousRankings = fetchedResult?.rankings || fetchedResult?.Rankings || [];
-
       const initialData = {};
       entriesList.forEach(e => {
         const hId = e.horseId || e.HorseId;
         const syncPenalty = autoPenaltyMap[hId] ? String(autoPenaltyMap[hId]) : "0";
-        
-        // Tìm xem ngựa này đã được nhập KQ lần trước chưa
         const prevRank = previousRankings.find(r => (r.horseId || r.HorseId) === hId);
 
         if (prevRank) {
           const status = prevRank.status || prevRank.Status || "Completed";
           let mm = "", ss = "", ms = "";
-          const t = prevRank.timeTaken || prevRank.TimeTaken; // Thời gian này ĐÃ BỊ CỘNG PHẠT ở backend
+          const t = prevRank.timeTaken || prevRank.TimeTaken;
 
         if (status === "Completed" && t != null) {
             let baseTimeMs = Math.round(t * 1000);
@@ -173,15 +166,24 @@ export default function RefereeRaceReportPage() {
 
           initialData[hId] = { status: finalStatus, mm, ss, ms, penalty: syncPenalty, isAutoDSQ: hasDSQViolation };
         } else {
-          // Chưa có KQ cũ
-          const syncStatus = autoStatusMap[hId] || "Completed";
-          initialData[hId] = { status: syncStatus, mm: "", ss: "", ms: "", penalty: syncPenalty };
+          const hasDSQViolation = autoStatusMap[hId] === "DSQ";
+          const syncStatus = hasDSQViolation ? "DSQ" : "Completed";
+          
+          initialData[hId] = { 
+            status: syncStatus, 
+            mm: "", 
+            ss: "", 
+            ms: "", 
+            penalty: syncPenalty, 
+            isAutoDSQ: hasDSQViolation
+          };
         }
       });
       setTimeData(initialData);
     });
   }, [selectedRaceId]);
 
+  //Compute failed health check horse IDs
   const failedHealthCheckHorseIds = useMemo(() => {
     const byHorse = new Map();
     healthChecks.forEach((c) => {
@@ -198,6 +200,7 @@ export default function RefereeRaceReportPage() {
     return failed;
   }, [healthChecks]);
 
+  //Compute rankings based on timeData
     const rankings = useMemo(() => {
     const arr = Object.keys(timeData).map(horseId => {
       const data = timeData[horseId];
@@ -232,6 +235,7 @@ export default function RefereeRaceReportPage() {
       return 0;
     });
 
+    //Assign ranks
     const result = {};
     let currentRank = 1;
     for (let i = 0; i < arr.length; i++) {
@@ -305,6 +309,7 @@ export default function RefereeRaceReportPage() {
 
   const maxCount = Math.max(...chartData.map((d) => d.count), 1);
 
+  //Handle report submission
   const handleSubmitReport = async (isDraft) => {
     if (!form.content.trim()) {
       setMsg("Vui lòng nhập nội dung báo cáo.");
@@ -336,6 +341,7 @@ export default function RefereeRaceReportPage() {
     }
   };
 
+  //Handle result submission
   const handleSubmitResult = async (e) => {
     e.preventDefault();
     if (!canEditRanking) return;
@@ -361,7 +367,6 @@ export default function RefereeRaceReportPage() {
           status: timeData[hId].status
         };
       });
-
       await submitRaceResult(selectedRaceId, { rankings: payloadRankings });
       setResultMsg("Kết quả đã được gửi thành công!");
       loadAssignments(true);
@@ -371,11 +376,6 @@ export default function RefereeRaceReportPage() {
       setResultSubmitting(false);
     }
   };
-
-  const currentRaceName =
-    assignments.find((a) => (a.raceId || a.RaceId) === selectedRaceId)?.raceName ||
-    assignments.find((a) => (a.raceId || a.RaceId) === selectedRaceId)?.RaceName ||
-    "Cuộc đua đã chọn";
 
   return (
     <div className="rr-wrap">
