@@ -246,9 +246,9 @@ describe("getPlacementLabel", () => {
     assert.equal(getPlacementLabel({ isFinal: false, qualificationSlots: 3 }), "");
   });
 
-  test("returns '--' when status is DNF or DSQ, regardless of isFinal/qualificationSlots", () => {
-    assert.equal(getPlacementLabel({ position: 99, isFinal: true, status: "DNF" }), "--");
-    assert.equal(getPlacementLabel({ position: 99, isFinal: false, qualificationSlots: 4, status: "DSQ" }), "--");
+  test("returns 'Bị loại' when status is DNF or DSQ, regardless of isFinal/qualificationSlots", () => {
+    assert.equal(getPlacementLabel({ position: 99, isFinal: true, status: "DNF" }), "Bị loại");
+    assert.equal(getPlacementLabel({ position: 99, isFinal: false, qualificationSlots: 4, status: "DSQ" }), "Bị loại");
   });
 
   test("keeps prior behavior when status is not passed", () => {

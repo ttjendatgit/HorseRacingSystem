@@ -70,8 +70,11 @@ export const getPlacementLabel = ({ position, isFinal, qualificationSlots, statu
   // DNF/DSQ entries carry the backend's 99 sentinel position (see LiveResultService.cs) so they
   // sort to the bottom without disturbing real finishers' ranks — 99 has no display meaning of
   // its own, so a non-Completed status always short-circuits before the isFinal/qualificationSlots
-  // logic below, regardless of what that sentinel position number happens to be.
-  if (status && status !== "Completed") return "--";
+  // logic below, regardless of what that sentinel position number happens to be. This label feeds
+  // the badge column (getPlacementTone maps "Bị loại" -> danger/red), which is a distinct concern
+  // from the rank column's own "--" (handled separately by callers, e.g. ResultRow's
+  // isEliminatedResult) — an eliminated entry still has a status worth stating, unlike a rank.
+  if (status && status !== "Completed") return "Bị loại";
 
   if (isFinal) {
     return position === 1 ? "Vô địch" : `Hạng ${position}`;
