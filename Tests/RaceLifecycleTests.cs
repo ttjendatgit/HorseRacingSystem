@@ -793,8 +793,8 @@ public class RaceLifecycleTests
                 TournamentSvc, walletService, db);
 
             ViolationSvc = new ViolationRecordService(
-                ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
-                new FakeNotificationService(), _userRepo, UnitOfWork);
+    ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
+    new FakeNotificationService(), _userRepo, UnitOfWork, _assignmentRepo);
 
             ProtestSvc = new ProtestService(
                 ProtestRepo, RaceRepo, RaceResultRepo, EntryRepo, _ownerRepo, _jockeyRepo, _userRepo,
