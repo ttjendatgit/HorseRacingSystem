@@ -128,7 +128,7 @@ export default function TournamentManagementPage() {
   const [showPrizeCta, setShowPrizeCta] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedT, setSelectedT] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
+  const [form, setForm] = useState({ name: "", description: "", venue: "", startDate: inputDate(7), endDate: inputDate(14), registrationDeadline: inputDate(6), prizePool: 0, imageUrl: "", minParticipants: 3, maxParticipants: 10, maxRounds: 1 });
   const isDraft = canEditTournamentStructure(editingStatus);
 
   const load = () => {
@@ -176,6 +176,7 @@ export default function TournamentManagementPage() {
       if (!isPublished) {
         payload.startDate = vnInputToApiUtc(form.startDate);
         payload.endDate = vnInputToApiUtc(form.endDate);
+        payload.registrationDeadline = vnInputToApiUtc(form.registrationDeadline);   // ADD
         payload.minParticipants = Number(form.minParticipants);
         payload.maxParticipants = Number(form.maxParticipants);
       }
@@ -206,6 +207,7 @@ export default function TournamentManagementPage() {
       description: item.description ?? item.Description ?? "",
       startDate: apiToVNInput(item.startDate ?? item.StartDate),
       endDate: apiToVNInput(item.endDate ?? item.EndDate),
+      registrationDeadline: apiToVNInput(item.registrationDeadline ?? item.RegistrationDeadline), // ADD
       imageUrl: item.imageUrl ?? item.ImageUrl ?? "",
       minParticipants: item.minParticipants ?? item.MinParticipants ?? 3,
       maxParticipants: item.maxParticipants ?? item.MaxParticipants ?? 10,
@@ -325,6 +327,10 @@ export default function TournamentManagementPage() {
         <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
           Thời gian kết thúc *
           <input type="datetime-local" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} min={inputDate(0)} disabled={editingStatus === 1} />
+        </label>
+        <label style={{ display: "block", fontSize: 13, color: "var(--hr-muted)", marginBottom: 4 }}>
+          Hạn đăng ký ngựa *
+          <input type="datetime-local" required value={form.registrationDeadline} onChange={(e) => setForm({ ...form, registrationDeadline: e.target.value })} min={inputDate(0)} max={form.startDate} disabled={editingStatus === 1} />
         </label>
         {editingStatus !== 1 && <p style={{ margin: "-8px 0 8px", fontSize: 12, color: "var(--hr-muted)" }}>Giải đấu có thể bắt đầu và kết thúc trong cùng một ngày, miễn thời gian kết thúc sau thời gian bắt đầu.</p>}
         <input type="number" placeholder="Số người tham gia tối thiểu" required min="3" value={form.minParticipants} onChange={(e) => setForm({ ...form, minParticipants: e.target.value })} disabled={editingStatus === 1} />
