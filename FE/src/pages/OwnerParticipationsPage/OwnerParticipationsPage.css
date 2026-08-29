@@ -393,6 +393,23 @@
   line-height: 1.4;
 }
 
+/* "Kết luận" (complaint ruling) section — the most consequential info on this card (it decides
+   whether the race result was affected), so it gets its own highlighted block instead of the
+   browser's unstyled default <dl>/<dt>/<dd> stacking. Mirrors the label/value visual pattern of
+   RaceUi.css's .rm-data-row__meta-item (uppercase muted label, bold prominent value, inline
+   label-value pairing) without depending on that component. */
+.op-conclusion-section {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(184, 134, 59, 0.08);
+  border: 1px solid rgba(184, 134, 59, 0.22);
+}
+.op-conclusion-meta { display: grid; gap: 8px; margin: 8px 0 0; }
+.op-conclusion-meta-item { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.op-conclusion-meta-item dt { margin: 0; color: var(--hr-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; min-width: 130px; }
+.op-conclusion-meta-item dd { margin: 0; color: var(--hr-paper); font-size: 14px; font-weight: 700; }
+
 @media (max-width: 860px) {
   .app-shell:has(.owner-participations) .page-wrapper {
     padding: 22px 18px 48px;

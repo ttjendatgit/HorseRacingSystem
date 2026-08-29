@@ -124,6 +124,11 @@
 .admin-title h1 { margin: 8px 0 5px; color: var(--hr-paper); font-size: 38px; font-weight: 800; letter-spacing: -0.02em; }
 .admin-title p { color: var(--hr-muted); font-size: 14.5px; }
 .admin-stat-grid, .admin-card-grid, .admin-role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+/* .admin-card-grid cards (e.g. AdminPage.jsx's Race list) can expand in place on click — default
+   Grid align-items:stretch from the rule above would then stretch sibling cards in the same row
+   to match, leaving ugly empty space in the collapsed ones. .admin-stat-grid/.admin-role-grid are
+   left on stretch since their cards don't have this expand-in-place behavior. */
+.admin-card-grid { align-items: start; }
 .admin-stat-card {
   background: var(--hr-surface);
   border-radius: 14px;

@@ -416,9 +416,7 @@ export function PrizeManagement() {
           }
         >
           <p>
-            Đây là hành động <strong>không thể hoàn tác qua giao diện</strong>. Số tiền của từng Hạng thưởng
-            (đã tính sẵn theo cơ cấu đã cấu hình) sẽ được cộng thẳng vào ví của Chủ ngựa đang đứng đúng thứ
-            hạng chung cuộc tương ứng. Vui lòng kiểm tra kỹ cơ cấu giải thưởng trước khi xác nhận.
+            Thao tác <strong>không thể hoàn tác</strong> — tiền sẽ được cộng thẳng vào ví theo đúng cơ cấu giải thưởng đã cấu hình. Hãy kiểm tra kỹ trước khi xác nhận.
           </p>
         </RaceModalShell>
       )}

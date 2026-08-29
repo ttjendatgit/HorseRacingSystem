@@ -570,15 +570,15 @@ function OwnerParticipationsPage() {
               {complaint.refereeResponse ? <p>{complaint.refereeResponse}</p> : <p className="op-muted-copy">Chưa có giải trình trọng tài.</p>}
               {refereeCount > 0 ? <ComplaintEvidenceGallery evidence={groupedEvidence.refereeEvidence} /> : <p className="op-inline-empty">Chưa có bằng chứng từ trọng tài.</p>}
             </section>
-            <section>
+            <section className="op-conclusion-section">
               <h4>Kết luận</h4>
-              <dl>
-                <div><dt>Trạng thái</dt><dd>{statusDetails.label}</dd></div>
-                <div><dt>Kết luận Admin</dt><dd>{complaint.ruling || "Chưa có kết luận"}</dd></div>
+              <dl className="op-conclusion-meta">
+                <div className="op-conclusion-meta-item"><dt>Trạng thái</dt><dd><StatusBadge label={statusDetails.label} tone={tone} /></dd></div>
+                <div className="op-conclusion-meta-item"><dt>Kết luận Admin</dt><dd>{complaint.ruling || "Chưa có kết luận"}</dd></div>
                 {normalizeResultStatus(complaint.status) === "Upheld" || complaint.affectsResult != null ? (
-                  <div><dt>Ảnh hưởng kết quả</dt><dd>{formatAffectsResult(complaint.affectsResult)}</dd></div>
+                  <div className="op-conclusion-meta-item"><dt>Ảnh hưởng kết quả</dt><dd>{formatAffectsResult(complaint.affectsResult)}</dd></div>
                 ) : null}
-                <div><dt>Thời điểm xử lý</dt><dd>{apiToVNDisplay(complaint.resolvedAt) || "Chưa xử lý"}</dd></div>
+                <div className="op-conclusion-meta-item"><dt>Thời điểm xử lý</dt><dd>{apiToVNDisplay(complaint.resolvedAt) || "Chưa xử lý"}</dd></div>
               </dl>
             </section>
           </div>
