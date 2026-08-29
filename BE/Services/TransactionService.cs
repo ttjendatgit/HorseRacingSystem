@@ -194,11 +194,7 @@ public class TransactionService : ITransactionService
         var transaction = await _transactionRepo.GetByIdAsync(transactionId);
         if (transaction == null || transaction.UserId != userId)
         {
-<<<<<<< HEAD
-            return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy giao dịch");
-=======
-            return ServiceResult<object>.Fail(404, "Transaction not found");
->>>>>>> origin/huyhoang
+                        return ServiceResult<object>.Fail(StatusCodes.Status404NotFound, "Không tìm thấy giao dịch");
         }
 
         if (transaction.Status == "completed")

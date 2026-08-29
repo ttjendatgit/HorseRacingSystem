@@ -89,15 +89,14 @@ export function createDeposit(amount) {
   });
 }
 
-<<<<<<< HEAD
+
 /**
  * [ROLE: Khán Giả / User]
  * Tra cứu kiểm tra trạng thái xử lý của một đơn nạp tiền SePay.
  * Endpoint: GET /api/sepay/check
  * @param {string} transactionId - Mã GUID giao dịch
  */
-=======
->>>>>>> origin/huyhoang
+
 export function checkDeposit(transactionId) {
   return request(`/api/sepay/check?transactionId=${transactionId}`);
 }

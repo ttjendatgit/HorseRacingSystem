@@ -61,13 +61,7 @@ public class SepayController : ControllerBase
     {
         var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(uid, out var userId)) return Unauthorized();
-<<<<<<< HEAD
-        var result = await _transactionService.CheckTransactionAsync(userId, transactionId);
-=======
-
-        var result = await _transactionService.CheckTransactionAsync(userId, transactionId);
-        if (result.StatusCode == 404) return NotFound();
->>>>>>> origin/huyhoang
+                var result = await _transactionService.CheckTransactionAsync(userId, transactionId);
         return StatusCode(result.StatusCode, result.Result);
     }
 

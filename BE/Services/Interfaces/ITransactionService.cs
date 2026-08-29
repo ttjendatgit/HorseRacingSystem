@@ -18,8 +18,8 @@ public interface ITransactionService
     /// Xử lý dữ liệu chuyển khoản tự động gửi về từ Webhook SePay và cộng tiền ví cho người dùng.
     /// </summary>
     Task<ServiceResult<object>> HandleWebhookAsync(SepayWebhookRequest request);
-<<<<<<< HEAD
 
+    
     /// <summary>
     /// Kiểm tra trạng thái xử lý của một đơn nạp tiền cụ thể theo ID.
     /// </summary>
@@ -28,8 +28,6 @@ public interface ITransactionService
     /// <summary>
     /// Lấy lịch sử biến động tất cả các đơn nạp tiền của người dùng đang đăng nhập.
     /// </summary>
-=======
-    Task<ServiceResult<object>> CheckTransactionAsync(Guid userId, Guid transactionId);
->>>>>>> origin/huyhoang
+     
     Task<ServiceResult<object>> GetHistoryAsync(Guid userId);
 }
