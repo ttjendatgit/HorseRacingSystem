@@ -86,6 +86,19 @@ public class PrizeDistributionErrorDto
     public string Reason { get; set; } = string.Empty;
 }
 
+// PRIZE-V2 (Phase 4): one row per PrizeDistributionLog, for the Owner-facing "lịch sử nhận thưởng"
+// (WalletController.GetMyPrizeHistory) — read-only, never written from this DTO.
+public class PrizeHistoryEntryDto
+{
+    public Guid TournamentId { get; set; }
+    public string TournamentName { get; set; } = string.Empty;
+    public int Position { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "VND";
+    public DateTime DistributedAt { get; set; }
+}
+
 // ── Protest ──
 public class CreateProtestRequest
 {

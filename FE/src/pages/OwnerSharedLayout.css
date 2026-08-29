@@ -74,6 +74,15 @@
   box-shadow: 0 16px 30px rgba(23, 32, 51, 0.12);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift {
+    transition: none;
+  }
+  .hover-lift:hover {
+    transform: none;
+  }
+}
+
 @media (max-width: 1100px) {
   .owner-layout {
     grid-template-columns: 1fr;

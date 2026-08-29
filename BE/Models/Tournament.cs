@@ -58,6 +58,22 @@ public class Tournament
     [MaxLength(1000)]
     public string? CancellationReason { get; set; }
 
+    // PRIZE-V2: set once, atomically, at the exact moment a Tournament transitions to Finished
+    // via walkover (RaceManagementService's eligible==1 branch) — null for the ordinary case
+    // (Final Race actually played to >=1 Completed horse). "Walkover" is the only value written
+    // today; kept as free text (not an enum) so a future distinct reason never needs a schema
+    // change. RaceService.GetFinalStandingsAsync reads this first, before attempting to re-derive
+    // standings from Round/Race data, because a walkover never has a real Final Race to read from.
+    [MaxLength(500)]
+    public string? FinishReason { get; set; }
+
+    // PRIZE-V2: the Tournament's Position-1 Horse for a walkover finish — the only durable record
+    // of who the champion is, since no Final Race is ever played in that case (nothing in
+    // Round/Race/RaceResult can be re-derived from later). Only ever set together with
+    // FinishReason == "Walkover".
+    public Guid? ChampionHorseId { get; set; }
+    public Horse? ChampionHorse { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }

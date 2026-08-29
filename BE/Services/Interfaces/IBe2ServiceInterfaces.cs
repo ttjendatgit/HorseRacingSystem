@@ -147,7 +147,9 @@ public interface IAdminService
 
     // Operations
     Task<ServiceResult<RefereeAssignmentResponse>> AssignRefereeToRaceAsync(AssignRefereeRequest request);
-    Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId);
+    // PRIZE-V2: actorId is optional and only meaningful for the Final-Race-all-DNF/DSQ auto-Cancel
+    // branch (recorded as Tournament.CancelledBy) — every other approval path ignores it entirely.
+    Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId, Guid? actorId = null);
     Task<ServiceResult<bool>> RejectRaceResultAsync(Guid raceId, string reason);
     Task<ServiceResult<object>> GetPredictionsAsync();
     Task<ServiceResult<object>> SettlePredictionsAsync(Guid raceId);

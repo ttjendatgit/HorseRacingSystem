@@ -31,6 +31,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Prize> Prizes => Set<Prize>();
+    public DbSet<PrizeDistributionLog> PrizeDistributionLogs => Set<PrizeDistributionLog>();
     public DbSet<Protest> Protests => Set<Protest>();
     public DbSet<RaceComplaint> RaceComplaints => Set<RaceComplaint>();
     public DbSet<RaceComplaintEvidence> RaceComplaintEvidence => Set<RaceComplaintEvidence>();
@@ -347,6 +348,15 @@ public class ApplicationDbContext : DbContext
             .Property(t => t.SurfaceType)
             .HasConversion<string>();
 
+        // PRIZE-V2: ChampionHorseId is a historical record (set once, at walkover-Finished) — same
+        // Restrict convention as every other FK to Horse in this model, so a Horse can never be
+        // hard-deleted out from under it.
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.ChampionHorse)
+            .WithMany()
+            .HasForeignKey(t => t.ChampionHorseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Prize Model
         modelBuilder.Entity<Prize>()
             .HasOne(p => p.Tournament)
@@ -388,6 +398,24 @@ public class ApplicationDbContext : DbContext
             .IsUnique()
             .HasFilter("\"TournamentId\" IS NOT NULL")
             .HasDatabaseName("IX_Prizes_TournamentId_Position_Active");
+
+        // PRIZE-V2 (Phase 4): PrizeDistributionLog — append-only audit trail, never updated/deleted
+        // by application code. Restrict delete on both FKs: a Prize/Tournament with existing payout
+        // history must never be silently orphaned or cascade-deleted out from under its own log.
+        modelBuilder.Entity<PrizeDistributionLog>()
+            .HasOne(l => l.Prize)
+            .WithMany()
+            .HasForeignKey(l => l.PrizeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PrizeDistributionLog>()
+            .HasOne(l => l.Tournament)
+            .WithMany()
+            .HasForeignKey(l => l.TournamentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PrizeDistributionLog>()
+            .HasIndex(l => l.OwnerUserId);
 
         // Protest Model
         modelBuilder.Entity<Protest>()

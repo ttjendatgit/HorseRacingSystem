@@ -17,14 +17,16 @@ public class RaceService : IRaceService
     private readonly IRaceResultRepository _results;
     private readonly ITournamentRepository _tournaments;
     private readonly IRaceManagementService _raceManagement;
+    private readonly IHorseRepository _horses;
 
-    public RaceService(IRaceRepository races, IRaceEntryRepository entries, IRaceResultRepository results, ITournamentRepository tournaments, IRaceManagementService raceManagement)
+    public RaceService(IRaceRepository races, IRaceEntryRepository entries, IRaceResultRepository results, ITournamentRepository tournaments, IRaceManagementService raceManagement, IHorseRepository horses)
     {
         _races = races;
         _entries = entries;
         _results = results;
         _tournaments = tournaments;
         _raceManagement = raceManagement;
+        _horses = horses;
     }
 
     /// <summary>
@@ -237,6 +239,43 @@ public class RaceService : IRaceService
 
     private async Task<ServiceResult<FinalStandingsDto>> BuildFinishedStandingsAsync(Tournament tournament)
     {
+        // PRIZE-V2: walkover never plays a Final Race — Tournament.ChampionHorseId/FinishReason
+        // (set once, atomically, by RaceManagementService's eligible==1 branch) is the ONLY source
+        // of truth here. Must be checked BEFORE the "deciding round" search below: that search
+        // would otherwise land on the semifinal Round that actually produced the walkover winner,
+        // which can easily have had more than 1 parallel Race — triggering RequiresManualReview
+        // for a case that is in fact perfectly resolved (exactly 1 real finisher, already known).
+        if (string.Equals(tournament.FinishReason, "Walkover", System.StringComparison.Ordinal))
+        {
+            if (!tournament.ChampionHorseId.HasValue)
+            {
+                return ServiceResult<FinalStandingsDto>.Fail(StatusCodes.Status409Conflict,
+                    "Giải đấu kết thúc bằng walkover nhưng không xác định được nhà vô địch — dữ liệu bất thường, cần kiểm tra lại.");
+            }
+
+            var champion = await _horses.GetByIdAsync(tournament.ChampionHorseId.Value);
+            var standing = new StandingEntryDto
+            {
+                Position = 1,
+                HorseId = tournament.ChampionHorseId.Value,
+                HorseName = champion?.Name ?? string.Empty,
+                OwnerId = champion?.Owner?.Id,
+                OwnerName = champion?.Owner?.User?.FullName,
+                OwnerUserId = champion?.Owner?.User?.Id
+            };
+
+            return ServiceResult<FinalStandingsDto>.Ok(new FinalStandingsDto
+            {
+                TournamentId = tournament.Id,
+                IsFinal = true,
+                IsVoid = false,
+                IsWalkover = true,
+                DecidingRoundNumber = null,
+                RequiresManualReview = false,
+                Standings = new List<StandingEntryDto> { standing }
+            });
+        }
+
         // Vòng quyết định = Round có RoundNumber lớn nhất có ít nhất 1 Race Finished+Official.
         // Duyệt giảm dần RoundNumber vì walkover/void có thể kết thúc giải sớm ở 1 Round giữa
         // chừng — các Round sau đó (kể cả Final) không có Race nào Finished+Official (bị Cancelled).
@@ -292,7 +331,15 @@ public class RaceService : IRaceService
             .Where(e => e.Horse != null)
             .ToDictionary(e => e.HorseId, e => e);
 
-        var standings = raceResultResponse.Rankings.Select(r =>
+        // PRIZE-V2: only Status=="Completed" entries ever occupy a real finishing Position (see
+        // RaceResultRankingValidator — DNF/DSQ items are guaranteed never to reuse a Completed
+        // Position, but are NOT excluded from Rankings itself). Prize distribution keys strictly
+        // off Position here, so a DNF/DSQ item must never leak into these standings — that would
+        // risk crediting a horse that never finished the race, or reusing a Position dropped by
+        // this same filter.
+        var standings = raceResultResponse.Rankings
+            .Where(r => r.Status == "Completed")
+            .Select(r =>
         {
             entryByHorse.TryGetValue(r.HorseId, out var entry);
             return new StandingEntryDto

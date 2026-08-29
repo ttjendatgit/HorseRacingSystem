@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -236,7 +237,10 @@ public class AdminController : ControllerBase
     [HttpPost("races/{raceId:guid}/approve-result")]
     public async Task<ActionResult> ApproveRaceResult(Guid raceId)
     {
-        var result = await _adminService.ApproveRaceResultAsync(raceId);
+        // PRIZE-V2: actorId is only actually used for the rare Final-Race-all-DNF/DSQ auto-Cancel
+        // branch (Tournament.CancelledBy) — every other approval ignores it.
+        Guid? actorId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
+        var result = await _adminService.ApproveRaceResultAsync(raceId, actorId);
         return StatusCode(result.StatusCode, result.Result);
     }
 

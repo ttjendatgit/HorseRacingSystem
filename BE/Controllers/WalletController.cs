@@ -16,10 +16,12 @@ namespace HorseRacing.Controllers;
 public class WalletController : ControllerBase
 {
     private readonly IWalletService _walletService;
+    private readonly IPrizeService _prizeService;
 
-    public WalletController(IWalletService walletService)
+    public WalletController(IWalletService walletService, IPrizeService prizeService)
     {
         _walletService = walletService;
+        _prizeService = prizeService;
     }
 
     /// <summary>
@@ -32,6 +34,20 @@ public class WalletController : ControllerBase
         var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(uid, out var userId)) return Unauthorized();
         var result = await _walletService.GetBalanceAsync(userId);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
+    /// <summary>
+    /// Lịch sử nhận thưởng của Chủ ngựa đang đăng nhập — mới nhất trước.
+    /// </summary>
+    /// <returns>Danh sách các lần trao thưởng đã nhận thật (không bao gồm Skipped/Errors).</returns>
+    [HttpGet("my-prize-history")]
+    [Authorize(Roles = "HorseOwner")]
+    public async Task<ActionResult> GetMyPrizeHistory()
+    {
+        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(uid, out var userId)) return Unauthorized();
+        var result = await _prizeService.GetMyPrizeHistoryAsync(userId);
         return StatusCode(result.StatusCode, result.Result);
     }
 }

@@ -1,0 +1,319 @@
+/* Owner Wallet — palette/tokens reused verbatim from OwnerSharedLayout.css / OwnerDashboardPage.css
+   (bg #f5f2eb, text #1a1d23 / #657086, gold gradient e7b55d→d7aa4d→8f6420, dark hero gradient
+   181c26→0e121a). Contrast pairs verified with the WCAG relative-luminance formula before use —
+   see task report; #657086/#64748b only ever sit on a white/cream card surface here (4.75–4.99:1),
+   never directly on the bare #f5f2eb page background (would be 4.26–4.46:1, below AA). */
+
+.ow-page {
+  background: #f5f2eb;
+  min-height: 100%;
+  padding: 28px 32px 48px;
+  display: grid;
+  gap: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.ow-topbar h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1a1d23;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.ow-topbar-sub {
+  color: #414a5a;
+  font-size: 14.5px;
+  font-weight: 500;
+  margin: 4px 0 0;
+}
+
+/* ── Hero balance card ── */
+.ow-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 32px;
+  background: linear-gradient(180deg, #181c26 0%, #0e121a 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+}
+
+.ow-hero__content {
+  display: grid;
+  gap: 6px;
+}
+
+.ow-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.ow-hero__value {
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ow-hero__value--error {
+  color: #f2a49a;
+  font-size: 20px;
+}
+
+.ow-hero__sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ow-hero__icon {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(231, 181, 93, 0.22) 0%, rgba(143, 100, 32, 0.22) 100%);
+  color: #e7b55d;
+}
+
+/* ── Error banner (mirrors .od-error's verified colors) ── */
+.ow-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #b91c1c;
+}
+
+.ow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  min-width: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease;
+  font-family: inherit;
+  border: none;
+}
+
+.ow-btn--outline {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(215, 170, 77, 0.3);
+  color: #1a1d23;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ow-btn--outline:hover {
+  border-color: #d7aa4d;
+  color: #8f6420;
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.ow-btn:focus-visible {
+  outline: 3px solid #d7aa4d;
+  outline-offset: 2px;
+}
+
+/* ── History section ── */
+.ow-history {
+  display: grid;
+  gap: 16px;
+}
+
+.ow-history__head h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1a1d23;
+  margin: 0;
+}
+
+.ow-empty {
+  padding: 40px 24px;
+  text-align: center;
+  border-radius: 16px;
+  border: 1px dashed rgba(143, 100, 32, 0.28);
+  background: rgba(255, 250, 240, 0.6);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.ow-empty__icon {
+  color: #d7aa4d;
+  margin-bottom: 4px;
+}
+
+.ow-empty h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1a1d23;
+}
+
+.ow-empty p {
+  margin: 0;
+  font-size: 13.5px;
+  color: #657086;
+  max-width: 360px;
+}
+
+.ow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.ow-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(143, 100, 32, 0.14);
+  box-shadow: 0 2px 10px rgba(23, 32, 51, 0.04);
+}
+
+.ow-card__badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(231, 198, 120, 0.1);
+  color: #8f6420;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.ow-card__body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.ow-card__body h3 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #1a1d23;
+  overflow-wrap: break-word;
+}
+
+.ow-card__horse {
+  margin: 0;
+  font-size: 13.5px;
+  color: #657086;
+}
+
+.ow-card__horse strong {
+  color: #1a1d23;
+  font-weight: 700;
+}
+
+.ow-card__date {
+  font-size: 12px;
+  color: #657086;
+}
+
+.ow-card__amount {
+  flex-shrink: 0;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.ow-card__amount span {
+  font-size: 11px;
+  color: #657086;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.ow-card__amount strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: #8f6420;
+}
+
+/* ── Reduced motion: this page's own transitions ── */
+@media (prefers-reduced-motion: reduce) {
+  .ow-btn {
+    transition: none;
+  }
+  .ow-btn--outline:hover {
+    transform: none;
+  }
+}
+
+/* ── Responsive: 375 / 768 / 1024 / 1440 ── */
+@media (max-width: 1024px) {
+  .ow-page {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .ow-page {
+    padding: 20px 20px 40px;
+  }
+  .ow-hero {
+    padding: 22px 22px;
+  }
+  .ow-hero__value {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 375px) {
+  .ow-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ow-hero__icon {
+    width: 56px;
+    height: 56px;
+  }
+  .ow-card {
+    flex-wrap: wrap;
+  }
+  .ow-card__amount {
+    justify-items: start;
+    text-align: left;
+    width: 100%;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+}

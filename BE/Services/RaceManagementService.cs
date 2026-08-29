@@ -1137,6 +1137,16 @@ public class RaceManagementService : IRaceManagementService
                             $"Không thể hoàn tất walkover: {finishResult.Result.Message}");
                     }
 
+                    // PRIZE-V2: durable record of who the champion is — walkover never plays a Final
+                    // Race, so nothing in Round/Race/RaceResult can be re-derived from later.
+                    // RaceService.GetFinalStandingsAsync reads these back to build Position-1
+                    // standings for prize payout, instead of trying (and failing) to re-derive a
+                    // "deciding round" from a semifinal that may have had multiple parallel Races.
+                    tournament.FinishReason = "Walkover";
+                    tournament.ChampionHorseId = walkoverWinnerHorseId;
+                    await _tournamentRepo.UpdateAsync(tournament);
+                    await _unitOfWork.SaveChangesAsync();
+
                     await walkoverTransaction.CommitAsync();
 
                     return ServiceResult<GenerateNextRoundResultDto>.Ok(new GenerateNextRoundResultDto

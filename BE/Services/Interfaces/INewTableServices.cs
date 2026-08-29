@@ -19,6 +19,10 @@ public interface IPrizeService
     // Manual, Admin-triggered payout of already-computed Prize.Amount rows to the Owner standing
     // at each Position in the Tournament's final standings (RaceService.GetFinalStandingsAsync).
     Task<ServiceResult<PrizeDistributionResultDto>> DistributeAsync(Guid tournamentId);
+
+    // Owner-facing "lịch sử nhận thưởng" — reads PrizeDistributionLog (the only successful-payout
+    // audit trail; Prize itself carries no OwnerId), newest first.
+    Task<ServiceResult<List<PrizeHistoryEntryDto>>> GetMyPrizeHistoryAsync(Guid ownerUserId);
 }
 
 public interface IProtestService

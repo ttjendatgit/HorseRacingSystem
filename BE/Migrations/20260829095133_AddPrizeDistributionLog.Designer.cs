@@ -3,6 +3,7 @@ using System;
 using HorseRacing.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HorseRacing.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829095133_AddPrizeDistributionLog")]
+    partial class AddPrizeDistributionLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1494,9 +1497,6 @@ namespace HorseRacing.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<Guid?>("ChampionHorseId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Country")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1510,10 +1510,6 @@ namespace HorseRacing.Migrations
 
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("FinishReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("FinishedAt")
                         .HasColumnType("timestamp without time zone");
@@ -1568,8 +1564,6 @@ namespace HorseRacing.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ChampionHorseId");
 
                     b.ToTable("Tournaments");
                 });
@@ -2441,16 +2435,6 @@ namespace HorseRacing.Migrations
                         .IsRequired();
 
                     b.Navigation("Tournament");
-                });
-
-            modelBuilder.Entity("HorseRacing.Models.Tournament", b =>
-                {
-                    b.HasOne("HorseRacing.Models.Horse", "ChampionHorse")
-                        .WithMany()
-                        .HasForeignKey("ChampionHorseId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("ChampionHorse");
                 });
 
             modelBuilder.Entity("HorseRacing.Models.TournamentHorseRegistration", b =>

@@ -40,6 +40,7 @@ const OwnerHorseEditPage = lazy(() => import("./pages/OwnerHorseEditPage/OwnerHo
 const OwnerTournamentListPage = lazy(() => import("./pages/OwnerTournamentListPage/OwnerTournamentListPage"));
 const OwnerTournamentRegisterPage = lazy(() => import("./pages/OwnerTournamentRegisterPage/OwnerTournamentRegisterPage"));
 const OwnerParticipationsPage = lazy(() => import("./pages/OwnerParticipationsPage/OwnerParticipationsPage"));
+const OwnerWalletPage = lazy(() => import("./pages/OwnerWalletPage/OwnerWalletPage"));
 const OwnerRaceConfirmationPage = lazy(() => import("./pages/OwnerRaceConfirmationPage/OwnerRaceConfirmationPage"));
 const RefereeDashboardPage = lazy(() => import("./pages/RefereeDashboardPage/RefereeDashboardPage"));
 const RefereeAssignmentPage = lazy(() => import("./pages/RefereeAssignmentPage/RefereeAssignmentPage"));
@@ -167,6 +168,7 @@ function AppLayout() {
               <Route path="/owner/horses/:id/edit" element={<OwnerHorseEditPage />} />
               <Route path="/owner/register-tournament" element={<OwnerTournamentRegisterPage />} />
               <Route path="/owner/participations" element={<OwnerParticipationsPage />} />
+              <Route path="/owner/wallet" element={<OwnerWalletPage />} />
             </Route>
 
             {/* Referee */}

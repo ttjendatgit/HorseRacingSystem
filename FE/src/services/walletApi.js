@@ -9,3 +9,13 @@ import { request } from "./apiClient";
 export function getBalance() {
   return request("/api/wallet/balance");
 }
+
+/**
+ * [ROLE: Chủ ngựa]
+ * Truy vấn lịch sử nhận thưởng (các lần trao thưởng đã thực sự thành công) của Chủ ngựa đang đăng nhập.
+ * Endpoint: GET /api/wallet/my-prize-history
+ * @returns {Promise<Object>} Danh sách lịch sử nhận thưởng, mới nhất trước.
+ */
+export function getMyPrizeHistory() {
+  return request("/api/wallet/my-prize-history");
+}

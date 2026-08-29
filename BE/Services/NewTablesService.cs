@@ -283,7 +283,7 @@ public class PrizeService : IPrizeService
         // Rỗng (chưa cấu hình Prize nào, hoặc đã trao hết từ trước) — thành công, không phải lỗi.
         foreach (var prize in pending)
         {
-            if (!standingByPosition.TryGetValue(prize.Position, out var entry) || entry.OwnerUserId == null)
+            if (!standingByPosition.TryGetValue(prize.Position, out var entry) || entry.OwnerUserId == null || entry.OwnerId == null)
             {
                 result.Skipped.Add(new PrizeDistributionSkippedDto
                 {
@@ -313,9 +313,42 @@ public class PrizeService : IPrizeService
 
             try
             {
-                var walletResult = await _walletService.AddPointsAsync(entry.OwnerUserId.Value, prize.Amount, $"prize_{prize.Id}");
-                if (!walletResult.Result.Success)
-                    throw new InvalidOperationException(walletResult.Result.Message ?? "Không thể cộng tiền vào ví.");
+                // PRIZE-V2 fix: AddPointsAsync's wallet credit (WalletRepository.AddBalanceAsync,
+                // an ExecuteUpdateAsync bypassing the change tracker) and the PrizeDistributionLog
+                // insert below share this same scoped ApplicationDbContext/connection — wrapping
+                // both in one local TransactionScope enlists them on that single connection (no
+                // distributed transaction promotion) so a failure writing the log (lost connection,
+                // crash mid-SaveChanges, etc.) also rolls back the wallet credit that already
+                // succeeded. Without this, a retry after such a failure would re-claim the Prize
+                // (IsDistributed rolled back to false by the catch block below) and credit the
+                // wallet a SECOND time for the same Prize, with no log ever recording the first,
+                // already-committed credit — a real double-pay with no audit trail.
+                using (var creditScope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+                {
+                    var walletResult = await _walletService.AddPointsAsync(entry.OwnerUserId.Value, prize.Amount, $"prize_{prize.Id}");
+                    if (!walletResult.Result.Success)
+                        throw new InvalidOperationException(walletResult.Result.Message ?? "Không thể cộng tiền vào ví.");
+
+                    // Ghi log CHỈ khi ví đã cộng tiền thành công thật sự — đây là nguồn sự thật duy nhất
+                    // cho "Owner xem lịch sử nhận thưởng" (Prize không lưu OwnerId nên không suy ngược được).
+                    _db.PrizeDistributionLogs.Add(new PrizeDistributionLog
+                    {
+                        Id = Guid.NewGuid(),
+                        PrizeId = prize.Id,
+                        TournamentId = tournamentId,
+                        Position = prize.Position,
+                        OwnerId = entry.OwnerId.Value,
+                        OwnerUserId = entry.OwnerUserId.Value,
+                        HorseId = entry.HorseId,
+                        HorseName = entry.HorseName,
+                        Amount = prize.Amount,
+                        Currency = prize.Currency,
+                        DistributedAt = DateTime.UtcNow,
+                    });
+                    await _uow.SaveChangesAsync();
+
+                    creditScope.Complete();
+                }
 
                 result.Distributed.Add(new PrizeDistributionEntryDto
                 {
@@ -341,6 +374,32 @@ public class PrizeService : IPrizeService
         }
 
         return ServiceResult<PrizeDistributionResultDto>.Ok(result);
+    }
+
+    /// <summary>
+    /// PRIZE-V2 (Phase 4): Owner-facing "lịch sử nhận thưởng" — đọc PrizeDistributionLog (nguồn sự
+    /// thật duy nhất cho payout đã thực sự xảy ra; Prize không lưu OwnerId nên không suy ngược
+    /// được), lọc theo OwnerUserId == userId hiện tại (JWT của người gọi), mới nhất trước.
+    /// </summary>
+    public async Task<ServiceResult<List<PrizeHistoryEntryDto>>> GetMyPrizeHistoryAsync(Guid ownerUserId)
+    {
+        var history = await _db.PrizeDistributionLogs
+            .AsNoTracking()
+            .Where(l => l.OwnerUserId == ownerUserId)
+            .OrderByDescending(l => l.DistributedAt)
+            .Select(l => new PrizeHistoryEntryDto
+            {
+                TournamentId = l.TournamentId,
+                TournamentName = l.Tournament != null ? l.Tournament.Name : string.Empty,
+                Position = l.Position,
+                HorseName = l.HorseName,
+                Amount = l.Amount,
+                Currency = l.Currency,
+                DistributedAt = l.DistributedAt,
+            })
+            .ToListAsync();
+
+        return ServiceResult<List<PrizeHistoryEntryDto>>.Ok(history);
     }
 
     private static PrizeResponse Map(Prize p) => new()

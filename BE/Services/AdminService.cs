@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Transactions;
+using HorseRacing.Data;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
 using HorseRacing.Repositories.Interfaces;
@@ -33,6 +34,12 @@ public class AdminService : IAdminService
     private readonly IProtestRepository _protestRepo;
     private readonly IRaceComplaintRepository _raceComplaintRepo;
     private readonly IUnitOfWork _unitOfWork;
+    // PRIZE-V2: only used by ApproveRaceResultAsync's Final-Race-all-DNF/DSQ branch — see the doc
+    // comment there for why a Tournament-level status change and a raw DbContext query are needed
+    // inside what is otherwise a per-Race approval flow.
+    private readonly ITournamentService _tournamentService;
+    private readonly IWalletService _walletService;
+    private readonly ApplicationDbContext _db;
 
     public AdminService(
         IUserRepository userRepo,
@@ -52,7 +59,10 @@ public class AdminService : IAdminService
         IViolationRecordRepository violationRepo,
         IProtestRepository protestRepo,
         IRaceComplaintRepository raceComplaintRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ITournamentService tournamentService,
+        IWalletService walletService,
+        ApplicationDbContext db)
     {
         _userRepo = userRepo;
         _registrationRepo = registrationRepo;
@@ -72,6 +82,9 @@ public class AdminService : IAdminService
         _protestRepo = protestRepo;
         _raceComplaintRepo = raceComplaintRepo;
         _unitOfWork = unitOfWork;
+        _tournamentService = tournamentService;
+        _walletService = walletService;
+        _db = db;
     }
 
     public async Task<ServiceResult<AdminDashboardResponse>> GetDashboardAsync()
@@ -607,8 +620,18 @@ public class AdminService : IAdminService
     /// never touched here (it is already Finished and stays Finished).
     /// Prediction settlement is triggered from here — the moment a result
     /// becomes Official — rather than from a later "end race" action.
+    ///
+    /// PRIZE-V2: this Race's Round IS the Tournament's Final Round (RoundNumber == MaxRounds) AND
+    /// every participant is DNF/DSQ (0 Completed) is a distinct, deliberately handled case — see
+    /// HandleFinalRaceAllDnfDsqAsync. RaceResult.WinningHorseId is only ever an arbitrary fallback
+    /// pick in that situation (LiveResultService has no real Position-1 to choose from), so it
+    /// must never be credited a Horse/Jockey "win" stat nor used to settle Predictions as a real
+    /// winner — Predictions are refunded instead, and the Tournament itself auto-Cancels (same
+    /// "void" precedent already applied to a mid-Tournament Round with 0 eligible qualifiers, see
+    /// RaceManagementService.GenerateNextRoundEntriesAsync), since a Final with no valid finisher
+    /// has no champion to declare.
     /// </summary>
-    public async Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId)
+    public async Task<ServiceResult<bool>> ApproveRaceResultAsync(Guid raceId, Guid? actorId = null)
     {
         try
         {
@@ -682,66 +705,135 @@ public class AdminService : IAdminService
             }
             var positionByHorseId = ranking.ToDictionary(r => r.HorseId, r => r.Position);
 
+            // PRIZE-V2: completedCount==0 means every participant is DNF/DSQ — WinningHorseId is
+            // then only LiveResultService's arbitrary fallback, never a real winner (see the
+            // method doc comment above). Detected here, BEFORE the transaction, purely to decide
+            // which branch runs inside it — the Tournament-level follow-up itself only ever runs
+            // AFTER this transaction commits (see below), never nested inside it.
+            var completedCount = ranking.Count(r => r.Status == "Completed");
+            var finalRoundCheck = await _db.Rounds.AsNoTracking().FirstOrDefaultAsync(r => r.Id == race.RoundId);
+            var tournamentForFinalCheck = await _tournamentRepo.GetByIdAsync(race.TournamentId);
+            var isFinalRoundAllDnfDsq = completedCount == 0
+                && finalRoundCheck != null
+                && tournamentForFinalCheck != null
+                && finalRoundCheck.RoundNumber == tournamentForFinalCheck.MaxRounds;
+
             // Wrap in transaction: if approval/settlement fails, everything rolls back
-            using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
-            try
+            using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
             {
-                raceResult.Status = RaceResultStatus.Official;
-                raceResult.RejectedReason = null;
-                raceResult.ApprovedAt = DateTime.UtcNow;
-                await _raceResultRepo.UpdateAsync(raceResult);
-
-                // Ghi kết quả vào entry + cập nhật thành tích ngựa/kỵ sĩ
-                foreach (var entry in entries)
+                try
                 {
-                    // Clear any stale value first (old/demo data, or a prior
-                    // approval attempt) so it can never survive into a newly
-                    // Official ranking — then set from the validated ranking.
-                    entry.FinishPosition = positionByHorseId.TryGetValue(entry.HorseId, out var position)
-                        ? position
-                        : null;
+                    raceResult.Status = RaceResultStatus.Official;
+                    raceResult.RejectedReason = null;
+                    raceResult.ApprovedAt = DateTime.UtcNow;
+                    await _raceResultRepo.UpdateAsync(raceResult);
 
-                    var horse = await _horseRepo.GetByIdAsync(entry.HorseId);
-                    if (horse != null)
+                    // Ghi kết quả vào entry + cập nhật thành tích ngựa/kỵ sĩ
+                    foreach (var entry in entries)
                     {
-                        horse.TotalRaces += 1;
-                        if (entry.HorseId == raceResult.WinningHorseId) horse.TotalWins += 1;
-                        await _horseRepo.UpdateAsync(horse);
-                    }
+                        // Clear any stale value first (old/demo data, or a prior
+                        // approval attempt) so it can never survive into a newly
+                        // Official ranking — then set from the validated ranking.
+                        entry.FinishPosition = positionByHorseId.TryGetValue(entry.HorseId, out var position)
+                            ? position
+                            : null;
 
-                    if (entry.JockeyId.HasValue)
-                    {
-                        var jockey = await _jockeyRepo.GetByIdAsync(entry.JockeyId.Value);
-                        if (jockey != null)
+                        var horse = await _horseRepo.GetByIdAsync(entry.HorseId);
+                        if (horse != null)
                         {
-                            jockey.TotalRaces += 1;
-                            if (entry.HorseId == raceResult.WinningHorseId) jockey.TotalWins += 1;
-                            jockey.WinRate = jockey.TotalRaces > 0
-                                ? Math.Round((decimal)jockey.TotalWins / jockey.TotalRaces * 100, 1)
-                                : 0;
-                            await _jockeyRepo.UpdateAsync(jockey);
+                            horse.TotalRaces += 1;
+                            // PRIZE-V2: completedCount>0 guard — WinningHorseId must never credit
+                            // a "win" when it is only the arbitrary DNF/DSQ fallback.
+                            if (completedCount > 0 && entry.HorseId == raceResult.WinningHorseId)
+                                horse.TotalWins += 1;
+                            await _horseRepo.UpdateAsync(horse);
+                        }
+
+                        if (entry.JockeyId.HasValue)
+                        {
+                            var jockey = await _jockeyRepo.GetByIdAsync(entry.JockeyId.Value);
+                            if (jockey != null)
+                            {
+                                jockey.TotalRaces += 1;
+                                if (completedCount > 0 && entry.HorseId == raceResult.WinningHorseId)
+                                    jockey.TotalWins += 1;
+                                jockey.WinRate = jockey.TotalRaces > 0
+                                    ? Math.Round((decimal)jockey.TotalWins / jockey.TotalRaces * 100, 1)
+                                    : 0;
+                                await _jockeyRepo.UpdateAsync(jockey);
+                            }
                         }
                     }
+                    await _entryRepo.UpdateRangeAsync(entries);
+
+                    await _unitOfWork.SaveChangesAsync();
+
+                    if (!isFinalRoundAllDnfDsq)
+                    {
+                        // Settlement only after Official — see PredictionService.SettlePredictionAsync
+                        // for the explicit Race.Status==Finished + RaceResult.Status==Official guard.
+                        await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
+                    }
+                    // else: Final-Race-all-DNF/DSQ — Predictions are refunded, not settled, by
+                    // HandleFinalRaceAllDnfDsqAsync below, strictly AFTER this transaction commits.
+
+                    scope.Complete();
                 }
-                await _entryRepo.UpdateRangeAsync(entries);
-
-                await _unitOfWork.SaveChangesAsync();
-
-                // Settlement only after Official — see PredictionService.SettlePredictionAsync
-                // for the explicit Race.Status==Finished + RaceResult.Status==Official guard.
-                await _predictionService.SettlePredictionAsync(raceId, raceResult.WinningHorseId);
-
-                scope.Complete();
-                return ServiceResult<bool>.Ok(true);
+                catch (Exception ex)
+                {
+                    return ServiceResult<bool>.Fail(500, $"Lỗi phê duyệt kết quả: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+
+            if (isFinalRoundAllDnfDsq && tournamentForFinalCheck != null)
             {
-                return ServiceResult<bool>.Fail(500, $"Lỗi phê duyệt kết quả: {ex.Message}");
+                await HandleFinalRaceAllDnfDsqAsync(tournamentForFinalCheck, raceId, actorId);
             }
+
+            return ServiceResult<bool>.Ok(true);
         }
         catch (Exception ex)
         {
             return ServiceResult<bool>.Fail(500, $"Lỗi phê duyệt kết quả: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// PRIZE-V2: runs strictly AFTER ApproveRaceResultAsync's own transaction has already committed
+    /// the RaceResult as Official — that fact must never be undone or masked by anything that
+    /// happens here. Refunds every Pending Prediction on this (void) Final Race — same convention
+    /// as PredictionRefundHelper's other two callers — then auto-Cancels the Tournament, reusing
+    /// TournamentService.ChangeStatusAsync (its own cascade already cancels every not-yet-run Race
+    /// and refunds their Predictions too) instead of hand-rolling that logic again. Deliberately
+    /// best-effort/swallowed: a failure here must surface as a retry need, not as
+    /// "ApproveRaceResultAsync failed" — the Official result already reflects the truth of what
+    /// the Referee reported (everyone DNF/DSQ), independent of whether this cleanup step succeeds.
+    ///
+    /// swallowIndividualFailures: true — this call runs with NO surrounding DB transaction (the
+    /// approval transaction above has already committed), so a failed wallet credit must
+    /// compensate (un-claim) that one Prediction back to Pending for later retry, never
+    /// throw-and-rely-on-an-outer-rollback — there is no outer transaction here to roll anything
+    /// back.
+    /// </summary>
+    private async Task HandleFinalRaceAllDnfDsqAsync(Tournament tournament, Guid raceId, Guid? actorId)
+    {
+        try
+        {
+            await PredictionRefundHelper.RefundPendingPredictionsAsync(
+                _db, _walletService, new[] { raceId }, $"final_void_{raceId}", swallowIndividualFailures: true);
+
+            await _tournamentService.ChangeStatusAsync(
+                tournament.Id,
+                new ChangeTournamentStatusRequest
+                {
+                    NewStatus = TournamentStatus.Cancelled,
+                    Reason = "Toàn bộ ngựa ở Vòng chung kết đều vi phạm/không về đích hợp lệ — giải đấu không có nhà vô địch.",
+                },
+                actorId ?? Guid.Empty);
+        }
+        catch
+        {
+            // Swallowed deliberately — see the doc comment above.
         }
     }
 

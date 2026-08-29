@@ -789,7 +789,8 @@ public class RaceLifecycleTests
                 _userRepo, new UserRegistrationRepository(db), _horseRepo, _jockeyRepo,
                 new RefereeRepository(db), RaceRepo, _tournamentRepo,
                 new FakeRefereeService(), LiveResult, Prediction, PredictionRepo,
-                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, RaceComplaintRepo, UnitOfWork);
+                RaceResultRepo, EntryRepo, _reportRepo, ViolationRepo, ProtestRepo, RaceComplaintRepo, UnitOfWork,
+                TournamentSvc, walletService, db);
 
             ViolationSvc = new ViolationRecordService(
                 ViolationRepo, RaceRepo, EntryRepo, new RefereeRepository(db),
@@ -809,7 +810,7 @@ public class RaceLifecycleTests
             TournamentRepo = _tournamentRepo;
             RoundRepoPublic = _roundRepo;
             RoundSvc = new RoundService(_roundRepo, _tournamentRepo, UnitOfWork, db);
-            RaceSvc = new RaceService(RaceRepo, EntryRepo, RaceResultRepo, _tournamentRepo, RaceManagement);
+            RaceSvc = new RaceService(RaceRepo, EntryRepo, RaceResultRepo, _tournamentRepo, RaceManagement, _horseRepo);
         }
 
         public static async Task<LifecycleFixture> CreateAsync()

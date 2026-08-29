@@ -5,4 +5,5 @@ export const ownerNavItems = [
   { to: "/owner/tournaments", label: "Giải đấu" },
   { to: "/owner/register-tournament", label: "Đăng kí giải đấu" },
   { to: "/owner/participations", label: "Tham gia của tôi" },
+  { to: "/owner/wallet", label: "Ví của tôi" },
 ];
