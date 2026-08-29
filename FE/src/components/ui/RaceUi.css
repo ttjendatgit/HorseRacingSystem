@@ -371,6 +371,21 @@
   font-weight: 600;
 }
 
+.rm-data-row__reason {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(184, 134, 59, 0.08);
+  border: 1px solid rgba(184, 134, 59, 0.2);
+  color: var(--hr-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.rm-data-row__reason strong {
+  color: var(--hr-paper);
+  font-weight: 700;
+}
+
 .rm-data-row__actions {
   display: flex;
   justify-content: flex-end;

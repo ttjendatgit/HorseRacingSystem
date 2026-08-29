@@ -555,10 +555,10 @@ function OwnerParticipationsPage() {
           <div className="op-complaint-detail">
             <section>
               <h4>Khiếu nại của bạn</h4>
-              <dl>
-                <div><dt>Loại</dt><dd>{getRaceComplaintTypeLabel(complaint.type)}</dd></div>
-                <div><dt>Nội dung</dt><dd>{complaint.reason || "-"}</dd></div>
-                <div><dt>Mô tả bằng chứng</dt><dd>{complaint.evidenceDescription || "Không có"}</dd></div>
+              <dl className="op-conclusion-meta">
+                <div className="op-conclusion-meta-item"><dt>Loại</dt><dd>{getRaceComplaintTypeLabel(complaint.type)}</dd></div>
+                <div className="op-conclusion-meta-item"><dt>Nội dung</dt><dd>{complaint.reason || "-"}</dd></div>
+                <div className="op-conclusion-meta-item"><dt>Mô tả bằng chứng</dt><dd>{complaint.evidenceDescription || "Không có"}</dd></div>
               </dl>
               {filerCount > 0 ? (
                 <ComplaintEvidenceGallery evidence={groupedEvidence.filerEvidence} complaintId={complaint.id} complaintStatus={complaint.status} viewerRole="filer" onDeleted={refreshComplaints} />
@@ -567,7 +567,7 @@ function OwnerParticipationsPage() {
             </section>
             <section>
               <h4>Giải trình trọng tài</h4>
-              {complaint.refereeResponse ? <p>{complaint.refereeResponse}</p> : <p className="op-muted-copy">Chưa có giải trình trọng tài.</p>}
+              {complaint.refereeResponse ? <p className="op-response-box">{complaint.refereeResponse}</p> : <p className="op-muted-copy">Chưa có giải trình trọng tài.</p>}
               {refereeCount > 0 ? <ComplaintEvidenceGallery evidence={groupedEvidence.refereeEvidence} /> : <p className="op-inline-empty">Chưa có bằng chứng từ trọng tài.</p>}
             </section>
             <section className="op-conclusion-section">

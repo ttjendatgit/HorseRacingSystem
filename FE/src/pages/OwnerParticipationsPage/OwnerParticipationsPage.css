@@ -410,6 +410,20 @@
 .op-conclusion-meta-item dt { margin: 0; color: var(--hr-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; min-width: 130px; }
 .op-conclusion-meta-item dd { margin: 0; color: var(--hr-paper); font-size: 14px; font-weight: 700; }
 
+/* Referee's written response to the complaint — same gold-tint box language as
+   .op-conclusion-section, one step down in prominence (no border-radius block heading, just the
+   paragraph itself framed) since the ruling above it is the most consequential info on the card. */
+.op-response-box {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(184, 134, 59, 0.08);
+  border: 1px solid rgba(184, 134, 59, 0.2);
+  color: var(--hr-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 @media (max-width: 860px) {
   .app-shell:has(.owner-participations) .page-wrapper {
     padding: 22px 18px 48px;
