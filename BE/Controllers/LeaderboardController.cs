@@ -44,7 +44,21 @@ public class LeaderboardController : ControllerBase
             .ThenBy(j => j.name)
             .ToListAsync();
 
-        return Ok(jockeys);
+        var ranked = jockeys.Select((j, i) => new
+        {
+            j.id,
+            j.name,
+            j.avatar,
+            j.points,
+            j.totalRaces,
+            j.wins,
+            j.winRate,
+            rank = i + 1,
+            j.trend,
+            j.nationality
+        }).ToList();
+
+        return Ok(ranked);
     }
 
     [HttpGet("horses")]

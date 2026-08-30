@@ -176,10 +176,11 @@ export default function LeaderboardPage() {
               </div>
               {rest.map((item, idx) => {
                 const rank = idx + 4;
+                const isMe = myProfile && (item.id === myProfile.id || item.id === myProfile.Id);
                 return (
-                  <div key={item.id} className={`lbd-tr ${selected?.id === item.id ? "lbd-tr--sel" : ""}`} onClick={() => setSelected({ ...item, _type: tab })}>
-                    <span className="lbd-rank">{rank}</span>
-                    <span><strong>{item.name}</strong></span>
+                  <div key={item.id} className={`lbd-tr ${selected?.id === item.id ? "lbd-tr--sel" : ""} ${isMe ? "lbd-tr--me" : ""}`} onClick={() => setSelected({ ...item, _type: tab })}>
+                    <span className="lbd-rank">{item.rank || rank}</span>
+                    <span><strong>{item.name}</strong>{isMe ? " (Bạn)" : ""}</span>
                     <span>{item.points?.toLocaleString()}</span>
                     <span><span className="lbd-badge">{item.winRate}%</span></span>
                     <span>{item.wins}</span>

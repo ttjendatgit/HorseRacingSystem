@@ -314,6 +314,11 @@ public class HorseService : IHorseService
         }
         var invitationRaceId = request.RaceId;
 
+        if (request.JockeySharePercentage < 0 || request.JockeySharePercentage > 100)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Tỉ lệ ăn chia giải thưởng cho Jockey phải từ 0% đến 100%");
+        }
+
         // J2: invitation acceptance is not final assignment, so a jockey may hold
         // multiple Pending/Accepted invitations across different owners/horses/races
         // even when their schedules overlap. Exclusivity/schedule-conflict enforcement
@@ -365,6 +370,11 @@ public class HorseService : IHorseService
                 $"Kỵ sĩ này đã có lời mời với trạng thái {status} cho giải đua này");
         }
 
+        if (request.JockeySharePercentage < 0 || request.JockeySharePercentage > 100)
+        {
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Tỉ lệ ăn chia giải thưởng cho Jockey phải từ 0% đến 100%");
+        }
+
         // Also we should create a new invitation rather than reusing an old declined one for a different race
         var existingDeclined = horse.JockeyInvitations.FirstOrDefault(i =>
             i.JockeyId == request.JockeyId &&
@@ -377,6 +387,7 @@ public class HorseService : IHorseService
             existingDeclined.RespondedAt = null;
             existingDeclined.ResponseNote = null;
             existingDeclined.Message = request.Message?.Trim();
+            existingDeclined.JockeySharePercentage = request.JockeySharePercentage;
         }
 
         var jockeyExists = await _jockeys.ExistsAsync(request.JockeyId);
@@ -393,6 +404,7 @@ public class HorseService : IHorseService
             RaceId = invitationRaceId,
             Status = JockeyInvitationStatus.Pending,
             Message = request.Message?.Trim(),
+            JockeySharePercentage = request.JockeySharePercentage,
             CreatedAt = DateTime.UtcNow
         };
 

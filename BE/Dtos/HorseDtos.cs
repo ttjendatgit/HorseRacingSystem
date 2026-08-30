@@ -83,6 +83,9 @@ public class JockeyInvitationCreateRequest
 
     [MaxLength(500)]
     public string? Message { get; set; }
+
+    [Range(0, 100, ErrorMessage = "Tỉ lệ ăn chia giải thưởng cho Jockey phải từ 0% đến 100%")]
+    public decimal JockeySharePercentage { get; set; } = 0;
 }
 
 public class JockeyRemovalRequest

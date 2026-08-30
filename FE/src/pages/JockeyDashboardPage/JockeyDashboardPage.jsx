@@ -159,6 +159,7 @@ function JockeyDashboardPage() {
                   </div>
                   <div className="jd-race-right">
                     <span className="jd-date">{formatJockeyDate(race.scheduledAt, "")}</span>
+                    <span className="jd-date">{race.finishPosition ? `Hạng ${race.finishPosition}` : (race.finishStatus || "")}</span>
                     <span className={`jd-badge ${race.jockeyConfirmed ? "jd-badge--ok" : "jd-badge--warn"}`}>
                       {race.jockeyConfirmed ? "Đã xác nhận" : "Chờ"}
                     </span>
@@ -198,7 +199,7 @@ function JockeyDashboardPage() {
           <h3>Thành tích</h3>
           <div className="jd-stats">
             <div className="jd-stat">
-              <span>Hạng</span>
+              <span>Hạng toàn hệ thống</span>
               <strong>#{rank ?? "--"}</strong>
             </div>
             <div className="jd-stat">

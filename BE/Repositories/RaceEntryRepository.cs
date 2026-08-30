@@ -68,6 +68,10 @@ public class RaceEntryRepository : IRaceEntryRepository
         return _db.RaceEntries
             .Include(e => e.Race)
                 .ThenInclude(r => r!.Tournament)
+            .Include(e => e.Race)
+                .ThenInclude(r => r!.Round)
+            .Include(e => e.Race)
+                .ThenInclude(r => r!.Result)
             .Include(e => e.Horse)
             .Include(e => e.Jockey)
             .Where(e => e.JockeyId == jockeyId && e.Race != null)

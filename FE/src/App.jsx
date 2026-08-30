@@ -35,6 +35,7 @@ const JockeyInvitationDetailPage = lazy(() => import("./pages/JockeyInvitationPa
 const JockeyDashboardPage = lazy(() => import("./pages/JockeyDashboardPage/JockeyDashboardPage"));
 const JockeySchedulePage = lazy(() => import("./pages/JockeySchedulePage/JockeySchedulePage"));
 const JockeyPerformancePage = lazy(() => import("./pages/JockeyPerformancePage/JockeyPerformancePage"));
+const JockeyWalletPage = lazy(() => import("./pages/JockeyWalletPage/JockeyWalletPage"));
 const OwnerDashboardPage = lazy(() => import("./pages/OwnerDashboardPage/OwnerDashboardPage"));
 const OwnerHorseListPage = lazy(() => import("./pages/OwnerHorseListPage/OwnerHorseListPage"));
 const OwnerHorseDetailPage = lazy(() => import("./pages/OwnerHorseDetailPage/OwnerHorseDetailPage"));
@@ -206,6 +207,7 @@ function AppLayout() {
                 <Route path="/jockey/invitations/:id" element={<JockeyInvitationDetailPage />} />
                 <Route path="/jockey/schedule" element={<JockeySchedulePage />} />
                 <Route path="/jockey/performance" element={<JockeyPerformancePage />} />
+                <Route path="/jockey/wallet" element={<JockeyWalletPage />} />
                 <Route path="/jockey/leaderboard" element={<LeaderboardPage />} />
               </Route>
               <Route path="/jockey/profile" element={<JockeyProfilePage />} />

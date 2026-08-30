@@ -65,7 +65,7 @@ public class WalletService : IWalletService
 
         var wallet = await GetOrCreateWalletAsync(userId);
         if (wallet == null)
-            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Chỉ Khán giả hoặc Chủ ngựa mới có ví để giao dịch.");
+            return ServiceResult<object>.Fail(StatusCodes.Status400BadRequest, "Chỉ Khán giả, Chủ ngựa hoặc Kỵ sĩ mới có ví để giao dịch.");
 
         var updated = await _walletRepo.AddBalanceAsync(userId, points);
         if (!updated)
@@ -127,7 +127,7 @@ public class WalletService : IWalletService
         if (wallet != null) return wallet;
 
         var user = await _userRepo.GetByIdAsync(userId);
-        if (user == null || user.Role is not (UserRole.Spectator or UserRole.HorseOwner))
+        if (user == null || user.Role is not (UserRole.Spectator or UserRole.HorseOwner or UserRole.Jockey))
             return null;
 
         wallet = new Wallet

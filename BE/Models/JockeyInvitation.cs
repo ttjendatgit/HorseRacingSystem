@@ -32,6 +32,9 @@ public class JockeyInvitation
     [MaxLength(500)]
     public string? ResponseNote { get; set; }
 
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal JockeySharePercentage { get; set; } = 0;
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? RespondedAt { get; set; }

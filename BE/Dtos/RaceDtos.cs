@@ -134,6 +134,9 @@ public class JockeyAssignedRaceResponse
     public string Status { get; set; } = string.Empty;
     public bool OwnerConfirmed { get; set; }
     public bool JockeyConfirmed { get; set; }
+    public int? FinishPosition { get; set; }
+    public string? FinishStatus { get; set; }
+    public int? TournamentStandingPosition { get; set; }
     public JockeyAssignedRaceDetailResponse Race { get; set; } = new();
     public JockeyAssignedHorseResponse Horse { get; set; } = new();
 }

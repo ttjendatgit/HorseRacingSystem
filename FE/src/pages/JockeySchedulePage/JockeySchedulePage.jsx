@@ -3,6 +3,14 @@ import { formatJockeyDate, getJockeyAssignedRaces } from "../../services/jockeyA
 import { getRegistrationStatusLabel } from "../../utils/registrationStatusDisplay";
 import "./JockeySchedulePage.css";
 
+function formatRaceRank(race) {
+  if (race?.finishStatus && race.finishStatus !== "Completed") {
+    return race.finishStatus;
+  }
+  if (race?.finishPosition) return `Hạng ${race.finishPosition}`;
+  return "Chưa có kết quả";
+}
+
 function DetailBlock({ icon, label, value }) {
   return (
     <div className="js-block">
@@ -128,6 +136,7 @@ export default function JockeySchedulePage() {
                     <span>{formatJockeyDate(race.scheduledAt, "")}</span>
                     {race.location && <span>{race.location}</span>}
                     {race.distance && <span>{race.distance}m</span>}
+                    <span>{formatRaceRank(race)}</span>
                   </div>
                 </div>
               ))}
@@ -150,6 +159,8 @@ export default function JockeySchedulePage() {
                         <DetailBlock icon="" label="Thời gian" value={formatJockeyDate(selectedRace.scheduledAt, "")} />
                         <DetailBlock icon="" label="Đường đua" value={selectedRace.location} />
                         <DetailBlock icon="" label="Cự ly" value={selectedRace.distance ? `${selectedRace.distance}m` : ""} />
+                        <DetailBlock icon="" label="Hạng cuộc đua" value={formatRaceRank(selectedRace)} />
+                        <DetailBlock icon="" label="Hạng giải" value={selectedRace.tournamentStandingPosition ? `Hạng ${selectedRace.tournamentStandingPosition}` : "Chưa có"} />
                         <DetailBlock icon="" label="Số người" value={selectedRace.maxParticipants} />
                         <DetailBlock icon="" label="Trạng thái" value={getRegistrationStatusLabel(selectedRace.status)} />
                       </div>

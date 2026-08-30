@@ -297,7 +297,7 @@ export function PrizeManagement() {
             <div className="pm-distribute-bar">
               <p className="admin-notice" style={{ marginBottom: 0 }}>
                 Giải đấu đã kết thúc — cơ cấu giải thưởng đã khóa. Trao thưởng sẽ cộng tiền vào ví
-                Chủ ngựa đứng đúng thứ hạng chung cuộc theo số tiền đã tính sẵn cho mỗi Hạng.
+                Chủ ngựa và Kỵ sĩ (nếu lời mời có tỉ lệ chia) theo số tiền đã tính sẵn cho mỗi Hạng.
               </p>
               <RaceButton onClick={() => setConfirmDistribute(true)} disabled={sorted.length === 0}>
                 Trao thưởng
@@ -402,7 +402,7 @@ export function PrizeManagement() {
       {confirmDistribute && (
         <RaceModalShell
           title="Xác nhận trao thưởng"
-          description="Hành động này sẽ cộng tiền thật vào ví các Chủ ngựa đoạt giải."
+          description="Hành động này sẽ cộng tiền thật vào ví Chủ ngựa và Kỵ sĩ (nếu có tỉ lệ chia trên lời mời)."
           onClose={() => (distributing ? null : setConfirmDistribute(false))}
           footer={
             <>
@@ -416,7 +416,7 @@ export function PrizeManagement() {
           }
         >
           <p>
-            Thao tác <strong>không thể hoàn tác</strong> — tiền sẽ được cộng thẳng vào ví theo đúng cơ cấu giải thưởng đã cấu hình. Hãy kiểm tra kỹ trước khi xác nhận.
+                  Thao tác <strong>không thể hoàn tác</strong> — tiền sẽ được cộng vào ví Chủ ngựa và (nếu lời mời có tỉ lệ chia) ví Kỵ sĩ theo đúng cơ cấu đã cấu hình. Hãy kiểm tra kỹ trước khi xác nhận.
           </p>
         </RaceModalShell>
       )}
@@ -448,6 +448,9 @@ export function PrizeManagement() {
                         <li key={`d-${position}-${i}`}>
                           <strong>Hạng {position}</strong> — {ownerName || "Chưa rõ Chủ ngựa"} (ngựa {horseName}
                           ): {formatVndCurrency(amount)}
+                          {(d.jockeyAmount ?? d.JockeyAmount) > 0
+                            ? ` · Kỵ sĩ ${(d.jockeyName ?? d.JockeyName) || ""} ${(d.jockeySharePercentage ?? d.JockeySharePercentage)}% = ${formatVndCurrency(d.jockeyAmount ?? d.JockeyAmount)}`
+                            : " · Toàn bộ cho Chủ ngựa (chưa có tỉ lệ chia kỵ sĩ)"}
                         </li>
                       );
                     })}

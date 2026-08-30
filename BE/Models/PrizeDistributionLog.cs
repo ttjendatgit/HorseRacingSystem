@@ -49,5 +49,18 @@ public class PrizeDistributionLog
     [MaxLength(10)]
     public string Currency { get; set; } = "VND";
 
+    public Guid? JockeyId { get; set; }
+
+    public Guid? JockeyUserId { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal OwnerAmount { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal JockeyAmount { get; set; }
+
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal JockeySharePercentage { get; set; }
+
     public DateTime DistributedAt { get; set; }
 }

@@ -19,7 +19,7 @@ export default function ProfileDropdown({ profileUrl }) {
   const [balance, setBalance] = useState(null);
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("authUser") || "null");
-    if (stored?.role === "spectator") {
+    if (stored?.role === "spectator" || stored?.role === "jockey" || stored?.role === "horse_owner") {
       getBalance()
         .then((d) => { const b = d?.data ?? d; setBalance(b?.balance ?? b?.Balance ?? null); })
         .catch(() => {});
@@ -97,6 +97,14 @@ export default function ProfileDropdown({ profileUrl }) {
                 textDecoration: "none", fontSize: 13, marginBottom: 4,
               }} onMouseOver={(e) => e.target.style.background = "rgba(184,134,59,.10)"} onMouseOut={(e) => e.target.style.background = "none"}>
                 Hồ sơ
+              </Link>
+            )}
+            {role === "jockey" && (
+              <Link to="/jockey/wallet" onClick={() => setOpen(false)} style={{
+                display: "block", padding: "8px 10px", borderRadius: 6, color: "#e5d9c6",
+                textDecoration: "none", fontSize: 13, marginBottom: 4,
+              }} onMouseOver={(e) => e.target.style.background = "rgba(184,134,59,.10)"} onMouseOut={(e) => e.target.style.background = "none"}>
+                Ví của tôi
               </Link>
             )}
             <button onClick={handleLogout} style={{

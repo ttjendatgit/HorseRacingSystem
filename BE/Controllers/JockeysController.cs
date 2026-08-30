@@ -14,10 +14,12 @@ namespace HorseRacing.Controllers;
 public class JockeysController : ControllerBase
 {
     private readonly IJockeyService _jockeyService;
+    private readonly IPrizeService _prizeService;
 
-    public JockeysController(IJockeyService jockeyService)
+    public JockeysController(IJockeyService jockeyService, IPrizeService prizeService)
     {
         _jockeyService = jockeyService;
+        _prizeService = prizeService;
     }
 
     [HttpGet]
@@ -107,6 +109,15 @@ public class JockeysController : ControllerBase
     {
         var userId = GetUserId();
         var result = await _jockeyService.UpdateJockeyProfileAsync(userId, request);
+        return StatusCode(result.StatusCode, result.Result);
+    }
+
+    [HttpGet("my-prize-history")]
+    [Authorize(Roles = "Jockey")]
+    public async Task<ActionResult> GetMyPrizeHistory()
+    {
+        var userId = GetUserId();
+        var result = await _prizeService.GetMyJockeyPrizeHistoryAsync(userId);
         return StatusCode(result.StatusCode, result.Result);
     }
 

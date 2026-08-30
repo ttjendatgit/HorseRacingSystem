@@ -138,6 +138,7 @@ export const normalizeInvitation = (invitation) => {
     horseColor: read(horse, "color", "Color"),
     horseTotalRaces: read(horse, "totalRaces", "TotalRaces"),
     horseTotalWins: read(horse, "totalWins", "TotalWins"),
+    jockeySharePercentage: read(invitation, "jockeySharePercentage", "JockeySharePercentage") ?? 0,
   };
 };
 
@@ -184,6 +185,10 @@ export const normalizeAssignedRace = (entry) => {
     horseColor: read(horse, "color", "Color"),
     horseTotalRaces: read(horse, "totalRaces", "TotalRaces") ?? 0,
     horseTotalWins: read(horse, "totalWins", "TotalWins") ?? 0,
+    finishPosition: read(entry, "finishPosition", "FinishPosition") ?? null,
+    finishStatus: read(entry, "finishStatus", "FinishStatus") ?? null,
+    tournamentStandingPosition:
+      read(entry, "tournamentStandingPosition", "TournamentStandingPosition") ?? null,
   };
 };
 
@@ -244,3 +249,7 @@ export const updateJockeyProfile = async (payload) =>
     method: "PUT",
     body: JSON.stringify(payload),
   });
+
+/** Lấy lịch sử tiền thưởng giải đấu của nài ngựa */
+export const getJockeyPrizeHistory = async () =>
+  asArray(await request("/api/jockeys/my-prize-history"));

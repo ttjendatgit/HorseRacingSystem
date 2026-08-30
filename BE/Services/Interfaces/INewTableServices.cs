@@ -23,6 +23,9 @@ public interface IPrizeService
     // Owner-facing "lịch sử nhận thưởng" — reads PrizeDistributionLog (the only successful-payout
     // audit trail; Prize itself carries no OwnerId), newest first.
     Task<ServiceResult<List<PrizeHistoryEntryDto>>> GetMyPrizeHistoryAsync(Guid ownerUserId);
+
+    // Jockey-facing "lịch sử nhận thưởng" — reads PrizeDistributionLog filtered by JockeyUserId.
+    Task<ServiceResult<List<JockeyPrizeHistoryEntryDto>>> GetMyJockeyPrizeHistoryAsync(Guid jockeyUserId);
 }
 
 public interface IProtestService

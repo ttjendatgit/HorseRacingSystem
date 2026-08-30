@@ -247,8 +247,10 @@ public class PrizeService : IPrizeService
     /// PRIZE-V2 (Phase 4): manual, Admin-triggered payout — never automatic on Tournament-&gt;Finished.
     /// Reads the already-frozen Prize.Amount rows (computed once by PrizeAmountCalculator while
     /// Draft, never recomputed here) and pays each un-distributed Prize to the Owner standing at
-    /// that Position in RaceService.GetFinalStandingsAsync's Standings — 100% of Prize.Amount to
-    /// the Owner, no split with Jockey (out of scope). One Prize's failure never blocks the others.
+    /// that Position in RaceService.GetFinalStandingsAsync's Standings. Prize.Amount is split
+    /// between Owner and Jockey using JockeyInvitation.JockeySharePercentage when an Accepted
+    /// invitation exists for that pairing in the tournament; otherwise 100% goes to the Owner.
+    /// One Prize's failure never blocks the others.
     /// </summary>
     public async Task<ServiceResult<PrizeDistributionResultDto>> DistributeAsync(Guid tournamentId)
     {
@@ -296,9 +298,7 @@ public class PrizeService : IPrizeService
                 continue;
             }
 
-            // Atomic claim TRƯỚC khi cộng ví — đúng pattern duy nhất đang dùng trong codebase
-            // (PredictionRefundHelper.ClaimAsync / PredictionService.ExecuteUpdateWinnersAsync):
-            // affected-row-count == 0 nghĩa là 1 lần gọi khác (đồng thời hoặc trước đó) đã trao rồi.
+            // Atomic claim TRƯỚC khi cộng ví
             var claimed = await _db.Prizes
                 .Where(p => p.Id == prize.Id && !p.IsDistributed)
                 .ExecuteUpdateAsync(s => s
@@ -311,26 +311,72 @@ public class PrizeService : IPrizeService
                 continue;
             }
 
+            // Tra cứu kỵ sĩ chính thức và tỉ lệ ăn chia (nếu có).
+            // UserId lấy thẳng từ bảng Jockeys — không phụ thuộc Include(User) trên RaceEntry,
+            // vì thiếu navigation đó trước đây khiến cả phần chia cho kỵ sĩ bị bỏ qua dù Owner vẫn nhận 100%.
+            Guid? jockeyId = entry.JockeyId;
+            Guid? jockeyUserId = null;
+            decimal jockeySharePercentage = 0;
+            decimal jockeyAmount = 0;
+            decimal ownerAmount = prize.Amount;
+
+            if (jockeyId == null)
+            {
+                jockeyId = await _db.RaceEntries
+                    .AsNoTracking()
+                    .Where(re => re.HorseId == entry.HorseId
+                        && re.JockeyId != null
+                        && re.Race != null
+                        && re.Race.TournamentId == tournamentId)
+                    .OrderByDescending(re => re.Race!.ScheduledAt)
+                    .Select(re => re.JockeyId)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (jockeyId != null)
+            {
+                jockeyUserId = await _db.Jockeys
+                    .AsNoTracking()
+                    .Where(j => j.Id == jockeyId)
+                    .Select(j => (Guid?)j.UserId)
+                    .FirstOrDefaultAsync();
+
+                var invitations = await _db.JockeyInvitations
+                    .AsNoTracking()
+                    .Where(i => i.HorseId == entry.HorseId
+                        && i.JockeyId == jockeyId
+                        && i.Status == JockeyInvitationStatus.Accepted
+                        && (i.RaceId == null || _db.Races.Any(r => r.Id == i.RaceId && r.TournamentId == tournamentId)))
+                    .ToListAsync();
+
+                var invitation = invitations
+                    .OrderByDescending(i => i.JockeySharePercentage)
+                    .ThenByDescending(i => i.CreatedAt)
+                    .FirstOrDefault();
+
+                if (invitation != null && invitation.JockeySharePercentage > 0 && jockeyUserId.HasValue)
+                {
+                    jockeySharePercentage = invitation.JockeySharePercentage;
+                    jockeyAmount = Math.Round(prize.Amount * (jockeySharePercentage / 100m), 2);
+                    ownerAmount = prize.Amount - jockeyAmount;
+                }
+            }
+
             try
             {
-                // PRIZE-V2 fix: AddPointsAsync's wallet credit (WalletRepository.AddBalanceAsync,
-                // an ExecuteUpdateAsync bypassing the change tracker) and the PrizeDistributionLog
-                // insert below share this same scoped ApplicationDbContext/connection — wrapping
-                // both in one local TransactionScope enlists them on that single connection (no
-                // distributed transaction promotion) so a failure writing the log (lost connection,
-                // crash mid-SaveChanges, etc.) also rolls back the wallet credit that already
-                // succeeded. Without this, a retry after such a failure would re-claim the Prize
-                // (IsDistributed rolled back to false by the catch block below) and credit the
-                // wallet a SECOND time for the same Prize, with no log ever recording the first,
-                // already-committed credit — a real double-pay with no audit trail.
                 using (var creditScope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
                 {
-                    var walletResult = await _walletService.AddPointsAsync(entry.OwnerUserId.Value, prize.Amount, $"prize_{prize.Id}");
-                    if (!walletResult.Result.Success)
-                        throw new InvalidOperationException(walletResult.Result.Message ?? "Không thể cộng tiền vào ví.");
+                    var ownerWalletResult = await _walletService.AddPointsAsync(entry.OwnerUserId.Value, ownerAmount, $"prize_owner_{prize.Id}");
+                    if (!ownerWalletResult.Result.Success)
+                        throw new InvalidOperationException(ownerWalletResult.Result.Message ?? "Không thể cộng tiền vào ví chủ ngựa.");
 
-                    // Ghi log CHỈ khi ví đã cộng tiền thành công thật sự — đây là nguồn sự thật duy nhất
-                    // cho "Owner xem lịch sử nhận thưởng" (Prize không lưu OwnerId nên không suy ngược được).
+                    if (jockeyAmount > 0 && jockeyUserId.HasValue)
+                    {
+                        var jockeyWalletResult = await _walletService.AddPointsAsync(jockeyUserId.Value, jockeyAmount, $"prize_jockey_{prize.Id}");
+                        if (!jockeyWalletResult.Result.Success)
+                            throw new InvalidOperationException(jockeyWalletResult.Result.Message ?? "Không thể cộng tiền vào ví kỵ sĩ.");
+                    }
+
                     _db.PrizeDistributionLogs.Add(new PrizeDistributionLog
                     {
                         Id = Guid.NewGuid(),
@@ -343,6 +389,11 @@ public class PrizeService : IPrizeService
                         HorseName = entry.HorseName,
                         Amount = prize.Amount,
                         Currency = prize.Currency,
+                        JockeyId = jockeyId,
+                        JockeyUserId = jockeyUserId,
+                        OwnerAmount = ownerAmount,
+                        JockeyAmount = jockeyAmount,
+                        JockeySharePercentage = jockeySharePercentage,
                         DistributedAt = DateTime.UtcNow,
                     });
                     await _uow.SaveChangesAsync();
@@ -355,14 +406,16 @@ public class PrizeService : IPrizeService
                     Position = prize.Position,
                     HorseName = entry.HorseName,
                     OwnerName = entry.OwnerName,
+                    JockeyName = entry.JockeyName,
                     Amount = prize.Amount,
+                    OwnerAmount = ownerAmount,
+                    JockeyAmount = jockeyAmount,
+                    JockeySharePercentage = jockeySharePercentage,
                     Currency = prize.Currency,
                 });
             }
             catch (Exception ex)
             {
-                // Rollback claim — guarded by IsDistributed == true nên chỉ hoàn tác đúng dòng
-                // lệnh gọi này vừa claim, không đụng dòng nào khác đã trao thật từ trước.
                 await _db.Prizes
                     .Where(p => p.Id == prize.Id && p.IsDistributed)
                     .ExecuteUpdateAsync(s => s
@@ -393,13 +446,37 @@ public class PrizeService : IPrizeService
                 TournamentName = l.Tournament != null ? l.Tournament.Name : string.Empty,
                 Position = l.Position,
                 HorseName = l.HorseName,
-                Amount = l.Amount,
+                Amount = l.OwnerAmount > 0 ? l.OwnerAmount : l.Amount,
                 Currency = l.Currency,
                 DistributedAt = l.DistributedAt,
             })
             .ToListAsync();
 
         return ServiceResult<List<PrizeHistoryEntryDto>>.Ok(history);
+    }
+
+    public async Task<ServiceResult<List<JockeyPrizeHistoryEntryDto>>> GetMyJockeyPrizeHistoryAsync(Guid jockeyUserId)
+    {
+        var history = await _db.PrizeDistributionLogs
+            .AsNoTracking()
+            .Where(l => l.JockeyUserId == jockeyUserId && l.JockeyAmount > 0)
+            .OrderByDescending(l => l.DistributedAt)
+            .Select(l => new JockeyPrizeHistoryEntryDto
+            {
+                TournamentId = l.TournamentId,
+                TournamentName = l.Tournament != null ? l.Tournament.Name : string.Empty,
+                Position = l.Position,
+                HorseName = l.HorseName,
+                TotalPrizeAmount = l.Amount,
+                JockeyAmount = l.JockeyAmount,
+                OwnerAmount = l.OwnerAmount,
+                JockeySharePercentage = l.JockeySharePercentage,
+                Currency = l.Currency,
+                DistributedAt = l.DistributedAt,
+            })
+            .ToListAsync();
+
+        return ServiceResult<List<JockeyPrizeHistoryEntryDto>>.Ok(history);
     }
 
     private static PrizeResponse Map(Prize p) => new()

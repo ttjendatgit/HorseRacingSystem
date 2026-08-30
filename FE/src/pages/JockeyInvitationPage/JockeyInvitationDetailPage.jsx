@@ -200,6 +200,10 @@ function JockeyInvitationDetailPage() {
                     label="Số người tham gia tối đa"
                     value={invitation.maxParticipants}
                   />
+                  <DetailRow
+                    label="Thỏa thuận tiền thưởng"
+                    value={invitation.jockeySharePercentage != null ? `Jockey ${invitation.jockeySharePercentage}% / Owner ${100 - invitation.jockeySharePercentage}%` : "Chưa xác định"}
+                  />
                 </article>
 
                 <article className="jockey-detail-panel">

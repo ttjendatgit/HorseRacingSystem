@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HorseRacing.Dtos;
 using HorseRacing.Models;
@@ -381,15 +384,37 @@ public class JockeyService : IJockeyService
         }
 
         var entries = await _raceEntries.GetByJockeyAsync(jockey.Id);
-        var response = entries
-            .Where(entry => entry.Race != null && entry.Horse != null)
-            .Select(entry => new JockeyAssignedRaceResponse
+        var assigned = entries.Where(entry => entry.Race != null && entry.Horse != null).ToList();
+
+        var tournamentStandingByHorse = new Dictionary<(Guid TournamentId, Guid HorseId), int>();
+        foreach (var group in assigned.GroupBy(e => e.Race!.TournamentId))
+        {
+            var deciding = group
+                .Where(e => !string.IsNullOrWhiteSpace(e.Race?.Result?.RankingsJson))
+                .OrderByDescending(e => e.Race!.Round?.RoundNumber ?? 0)
+                .ThenByDescending(e => e.Race!.ScheduledAt)
+                .FirstOrDefault();
+            if (deciding == null) continue;
+            var (position, status) = TryReadHorseRanking(deciding.Race!.Result!.RankingsJson, deciding.HorseId);
+            if (position.HasValue && (status == null || status == "Completed"))
+                tournamentStandingByHorse[(group.Key, deciding.HorseId)] = position.Value;
+        }
+
+        var response = assigned
+            .Select(entry =>
+            {
+                var (finishPosition, finishStatus) = TryReadHorseRanking(entry.Race!.Result?.RankingsJson, entry.HorseId);
+                tournamentStandingByHorse.TryGetValue((entry.Race.TournamentId, entry.HorseId), out var tournamentPos);
+                return new JockeyAssignedRaceResponse
             {
                 Id = entry.Id,
                 RaceId = entry.RaceId,
                 Status = entry.Status.ToString(),
                 OwnerConfirmed = entry.OwnerConfirmed,
                 JockeyConfirmed = entry.JockeyConfirmed,
+                FinishPosition = finishPosition ?? entry.FinishPosition,
+                FinishStatus = finishStatus,
+                TournamentStandingPosition = tournamentPos == 0 ? null : tournamentPos,
                 Race = new JockeyAssignedRaceDetailResponse
                 {
                     Id = entry.Race!.Id,
@@ -421,6 +446,7 @@ public class JockeyService : IJockeyService
                     TotalRaces = entry.Horse.TotalRaces,
                     TotalWins = entry.Horse.TotalWins
                 }
+            };
             })
             .ToList();
 
@@ -619,5 +645,61 @@ public class JockeyService : IJockeyService
         await _unitOfWork.SaveChangesAsync();
 
         return ServiceResult<object>.Ok(new { message = "Hồ sơ đã được gửi lại để duyệt thành công." });
+    }
+
+    private static (int? Position, string? Status) TryReadHorseRanking(string? rankingsJson, Guid horseId)
+    {
+        if (string.IsNullOrWhiteSpace(rankingsJson)) return (null, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(rankingsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, null);
+
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (ReadGuid(item, "horseId", "HorseId") != horseId) continue;
+                var position = ReadInt(item, "position", "Position");
+                var status = ReadString(item, "status", "Status");
+                return (position, status);
+            }
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+
+        return (null, null);
+    }
+
+    private static Guid? ReadGuid(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!item.TryGetProperty(name, out var prop)) continue;
+            if (prop.ValueKind == JsonValueKind.String && Guid.TryParse(prop.GetString(), out var parsed)) return parsed;
+            if (prop.TryGetGuid(out var guid)) return guid;
+        }
+        return null;
+    }
+
+    private static int? ReadInt(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!item.TryGetProperty(name, out var prop)) continue;
+            if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var n)) return n;
+            if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out var parsed)) return parsed;
+        }
+        return null;
+    }
+
+    private static string? ReadString(JsonElement item, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!item.TryGetProperty(name, out var prop)) continue;
+            if (prop.ValueKind == JsonValueKind.String) return prop.GetString();
+        }
+        return null;
     }
 }

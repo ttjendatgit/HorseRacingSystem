@@ -68,7 +68,11 @@ public class PrizeDistributionEntryDto
     public int Position { get; set; }
     public string HorseName { get; set; } = string.Empty;
     public string? OwnerName { get; set; }
+    public string? JockeyName { get; set; }
     public decimal Amount { get; set; }
+    public decimal OwnerAmount { get; set; }
+    public decimal JockeyAmount { get; set; }
+    public decimal JockeySharePercentage { get; set; }
     public string Currency { get; set; } = "VND";
 }
 
@@ -355,3 +359,18 @@ public class InjuryRecordResponse
     public bool ClearedToRace { get; set; }
     public DateTime? ClearedAt { get; set; }
 }
+
+public class JockeyPrizeHistoryEntryDto
+{
+    public Guid TournamentId { get; set; }
+    public string TournamentName { get; set; } = string.Empty;
+    public int Position { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public decimal TotalPrizeAmount { get; set; }
+    public decimal JockeyAmount { get; set; }
+    public decimal OwnerAmount { get; set; }
+    public decimal JockeySharePercentage { get; set; }
+    public string Currency { get; set; } = "VND";
+    public DateTime DistributedAt { get; set; }
+}
+

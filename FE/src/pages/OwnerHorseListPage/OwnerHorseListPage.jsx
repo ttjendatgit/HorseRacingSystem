@@ -39,6 +39,7 @@ function OwnerHorseListPage() {
   const [selectedRace, setSelectedRace] = useState("");
   const [selectedJockey, setSelectedJockey] = useState("");
   const [invitationMessage, setInvitationMessage] = useState("");
+  const [jockeySharePercentage, setJockeySharePercentage] = useState(30);
   const [jockeyError, setJockeyError] = useState("");
   const [jockeyLoading, setJockeyLoading] = useState(false);
 
@@ -110,6 +111,7 @@ function OwnerHorseListPage() {
     setSelectedRace("");
     setSelectedJockey("");
     setInvitationMessage("");
+    setJockeySharePercentage(30);
     setJockeyError("");
     setJockeyLoading(true);
     try {
@@ -152,6 +154,7 @@ function OwnerHorseListPage() {
         jockeyId: selectedJockey,
         raceId: selectedRace,
         message: invitationMessage.trim() || null,
+        jockeySharePercentage: Number(jockeySharePercentage) || 0,
       });
       setAssignHorse(null);
       await loadHorses();
@@ -357,10 +360,28 @@ function OwnerHorseListPage() {
                   <option key={race.id ?? race.Id} value={race.id ?? race.Id}>{race.name ?? race.Name}</option>
                 ))}
             </select>
-            <select value={selectedJockey} onChange={e => setSelectedJockey(e.target.value)} className="oh-select" disabled={jockeyLoading || jockeys.length === 0}>
+            <select value={selectedJockey} onChange={e => setSelectedJockey(e.target.value)} className="oh-select" disabled={jockeyLoading || jockeys.length === 0} style={{marginBottom:"12px"}}>
               <option value="">{jockeyLoading ? "Đang tải danh sách kỵ sĩ..." : "-- Chọn kỵ sĩ --"}</option>
               {jockeys.map(j => <option key={j.id ?? j.Id} value={j.id ?? j.Id}>{j.fullName ?? j.FullName ?? j.email ?? j.Email}</option>)}
             </select>
+            <div style={{ marginBottom: "12px", textAlign: "left" }}>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#334155", marginBottom: "4px" }}>
+                Tỉ lệ ăn chia giải thưởng cho Jockey (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                className="oh-select"
+                value={jockeySharePercentage}
+                onChange={e => setJockeySharePercentage(e.target.value)}
+                placeholder="Nhập tỉ lệ ăn chia (0 - 100%)"
+              />
+              <small style={{ color: "#64748b", fontSize: "11px", display: "block", marginTop: "2px" }}>
+                Ví dụ: 30% nghĩa là Kỵ sĩ nhận 30%, Chủ ngựa nhận 70% tiền giải thưởng.
+              </small>
+            </div>
             <textarea
               className="oh-textarea"
               value={invitationMessage}

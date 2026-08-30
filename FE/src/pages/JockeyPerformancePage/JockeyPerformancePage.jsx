@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { getJockeyAssignedRaces, getMyJockeyProfile } from "../../services/jockeyApi";
+import { getJockeyAssignedRaces, getMyJockeyProfile, getJockeyPrizeHistory } from "../../services/jockeyApi";
 import { getJockeyDisplayStats } from "../../utils/jockeyStats";
 import "./JockeyPerformancePage.css";
 
 export default function JockeyPerformancePage() {
   const [races, setRaces] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [prizeHistory, setPrizeHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date");
@@ -25,6 +26,7 @@ export default function JockeyPerformancePage() {
     };
     load();
     getMyJockeyProfile().then((p) => { if (!cancelled) setProfile(p); }).catch(() => {});
+    getJockeyPrizeHistory().then((h) => { if (!cancelled) setPrizeHistory(Array.isArray(h) ? h : []); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -88,7 +90,7 @@ export default function JockeyPerformancePage() {
     <div className="jp-page">
       <div className="jp-header">
         <h1>Thành tích</h1>
-        <p className="jp-sub">Theo dõi hiệu suất qua các cuộc đua được phân công.</p>
+        <p className="jp-sub">Theo dõi hiệu suất, thứ hạng về đích và tiền thưởng đã nhận.</p>
       </div>
 
       {/* KPI Cards */}
@@ -96,6 +98,7 @@ export default function JockeyPerformancePage() {
         <div className="jp-kpi"><span className="jp-kpi-label">Tỉ lệ thắng</span><strong className="jp-kpi-value">{winRate}%</strong><span className="jp-kpi-trend">{totalWins} thắng / {totalStarts} đua</span></div>
         <div className="jp-kpi jp-kpi--light"><span className="jp-kpi-label">Cuộc đua</span><strong className="jp-kpi-value">{assignedRaces}</strong><span className="jp-kpi-trend">{confirmed} đã xác nhận</span></div>
         <div className="jp-kpi"><span className="jp-kpi-label">Chiến thắng</span><strong className="jp-kpi-value">{totalWins}</strong><span className="jp-kpi-trend">{winRate >= 50 ? "Trên trung bình" : "Đang cải thiện"}</span></div>
+        <div className="jp-kpi jp-kpi--light"><span className="jp-kpi-label">Tiền thưởng nhận</span><strong className="jp-kpi-value">{prizeHistory.reduce((sum, item) => sum + (Number(item.jockeyAmount) || 0), 0).toLocaleString()} đ</strong><span className="jp-kpi-trend">{prizeHistory.length} giải đấu</span></div>
       </div>
 
       {/* Monthly Chart */}
@@ -144,6 +147,31 @@ export default function JockeyPerformancePage() {
         </div>
       )}
 
+      {/* Prize Earnings History */}
+      {prizeHistory.length > 0 && (
+        <div className="jp-chart-card">
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#1a1d23" }}>Lịch sử tiền thưởng từ giải đấu</h3>
+          <div className="jp-table">
+            <div className="jp-tr jp-tr--head">
+              <span className="jp-td">Giải đấu</span>
+              <span className="jp-td">Ngựa thi đấu</span>
+              <span className="jp-td">Hạng</span>
+              <span className="jp-td">Tỉ lệ chia</span>
+              <span className="jp-td">Thực nhận</span>
+            </div>
+            {prizeHistory.map((p, idx) => (
+              <div key={idx} className="jp-tr">
+                <span className="jp-td"><strong>{p.tournamentName}</strong></span>
+                <span className="jp-td">{p.horseName}</span>
+                <span className="jp-td">Hạng {p.position}</span>
+                <span className="jp-td">{p.jockeySharePercentage}% ({p.jockeyAmount?.toLocaleString()} / {p.totalPrizeAmount?.toLocaleString()} {p.currency})</span>
+                <span className="jp-td"><strong style={{ color: "#10b981" }}>+{p.jockeyAmount?.toLocaleString()} {p.currency}</strong></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="jp-table-card">
         <div className="jp-table-toolbar">
@@ -177,18 +205,22 @@ export default function JockeyPerformancePage() {
             <div className="jp-tr jp-tr--head">
               <span className="jp-td">Cuộc đua</span>
               <span className="jp-td">Ngựa</span>
-              <span className="jp-td">Kết quả</span>
-              <span className="jp-td">Tỉ lệ</span>
+              <span className="jp-td">Hạng cuộc đua</span>
+              <span className="jp-td">Hạng giải</span>
               <span className="jp-td">Trạng thái</span>
             </div>
             {filtered.map(r => {
-              const wRH = Number(r.horseTotalRaces || 0) > 0 ? Math.round((Number(r.horseTotalWins || 0) / Number(r.horseTotalRaces || 0)) * 100) : 0;
+              const finishLabel = r.finishStatus && r.finishStatus !== "Completed"
+                ? r.finishStatus
+                : r.finishPosition
+                  ? `Hạng ${r.finishPosition}`
+                  : "Chưa có";
               return (
                 <div key={r.id} className="jp-tr">
                   <span className="jp-td"><strong>{r.title}</strong><small>{r.location}</small></span>
                   <span className="jp-td">{r.horseName}</span>
-                  <span className="jp-td">{r.horseTotalWins || 0}W / {r.horseTotalRaces || 0}R</span>
-                  <span className="jp-td"><span className="jp-rate" style={{ background: wRH >= 50 ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)", color: wRH >= 50 ? "#0f7a5a" : "#b8860b" }}>{wRH}%</span></span>
+                  <span className="jp-td">{finishLabel}</span>
+                  <span className="jp-td">{r.tournamentStandingPosition ? `Hạng ${r.tournamentStandingPosition}` : "—"}</span>
                   <span className="jp-td"><span className={`jp-badge ${r.jockeyConfirmed ? "jp-badge--ok" : "jp-badge--warn"}`}>{r.jockeyConfirmed ? "Đã xác nhận" : "Chờ"}</span></span>
                 </div>
               );
