@@ -80,7 +80,7 @@ function JockeyWalletPage() {
           ) : (
             <strong className="ow-hero__value">{formatVndCurrency(balance)}</strong>
           )}
-          <p className="ow-hero__sub">Tiền được cộng khi Admin trao thưởng và lời mời có tỉ lệ chia &gt; 0%.</p>
+          <p className="ow-hero__sub">Số dư được cộng tự động mỗi khi bạn nhận thưởng.</p>
         </div>
         <div className="ow-hero__icon">
           <WalletIcon />
